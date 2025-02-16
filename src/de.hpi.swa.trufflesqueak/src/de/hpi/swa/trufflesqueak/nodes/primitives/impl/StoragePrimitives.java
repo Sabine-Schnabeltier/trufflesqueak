@@ -20,7 +20,6 @@ import com.oracle.truffle.api.dsl.Fallback;
 import com.oracle.truffle.api.dsl.GenerateNodeFactory;
 import com.oracle.truffle.api.dsl.ImportStatic;
 import com.oracle.truffle.api.dsl.NodeFactory;
-import com.oracle.truffle.api.dsl.ReportPolymorphism;
 import com.oracle.truffle.api.dsl.Specialization;
 import com.oracle.truffle.api.frame.Frame;
 import com.oracle.truffle.api.frame.FrameInstance;
@@ -53,10 +52,10 @@ import de.hpi.swa.trufflesqueak.nodes.accessing.SqueakObjectSizeNode;
 import de.hpi.swa.trufflesqueak.nodes.primitives.AbstractPrimitiveFactoryHolder;
 import de.hpi.swa.trufflesqueak.nodes.primitives.AbstractPrimitiveNode;
 import de.hpi.swa.trufflesqueak.nodes.primitives.AbstractSingletonPrimitiveNode;
-import de.hpi.swa.trufflesqueak.nodes.primitives.Primitive.Primitive1;
-import de.hpi.swa.trufflesqueak.nodes.primitives.Primitive.Primitive1WithFallback;
 import de.hpi.swa.trufflesqueak.nodes.primitives.Primitive.Primitive0;
 import de.hpi.swa.trufflesqueak.nodes.primitives.Primitive.Primitive0WithFallback;
+import de.hpi.swa.trufflesqueak.nodes.primitives.Primitive.Primitive1;
+import de.hpi.swa.trufflesqueak.nodes.primitives.Primitive.Primitive1WithFallback;
 import de.hpi.swa.trufflesqueak.nodes.primitives.Primitive.Primitive2WithFallback;
 import de.hpi.swa.trufflesqueak.nodes.primitives.Primitive.Primitive3WithFallback;
 import de.hpi.swa.trufflesqueak.nodes.primitives.SqueakPrimitive;
@@ -184,9 +183,7 @@ public final class StoragePrimitives extends AbstractPrimitiveFactoryHolder {
     @GenerateNodeFactory
     @SqueakPrimitive(indices = 70)
     public abstract static class PrimNewNode extends AbstractPrimitiveNode implements Primitive0WithFallback {
-        public static final int NEW_CACHE_SIZE = 6;
-
-        @Specialization(limit = "NEW_CACHE_SIZE", guards = {"receiver == cachedReceiver"}, assumptions = {"cachedReceiver.getClassFormatStable()"})
+        @Specialization(guards = {"receiver == cachedReceiver"}, assumptions = {"cachedReceiver.getClassFormatStable()"}, limit = "1")
         protected static final AbstractSqueakObjectWithClassAndHash newDirect(@SuppressWarnings("unused") final ClassObject receiver,
                         @Bind("this") final Node node,
                         @Cached("receiver.withEnsuredBehaviorHash()") final ClassObject cachedReceiver,
@@ -199,7 +196,6 @@ public final class StoragePrimitives extends AbstractPrimitiveFactoryHolder {
             }
         }
 
-        @ReportPolymorphism.Megamorphic
         @Specialization(replaces = "newDirect")
         protected static final AbstractSqueakObjectWithClassAndHash newIndirect(final ClassObject receiver,
                         @Bind("this") final Node node,
@@ -217,9 +213,7 @@ public final class StoragePrimitives extends AbstractPrimitiveFactoryHolder {
     @GenerateNodeFactory
     @SqueakPrimitive(indices = 71)
     protected abstract static class PrimNewWithArgNode extends AbstractPrimitiveNode implements Primitive1 {
-        public static final int NEW_CACHE_SIZE = 6;
-
-        @Specialization(limit = "NEW_CACHE_SIZE", guards = {"receiver == cachedReceiver", "isInstantiable(cachedReceiver, size)"}, assumptions = {"cachedReceiver.getClassFormatStable()"})
+        @Specialization(guards = {"receiver == cachedReceiver", "isInstantiable(cachedReceiver, size)"}, assumptions = {"cachedReceiver.getClassFormatStable()"}, limit = "1")
         protected static final AbstractSqueakObjectWithClassAndHash newWithArgDirect(@SuppressWarnings("unused") final ClassObject receiver, final long size,
                         @Bind("this") final Node node,
                         @Cached(value = "createIdentityProfile()", inline = true) final InlinedIntValueProfile sizeProfile,
@@ -233,7 +227,6 @@ public final class StoragePrimitives extends AbstractPrimitiveFactoryHolder {
             }
         }
 
-        @ReportPolymorphism.Megamorphic
         @Specialization(replaces = "newWithArgDirect", guards = "isInstantiable(receiver, size)")
         protected static final AbstractSqueakObjectWithClassAndHash newWithArg(final ClassObject receiver, final long size,
                         @Bind("this") final Node node,
