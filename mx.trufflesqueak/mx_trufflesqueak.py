@@ -38,7 +38,7 @@ VM_ARGS_TESTING = [
 
 if _COMPILER:
     # Tweak GraalVM Engine
-    VM_ARGS_TESTING.append("-Dpolyglot.engine.Mode=latency")
+    # VM_ARGS_TESTING.append("-Dpolyglot.engine.Mode=latency")
     VM_ARGS_TESTING.append("-Dpolyglot.engine.CompilationFailureAction=Diagnose")
 
 

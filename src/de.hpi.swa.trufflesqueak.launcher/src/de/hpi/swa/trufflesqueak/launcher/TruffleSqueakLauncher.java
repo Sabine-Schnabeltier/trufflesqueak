@@ -107,7 +107,7 @@ public final class TruffleSqueakLauncher extends AbstractLanguageLauncher {
         contextBuilder.option(SqueakLanguageConfig.ID + "." + SqueakLanguageOptions.QUIET, Boolean.toString(quiet));
         contextBuilder.arguments(getLanguageId(), imageArguments);
         if (useEngineModeLatency) {
-            contextBuilder.option(ENGINE_MODE_OPTION, ENGINE_MODE_LATENCY);
+            // contextBuilder.option(ENGINE_MODE_OPTION, ENGINE_MODE_LATENCY);
         }
         contextBuilder.allowAllAccess(true);
         final SqueakTranscriptForwarder out;
