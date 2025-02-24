@@ -6,6 +6,9 @@
  */
 package de.hpi.swa.trufflesqueak.nodes;
 
+import java.lang.management.ManagementFactory;
+import java.lang.management.RuntimeMXBean;
+import java.util.List;
 import java.util.logging.Level;
 
 import com.oracle.truffle.api.CompilerDirectives;
@@ -33,6 +36,8 @@ import de.hpi.swa.trufflesqueak.nodes.dispatch.DispatchSelector2Node.Dispatch2No
 import de.hpi.swa.trufflesqueak.shared.SqueakLanguageConfig;
 import de.hpi.swa.trufflesqueak.util.FrameAccess;
 import de.hpi.swa.trufflesqueak.util.LogUtils;
+import jdk.internal.vm.annotation.ReservedStackAccess;
+import jdk.jfr.consumer.RecordingStream;
 
 @NodeInfo(language = SqueakLanguageConfig.ID)
 public final class ExecuteTopLevelContextNode extends RootNode {
@@ -58,20 +63,73 @@ public final class ExecuteTopLevelContextNode extends RootNode {
         return new ExecuteTopLevelContextNode(image, language, context, isImageResuming);
     }
 
+    @ReservedStackAccess
+    public static int recursiveMethod(int n) {
+        if (n <= 0) {
+            return 0;
+        }
+        int[] largeArray = new int[10000]; // Large local array
+        return recursiveMethod(n - 1) + largeArray.length;
+    }
+
+    public static void test() {
+        RuntimeMXBean runtimeMXBean = ManagementFactory.getRuntimeMXBean();
+        List<String> arguments = runtimeMXBean.getInputArguments();
+
+        System.out.println("JVM Options:");
+        for (String arg : arguments) {
+            System.out.println(arg);
+        }
+
+        System.out.println("start test");
+        try {
+            recursiveMethod(1000); // Likely to cause a StackOverflowError
+//        } catch (final StackOverflowError e) {
+//            System.out.println("Stack overflow");
+        } finally {
+            System.out.println("complete");
+        }
+        System.out.println("return from test");
+    }
+
     @Override
     public Object execute(final VirtualFrame frame) {
-        try {
-            executeLoop();
-        } catch (final TopLevelReturn e) {
-            return e.getReturnValue();
-        } finally {
-            if (isImageResuming) {
-                image.interrupt.shutdown();
-                if (image.hasDisplay()) {
-                    image.getDisplay().close();
+
+        try (RecordingStream rs = new RecordingStream()) {
+
+            rs.enable("jdk.ReservedStackActivation");
+            rs.onEvent("jdk.ReservedStackActivation", event -> {
+                StartContextRootNode.interruptAtNextStackFrame();
+                System.out.println("ReservedStackActivation Event");
+            });
+
+            rs.enable("jdk.GarbageCollection");
+            rs.onEvent("jdk.GarbageCollection", event -> {
+                System.out.println("GarbageCollection Event");
+            });
+
+            try {
+                System.out.println("About to start JFR event stream.");
+                rs.startAsync();
+                System.out.println("JFR event stream started.");
+                test();
+
+                executeLoop();
+            } catch (final TopLevelReturn e) {
+                return e.getReturnValue();
+            } finally {
+                System.out.println("Stopping JFR event stream.");
+                rs.stop();
+
+                if (isImageResuming) {
+                    image.interrupt.shutdown();
+                    if (image.hasDisplay()) {
+                        image.getDisplay().close();
+                    }
                 }
             }
         }
+
         throw SqueakException.create("Top level context did not return");
     }
 
@@ -93,7 +151,9 @@ public final class ExecuteTopLevelContextNode extends RootNode {
             assert sender == NilObject.SINGLETON || ((ContextObject) sender).hasTruffleFrame();
             try {
                 image.lastSeenContext = null;  // Reset materialization mechanism.
-                StartContextRootNode.startingNewProcess();
+
+                StartContextRootNode.stackFrameInterruptAcknowledged();
+
                 final Object result = callNode.call(activeContext.getCallTarget());
                 activeContext = returnTo(activeContext, sender, result);
                 LogUtils.SCHEDULING.log(Level.FINE, "Local Return on top-level: {0}", activeContext);

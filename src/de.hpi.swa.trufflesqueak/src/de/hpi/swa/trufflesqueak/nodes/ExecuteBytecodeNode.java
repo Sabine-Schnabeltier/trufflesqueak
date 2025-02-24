@@ -54,9 +54,9 @@ public final class ExecuteBytecodeNode extends AbstractExecuteContextNode implem
         } catch (final NonLocalReturn nlr) {
             /* {@link getHandleNonLocalReturnNode()} acts as {@link BranchProfile} */
             return getHandleNonLocalReturnNode().executeHandle(frame, nlr);
-        } catch (final StackOverflowError e) {
-            CompilerDirectives.transferToInterpreter();
-            throw getContext().tryToSignalLowSpace(frame, e);
+//        } catch (final StackOverflowError e) {
+//            CompilerDirectives.transferToInterpreter();
+//            throw getContext().tryToSignalLowSpace(frame, e);
         }
     }
 

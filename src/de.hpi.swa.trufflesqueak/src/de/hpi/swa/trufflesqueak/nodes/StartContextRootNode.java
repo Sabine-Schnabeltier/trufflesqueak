@@ -26,16 +26,21 @@ import de.hpi.swa.trufflesqueak.nodes.interrupts.CheckForInterruptsQuickNode;
 import de.hpi.swa.trufflesqueak.shared.SqueakLanguageConfig;
 import de.hpi.swa.trufflesqueak.util.FrameAccess;
 
+import jdk.internal.vm.annotation.ReservedStackAccess;
+
 @NodeInfo(language = SqueakLanguageConfig.ID)
 public final class StartContextRootNode extends AbstractRootNode {
     @CompilationFinal private int initialPC;
     @CompilationFinal private int initialSP;
 
-    private static final int MaximumStackDepth = 1000;
-    private static int ApproximateStackDepth;
+    private static boolean InterruptAtNextExecute = false;
 
-    public static void startingNewProcess() {
-        ApproximateStackDepth = 0;
+    public static void interruptAtNextStackFrame() {
+        InterruptAtNextExecute = true;
+    }
+
+    public static void stackFrameInterruptAcknowledged() {
+        InterruptAtNextExecute = false;
     }
 
     @Children private FrameStackWriteNode[] writeTempNodes;
@@ -51,13 +56,13 @@ public final class StartContextRootNode extends AbstractRootNode {
     }
 
     @Override
+    @ReservedStackAccess
     public Object execute(final VirtualFrame frame) {
         initializeFrame(frame);
         try {
-            if (++ApproximateStackDepth > MaximumStackDepth) {
+            if (InterruptAtNextExecute) {
                 throw ProcessSwitch.create(getGetOrCreateContextNode().executeGet(frame));
             }
-
             interruptHandlerNode.execute(frame);
             return executeBytecodeNode.execute(frame, initialPC);
         } catch (final NonVirtualReturn | ProcessSwitch nvr) {
@@ -65,7 +70,6 @@ public final class StartContextRootNode extends AbstractRootNode {
             getGetOrCreateContextNode().executeGet(frame).markEscaped();
             throw nvr;
         } finally {
-            --ApproximateStackDepth;
             materializeContextOnMethodExitNode.execute(frame);
         }
     }

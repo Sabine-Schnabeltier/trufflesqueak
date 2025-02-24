@@ -45,6 +45,8 @@ public final class TruffleSqueakLauncher extends AbstractLanguageLauncher {
     private boolean useEngineModeLatency = true;
 
     public static void main(final String[] arguments) throws RuntimeException {
+        System.out.println("main!");
+
         new TruffleSqueakLauncher().launch(arguments);
     }
 
@@ -62,6 +64,8 @@ public final class TruffleSqueakLauncher extends AbstractLanguageLauncher {
         final List<String> unrecognized = new ArrayList<>();
         for (int i = 0; i < arguments.size(); i++) {
             final String arg = arguments.get(i);
+            System.out.println(arg);
+
             if (isExistingImageFile(arg)) {
                 imagePath = Paths.get(arg).toAbsolutePath().toString();
                 final List<String> remainingArguments = arguments.subList(i + 1, arguments.size());

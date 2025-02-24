@@ -31,6 +31,7 @@ VM_ARGS_TESTING = [
     "-Xss16M",  # Increase stack size
     # Make ReflectionUtils work
     "--add-exports=java.base/jdk.internal.module=ALL-UNNAMED",
+    "--add-exports java.base/jdk.internal.vm.annotation=ALL-UNNAMED",
     # Tweak GC for GitHub Actions
     "-Xms6G",  # Initial heap size
     "-XX:MetaspaceSize=32M",  # Initial size of Metaspaces
@@ -356,8 +357,12 @@ mx_sdk.register_graalvm_component(
                 ],
                 default_vm_args=[
                     "--vm.Xms512M",
-                    "--vm.Xss16M",
+                    "--vm.Xss17M",
                     "--vm.-add-exports=java.base/jdk.internal.module=de.hpi.swa.trufflesqueak",
+                    "--vm.-add-exports=java.base/jdk.internal.vm.annotation=de.hpi.swa.trufflesqueak",
+                    # "--vm.XX:UnlockExperimentalVMOptions",
+                    # "--vm.XX:PrintReservedStackAccessOnStackOverflow",
+                    # "--vm.XX:+AllowReservedStackAccess",
                 ],
             )
         ],

@@ -153,9 +153,10 @@ suite = {
                 "java.management",
                 "jdk.management",
                 "jdk.unsupported",
+                "jdk.jfr",
             ],
             "requiresConcealed": {
-                "java.base": ["jdk.internal.module"],
+                "java.base": ["jdk.internal.module", "jdk.internal.vm.annotation"],
             },
             "checkstyleVersion": "10.7.0",
             "jacoco": "include",
