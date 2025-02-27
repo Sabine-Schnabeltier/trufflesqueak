@@ -357,12 +357,12 @@ mx_sdk.register_graalvm_component(
                 ],
                 default_vm_args=[
                     "--vm.Xms512M",
-                    "--vm.Xss17M",
+                    "--vm.Xss16M",
                     "--vm.-add-exports=java.base/jdk.internal.module=de.hpi.swa.trufflesqueak",
                     "--vm.-add-exports=java.base/jdk.internal.vm.annotation=de.hpi.swa.trufflesqueak",
-                    # "--vm.XX:UnlockExperimentalVMOptions",
+                    "--vm.XX:+UnlockExperimentalVMOptions",
                     # "--vm.XX:PrintReservedStackAccessOnStackOverflow",
-                    # "--vm.XX:+AllowReservedStackAccess",
+                    "--vm.XX:-RestrictReservedStack",
                 ],
             )
         ],

@@ -37,6 +37,7 @@ import de.hpi.swa.trufflesqueak.shared.SqueakLanguageConfig;
 import de.hpi.swa.trufflesqueak.util.FrameAccess;
 import de.hpi.swa.trufflesqueak.util.LogUtils;
 import jdk.internal.vm.annotation.ReservedStackAccess;
+import jdk.jfr.Recording;
 import jdk.jfr.consumer.RecordingStream;
 
 @NodeInfo(language = SqueakLanguageConfig.ID)
@@ -63,8 +64,14 @@ public final class ExecuteTopLevelContextNode extends RootNode {
         return new ExecuteTopLevelContextNode(image, language, context, isImageResuming);
     }
 
+    static boolean stopRecursion = false;
+
     @ReservedStackAccess
     public static int recursiveMethod(int n) {
+        if (stopRecursion) {
+            System.out.println("recursion stopped!");
+            return -1;
+        }
         if (n <= 0) {
             return 0;
         }
@@ -83,9 +90,9 @@ public final class ExecuteTopLevelContextNode extends RootNode {
 
         System.out.println("start test");
         try {
-            recursiveMethod(1000); // Likely to cause a StackOverflowError
-//        } catch (final StackOverflowError e) {
-//            System.out.println("Stack overflow");
+            recursiveMethod(30000); // Likely to cause a StackOverflowError
+        } catch (final StackOverflowError e) {
+            System.out.println("Stack overflow");
         } finally {
             System.out.println("complete");
         }
@@ -97,8 +104,12 @@ public final class ExecuteTopLevelContextNode extends RootNode {
 
         try (RecordingStream rs = new RecordingStream()) {
 
+            rs.setReuse(true);
+            rs.setOrdered(false);
+
             rs.enable("jdk.ReservedStackActivation");
             rs.onEvent("jdk.ReservedStackActivation", event -> {
+                stopRecursion = true;
                 StartContextRootNode.interruptAtNextStackFrame();
                 System.out.println("ReservedStackActivation Event");
             });
