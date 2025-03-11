@@ -79,7 +79,7 @@ public final class SqueakSystemAttributes {
         if (osArch.equals("aarch64")) {
             value = "arm64";    /* Requires one of #('aarch64' 'arm64') for 'FFIPlatformDescription>>#abi'. */
                                 /* Begins with "arm" for `SmalltalkImage>>#isLowerPerformance`. */
-//            value = "aarch64";
+            value = "aarch64";
         } else {
             value = "x64"; /* For users of `Smalltalk os platformSubtype`. */
         }
