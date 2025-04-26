@@ -207,14 +207,14 @@ public final class ContextObject extends AbstractSqueakObjectWithClassAndHash {
     public AbstractSqueakObject getSender() {
         final Object value = getFrameSender();
         if (value instanceof final FrameMarker f) {
-            return fillInSenderFromMaker(f);
+            return fillInSenderFromMarker(f);
         } else {
             return (AbstractSqueakObject) value;
         }
     }
 
     @TruffleBoundary
-    private AbstractSqueakObject fillInSenderFromMaker(final FrameMarker value) {
+    private AbstractSqueakObject fillInSenderFromMarker(final FrameMarker value) {
         final CompiledCodeObject methodOrBlock = getCodeObject();
         if (!methodOrBlock.hasPrimitive() || methodOrBlock.isUnwindMarked() || methodOrBlock.isExceptionHandlerMarked()) {
             /*
@@ -255,7 +255,22 @@ public final class ContextObject extends AbstractSqueakObjectWithClassAndHash {
         FrameAccess.setSender(getOrCreateTruffleFrame(), value);
     }
 
+    public void setNilSender() {
+        /* context is end of sender chain, set by Smalltalk */
+        if (truffleFrame != null) {
+            final Object sender = FrameAccess.getSender(getTruffleFrame());
+            if (!hasModifiedSender && sender != NilObject.SINGLETON) {
+                hasModifiedSender = true;
+            }
+            System.out.println ("===================================================================");
+            System.out.print(this);
+            System.out.println (" -- set nil sender in setNilSender()!");
+        }
+        setSenderUnsafe(NilObject.SINGLETON);
+    }
+
     public void removeSender() {
+        /* context is terminated */
         if (hasModifiedSender) {
             hasModifiedSender = false;
         }

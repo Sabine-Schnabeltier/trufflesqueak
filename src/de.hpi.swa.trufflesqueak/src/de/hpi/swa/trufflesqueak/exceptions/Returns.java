@@ -12,6 +12,19 @@ import com.oracle.truffle.api.nodes.ControlFlowException;
 import de.hpi.swa.trufflesqueak.model.ContextObject;
 import de.hpi.swa.trufflesqueak.model.FrameMarker;
 
+/**
+ * TruffleSqueak return exceptions:
+ *
+ * NonLocalReturn
+ *      passes a return value to a sender, executing unwind blocks found between current context and sender context
+ *
+ * NonVirtualReturn
+ *      passes a return value to a context that is not immediately above the current Java execution node
+ *
+ * TopLevelReturn
+ *      passes a return value to the ExecuteTopLevelContextNode at the top of the Java stack
+ */
+
 public final class Returns {
     private abstract static class AbstractReturn extends ControlFlowException {
         private static final long serialVersionUID = 1L;

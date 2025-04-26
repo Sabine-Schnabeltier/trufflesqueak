@@ -12,8 +12,10 @@ import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.profiles.ConditionProfile;
 
 import de.hpi.swa.trufflesqueak.exceptions.Returns.NonLocalReturn;
+import de.hpi.swa.trufflesqueak.exceptions.Returns.NonVirtualReturn;
 import de.hpi.swa.trufflesqueak.exceptions.SqueakExceptions.SqueakException;
 import de.hpi.swa.trufflesqueak.image.SqueakImageContext;
+import de.hpi.swa.trufflesqueak.model.AbstractSqueakObject;
 import de.hpi.swa.trufflesqueak.model.BooleanObject;
 import de.hpi.swa.trufflesqueak.model.CompiledCodeObject;
 import de.hpi.swa.trufflesqueak.model.ContextObject;
@@ -83,7 +85,36 @@ public final class ReturnBytecodes {
             assert FrameAccess.hasClosure(frame);
             // Target is sender of closure's home context.
             final ContextObject homeContext = FrameAccess.getClosure(frame).getHomeContext();
-            if (homeContext.canBeReturnedTo()) {
+
+            /* TEMP: check for home context not on sender chain */
+            Boolean canReturn = homeContext.canBeReturnedTo();
+            if (canReturn && FrameAccess.getContext(frame) != null) {
+                ContextObject sender = FrameAccess.getContext(frame);
+                int depth = 0;
+                while (sender != homeContext) {
+                    final AbstractSqueakObject senderOrNil = ( (sender == null) ? NilObject.SINGLETON : sender.getSender() );
+                    if (senderOrNil instanceof ContextObject senderContext) {
+                        sender = senderContext;
+                        ++depth;
+                        if (sender.hasModifiedSender()) {
+                            System.out.print("ReturnFromClosureNode: modified sender at depth: (");
+                            System.out.print(depth);
+                            System.out.print("): ");
+                            System.out.println(sender);
+                        }
+                    } else {
+                        assert senderOrNil == NilObject.SINGLETON;
+//                        canReturn = false;
+                        System.out.print("ReturnFromClosureNode: sender chain broken: (");
+                        System.out.print(depth);
+                        System.out.print("): ");
+                        System.out.println(FrameAccess.getContext(frame));
+                        break;
+                    }
+                }
+            }
+
+            if (canReturn) {
                 throw new NonLocalReturn(returnValue, homeContext.getFrameSender());
             } else {
                 CompilerDirectives.transferToInterpreter();
@@ -167,11 +198,12 @@ public final class ReturnBytecodes {
         @Override
         public final Object executeReturnSpecialized(final VirtualFrame frame) {
             if (hasModifiedSenderProfile.profile(FrameAccess.hasModifiedSender(frame))) {
-                // Target is sender of closure's home context.
-                final ContextObject homeContext = FrameAccess.getClosure(frame).getHomeContext();
-                if (homeContext.canBeReturnedTo()) {
-                    throw new NonLocalReturn(getReturnValue(frame), homeContext.getFrameSender());
-                } else {
+                // Target is immediate sender.
+                final Object senderOrNull = FrameAccess.getSender(frame);
+                if ((senderOrNull instanceof final ContextObject returnContext) && returnContext.canBeReturnedTo()) {
+                    throw new NonVirtualReturn(getReturnValue(frame), returnContext, FrameAccess.getContext(frame));
+                }
+                else {
                     CompilerDirectives.transferToInterpreter();
                     final ContextObject contextObject = GetOrCreateContextNode.getOrCreateUncached(frame);
                     final SqueakImageContext image = getContext();

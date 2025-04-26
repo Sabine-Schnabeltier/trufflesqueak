@@ -101,6 +101,8 @@ public final class ExecuteTopLevelContextNode extends RootNode {
                 activeContext = ps.getNewContext();
                 LogUtils.SCHEDULING.log(Level.FINE, "Process Switch: {0}", activeContext);
             } catch (final NonLocalReturn nlr) {
+                nlr.printStackTrace();
+
                 activeContext = commonNLReturn(sender, nlr);
                 LogUtils.SCHEDULING.log(Level.FINE, "Non Local Return on top-level: {0}", activeContext);
             } catch (final NonVirtualReturn nvr) {
