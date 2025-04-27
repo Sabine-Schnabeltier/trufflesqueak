@@ -262,9 +262,6 @@ public final class ContextObject extends AbstractSqueakObjectWithClassAndHash {
             if (!hasModifiedSender && sender != NilObject.SINGLETON) {
                 hasModifiedSender = true;
             }
-            System.out.println ("===================================================================");
-            System.out.print(this);
-            System.out.println (" -- set nil sender in setNilSender()!");
         }
         setSenderUnsafe(NilObject.SINGLETON);
     }

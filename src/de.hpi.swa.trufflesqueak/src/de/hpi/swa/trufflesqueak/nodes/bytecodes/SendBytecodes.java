@@ -33,8 +33,10 @@ import de.hpi.swa.trufflesqueak.model.ArrayObject;
 import de.hpi.swa.trufflesqueak.model.BooleanObject;
 import de.hpi.swa.trufflesqueak.model.ClassObject;
 import de.hpi.swa.trufflesqueak.model.CompiledCodeObject;
+import de.hpi.swa.trufflesqueak.model.ContextObject;
 import de.hpi.swa.trufflesqueak.model.LargeIntegerObject;
 import de.hpi.swa.trufflesqueak.model.NativeObject;
+import de.hpi.swa.trufflesqueak.model.NilObject;
 import de.hpi.swa.trufflesqueak.model.PointersObject;
 import de.hpi.swa.trufflesqueak.model.layout.ObjectLayouts.POINT;
 import de.hpi.swa.trufflesqueak.nodes.AbstractNode;
@@ -69,6 +71,7 @@ import de.hpi.swa.trufflesqueak.nodes.bytecodes.SendBytecodesFactory.SendSpecial
 import de.hpi.swa.trufflesqueak.nodes.context.frame.FrameStackPushNode;
 import de.hpi.swa.trufflesqueak.nodes.context.frame.FrameStackReadNode;
 import de.hpi.swa.trufflesqueak.nodes.context.frame.FrameStackWriteNode;
+import de.hpi.swa.trufflesqueak.nodes.context.frame.GetOrCreateContextNode;
 import de.hpi.swa.trufflesqueak.nodes.dispatch.DispatchSelectorNode;
 import de.hpi.swa.trufflesqueak.nodes.primitives.impl.ControlPrimitives.PrimExitToDebuggerNode;
 import de.hpi.swa.trufflesqueak.util.FrameAccess;
@@ -97,6 +100,12 @@ public final class SendBytecodes {
             } catch (final NonLocalReturn nlr) {
                 if (nlrProfile.profile(nlr.getTargetContextOrMarker() == FrameAccess.getMarker(frame) || nlr.getTargetContextOrMarker() == FrameAccess.getContext(frame))) {
                     result = nlr.getReturnValue();
+                } else if (FrameAccess.getSender(frame) == NilObject.SINGLETON) {
+                    CompilerDirectives.transferToInterpreter();
+                    final ContextObject contextObject = GetOrCreateContextNode.getOrCreateUncached(frame);
+                    final SqueakImageContext image = getContext();
+                    image.cannotReturn.executeAsSymbolSlow(image, frame, contextObject, nlr.getReturnValue());
+                    throw CompilerDirectives.shouldNotReachHere();
                 } else {
                     throw nlr;
                 }
