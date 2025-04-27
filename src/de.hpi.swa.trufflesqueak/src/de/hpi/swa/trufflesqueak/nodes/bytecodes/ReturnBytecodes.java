@@ -71,11 +71,18 @@ public final class ReturnBytecodes {
         protected Object execute(final VirtualFrame frame, final Object returnValue) {
             assert !FrameAccess.hasClosure(frame);
             if (hasModifiedSenderProfile.profile(FrameAccess.hasModifiedSender(frame))) {
-                assert FrameAccess.getSender(frame) instanceof ContextObject : "Sender must be a materialized ContextObject";
-                throw new NonLocalReturn(returnValue, FrameAccess.getSender(frame));
-            } else {
-                return returnValue;
+                final Object senderOrNil = FrameAccess.getSender(frame);
+                if (senderOrNil instanceof ContextObject sender) {
+                    throw new NonVirtualReturn(returnValue, sender, FrameAccess.getContext(frame));
+                } else if (senderOrNil == NilObject.SINGLETON) {
+                    CompilerDirectives.transferToInterpreter();
+                    final ContextObject contextObject = GetOrCreateContextNode.getOrCreateUncached(frame);
+                    final SqueakImageContext image = getContext();
+                    image.cannotReturn.executeAsSymbolSlow(image, frame, contextObject, returnValue);
+                    throw CompilerDirectives.shouldNotReachHere();
+                }
             }
+            return returnValue;
         }
     }
 

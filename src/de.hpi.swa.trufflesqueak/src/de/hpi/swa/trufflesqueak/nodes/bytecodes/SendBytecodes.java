@@ -104,6 +104,7 @@ public final class SendBytecodes {
                     CompilerDirectives.transferToInterpreter();
                     final ContextObject contextObject = GetOrCreateContextNode.getOrCreateUncached(frame);
                     final SqueakImageContext image = getContext();
+                    /* should be sent to original context, I think */
                     image.cannotReturn.executeAsSymbolSlow(image, frame, contextObject, nlr.getReturnValue());
                     throw CompilerDirectives.shouldNotReachHere();
                 } else {
