@@ -97,6 +97,8 @@ public final class Returns {
 
         public TopLevelReturn(final Object result) {
             super(result);
+            System.err.println("TopLevelReturn:");
+            new Exception().printStackTrace(System.err);
         }
 
         @Override

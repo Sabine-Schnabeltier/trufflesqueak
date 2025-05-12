@@ -37,6 +37,8 @@ import de.hpi.swa.trufflesqueak.nodes.primitives.Primitive.Primitive0WithFallbac
 import de.hpi.swa.trufflesqueak.nodes.primitives.Primitive.Primitive2WithFallback;
 import de.hpi.swa.trufflesqueak.nodes.primitives.SqueakPrimitive;
 import de.hpi.swa.trufflesqueak.shared.SqueakLanguageConfig;
+import de.hpi.swa.trufflesqueak.util.ContextUtils;
+import de.hpi.swa.trufflesqueak.util.DebugUtils;
 import de.hpi.swa.trufflesqueak.util.FrameAccess;
 
 public class ContextPrimitives extends AbstractPrimitiveFactoryHolder {
@@ -68,7 +70,7 @@ public class ContextPrimitives extends AbstractPrimitiveFactoryHolder {
                     break;
                 } else {
                     current = (ContextObject) sender;
-                    if (!current.hasClosure() && current.getCodeObject().isUnwindMarked()) {
+                    if (current.isUnwindMarkedNonClosure()) {
                         return current;
                     }
                 }
@@ -80,33 +82,47 @@ public class ContextPrimitives extends AbstractPrimitiveFactoryHolder {
         @Specialization(guards = "!receiver.hasMaterializedSender()")
         protected final AbstractSqueakObject doFindNextAvoidingMaterialization(final ContextObject receiver, final ContextObject previousContext) {
             // Sender is not materialized, so avoid materialization by walking Truffle frames.
-            final boolean[] foundMyself = {false};
-            final AbstractSqueakObject result = Truffle.getRuntime().iterateFrames((frameInstance) -> {
-                final Frame current = frameInstance.getFrame(FrameInstance.FrameAccess.READ_ONLY);
-                if (!FrameAccess.isTruffleSqueakFrame(current)) {
-                    return null; // Foreign frame cannot be unwind marked.
-                }
-                final ContextObject context = FrameAccess.getContext(current);
-                if (!foundMyself[0]) {
-                    if (receiver == context) {
-                        foundMyself[0] = true;
-                    }
-                } else {
-                    if (previousContext == context) {
-                        return NilObject.SINGLETON;
-                    }
-                    if (!FrameAccess.hasClosure(current) && FrameAccess.getCodeObject(current).isUnwindMarked()) {
-                        if (context != null) {
-                            return context;
-                        } else {
-                            return ContextObject.create(getContext(), frameInstance);
-                        }
-                    }
-                }
-                return null;
-            });
-            assert foundMyself[0] : "Did not find receiver with virtual sender on Truffle stack";
-            return NilObject.nullToNil(result);
+            final ContextObject stopContext = ContextUtils.findStopContext(receiver.getTruffleFrame(), previousContext, this);
+
+            System.out.print("Find next unwind from: ");
+            System.out.print(receiver);
+            System.out.print(" to: ");
+            System.out.println(previousContext);
+            System.out.print("==>> ");
+            System.out.print(stopContext);
+
+            if (stopContext == null || stopContext == previousContext) {
+                return NilObject.SINGLETON;
+            } else {
+                return stopContext;
+            }
+//            final boolean[] foundMyself = {false};
+//            final AbstractSqueakObject result = Truffle.getRuntime().iterateFrames((frameInstance) -> {
+//                final Frame current = frameInstance.getFrame(FrameInstance.FrameAccess.READ_ONLY);
+//                if (!FrameAccess.isTruffleSqueakFrame(current)) {
+//                    return null; // Foreign frame cannot be unwind marked.
+//                }
+//                final ContextObject context = FrameAccess.getContext(current);
+//                if (!foundMyself[0]) {
+//                    if (receiver == context) {
+//                        foundMyself[0] = true;
+//                    }
+//                } else {
+//                    if (previousContext == context) {
+//                        return NilObject.SINGLETON;
+//                    }
+//                    if (FrameAccess.isUnwindMarkedNonClosure(current)) {
+//                        if (context != null) {
+//                            return context;
+//                        } else {
+//                            return ContextObject.create(getContext(), frameInstance);
+//                        }
+//                    }
+//                }
+//                return null;
+//            });
+//            assert foundMyself[0] : "Did not find receiver with virtual sender on Truffle stack";
+//            return NilObject.nullToNil(result);
         }
 
         @Specialization(guards = "!receiver.hasMaterializedSender()")
@@ -124,8 +140,24 @@ public class ContextPrimitives extends AbstractPrimitiveFactoryHolder {
              * Terminate all the Contexts between me and previousContext, if previousContext is on
              * my Context stack. Make previousContext my sender.
              */
-            terminateBetween(receiver, previousContext);
+            previousContext.getSender();
+            getContext().lastSeenContext = null;
+            if (ContextUtils.hasSenderChainFromTo(receiver, previousContext)) {
+                ContextUtils.terminateBetween(receiver, previousContext);
+            }
+            else
+                System.out.println("sender not on context chain");
+
             receiver.setSender(previousContext);
+
+//            if (previousContext.canBeReturnedTo() && previousContext.hasEscaped()) {
+//                // Materialization needs to continue in parent frame.
+//                getContext().lastSeenContext = previousContext;
+//            } else {
+//                // If context has not escaped, materialization can terminate here.
+//                getContext().lastSeenContext = null;
+//            }
+
             return receiver;
         }
 
@@ -140,6 +172,7 @@ public class ContextPrimitives extends AbstractPrimitiveFactoryHolder {
             while (current.hasMaterializedSender()) {
                 final AbstractSqueakObject sender = current.getSender();
                 if (current != start) {
+                    System.out.println(current);
                     current.terminate();
                 }
                 if (sender == NilObject.SINGLETON || sender == end) {
@@ -176,6 +209,7 @@ public class ContextPrimitives extends AbstractPrimitiveFactoryHolder {
                         bottomContextOnTruffleStack[0] = context;
                         final Frame currentWritable = frameInstance.getFrame(FrameInstance.FrameAccess.READ_WRITE);
                         // Terminate frame
+                        ContextUtils.dumpFrame(currentWritable,null);
                         FrameAccess.setInstructionPointer(currentWritable, -1);
                         FrameAccess.setSender(currentWritable, NilObject.SINGLETON);
                     }

@@ -77,6 +77,14 @@ import de.hpi.swa.trufflesqueak.nodes.primitives.impl.ControlPrimitives.PrimExit
 import de.hpi.swa.trufflesqueak.util.FrameAccess;
 
 public final class SendBytecodes {
+
+    public static void sendCannotReturn(AbstractNode node, final VirtualFrame frame, final Object returnValue) {
+        CompilerDirectives.transferToInterpreter();
+        final ContextObject contextObject = GetOrCreateContextNode.getOrCreateUncached(frame);
+        final SqueakImageContext image = node.getContext();
+        image.cannotReturn.executeAsSymbolSlow(image, frame, contextObject, returnValue);
+    }
+
     public abstract static class AbstractSendNode extends AbstractInstrumentableBytecodeNode {
         private final int stackPointer;
         private final ConditionProfile nlrProfile = ConditionProfile.create();

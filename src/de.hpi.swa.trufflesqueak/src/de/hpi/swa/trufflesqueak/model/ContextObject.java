@@ -248,6 +248,7 @@ public final class ContextObject extends AbstractSqueakObjectWithClassAndHash {
                 hasModifiedSender = true;
             }
         }
+//        value.markEscaped();
         setSenderUnsafe(value);
     }
 
@@ -328,6 +329,10 @@ public final class ContextObject extends AbstractSqueakObjectWithClassAndHash {
         if (hasClosure()) {
             throw SqueakException.create("Not yet implemented/support");
         }
+    }
+
+    public boolean isUnwindMarkedNonClosure() {
+        return FrameAccess.isUnwindMarkedNonClosure(getTruffleFrame());
     }
 
     @TruffleBoundary

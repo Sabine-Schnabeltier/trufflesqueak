@@ -37,6 +37,7 @@ public final class ProcessSwitch extends ControlFlowException {
     @Override
     public String toString() {
         CompilerAsserts.neverPartOfCompilation();
+        this.printStackTrace();
         return "Process switch to " + newContext;
     }
 }

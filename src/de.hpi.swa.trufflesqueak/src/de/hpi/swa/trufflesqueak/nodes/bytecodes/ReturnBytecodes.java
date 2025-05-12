@@ -8,6 +8,11 @@ package de.hpi.swa.trufflesqueak.nodes.bytecodes;
 
 import com.oracle.truffle.api.CompilerAsserts;
 import com.oracle.truffle.api.CompilerDirectives;
+import com.oracle.truffle.api.Truffle;
+import com.oracle.truffle.api.dsl.Specialization;
+import com.oracle.truffle.api.frame.Frame;
+import com.oracle.truffle.api.frame.FrameInstance;
+import com.oracle.truffle.api.frame.FrameInstanceVisitor;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.profiles.ConditionProfile;
 
@@ -19,11 +24,18 @@ import de.hpi.swa.trufflesqueak.model.AbstractSqueakObject;
 import de.hpi.swa.trufflesqueak.model.BooleanObject;
 import de.hpi.swa.trufflesqueak.model.CompiledCodeObject;
 import de.hpi.swa.trufflesqueak.model.ContextObject;
+import de.hpi.swa.trufflesqueak.model.FrameMarker;
 import de.hpi.swa.trufflesqueak.model.NilObject;
 import de.hpi.swa.trufflesqueak.nodes.AbstractNode;
 import de.hpi.swa.trufflesqueak.nodes.context.frame.FrameStackPopNode;
 import de.hpi.swa.trufflesqueak.nodes.context.frame.GetOrCreateContextNode;
+import de.hpi.swa.trufflesqueak.nodes.dispatch.DispatchSelector2Node.Dispatch2Node;
+import de.hpi.swa.trufflesqueak.util.ArrayUtils;
+import de.hpi.swa.trufflesqueak.util.ContextUtils;
 import de.hpi.swa.trufflesqueak.util.FrameAccess;
+import de.hpi.swa.trufflesqueak.util.MiscUtils;
+
+import static de.hpi.swa.trufflesqueak.nodes.bytecodes.SendBytecodes.sendCannotReturn;
 
 public final class ReturnBytecodes {
 
@@ -65,6 +77,9 @@ public final class ReturnBytecodes {
     }
 
     private static final class ReturnFromMethodNode extends AbstractReturnKindNode {
+
+        /* Return to sender */
+
         private final ConditionProfile hasModifiedSenderProfile = ConditionProfile.create();
 
         @Override
@@ -75,10 +90,7 @@ public final class ReturnBytecodes {
                 if (senderOrNil instanceof ContextObject sender) {
                     throw new NonVirtualReturn(returnValue, sender, FrameAccess.getContext(frame));
                 } else if (senderOrNil == NilObject.SINGLETON) {
-                    CompilerDirectives.transferToInterpreter();
-                    final ContextObject contextObject = GetOrCreateContextNode.getOrCreateUncached(frame);
-                    final SqueakImageContext image = getContext();
-                    image.cannotReturn.executeAsSymbolSlow(image, frame, contextObject, returnValue);
+                    sendCannotReturn(this, frame, returnValue);
                     throw CompilerDirectives.shouldNotReachHere();
                 }
             }
@@ -87,50 +99,61 @@ public final class ReturnBytecodes {
     }
 
     private static final class ReturnFromClosureNode extends AbstractReturnKindNode {
+
+        /* Return to closure's home context's sender */
+
+        @Child private GetOrCreateContextNode getOrCreateContextNode;
+        @Child private Dispatch2Node sendAboutToReturnNode;
+
         @Override
         protected Object execute(final VirtualFrame frame, final Object returnValue) {
             assert FrameAccess.hasClosure(frame);
             // Target is sender of closure's home context.
             final ContextObject homeContext = FrameAccess.getClosure(frame).getHomeContext();
 
-            /* TEMP: check for home context not on sender chain */
-            Boolean canReturn = homeContext.canBeReturnedTo();
-            if (canReturn && FrameAccess.getContext(frame) != null) {
-                ContextObject sender = FrameAccess.getContext(frame);
-                int depth = 0;
-                while (sender != homeContext) {
-                    final AbstractSqueakObject senderOrNil = ( (sender == null) ? NilObject.SINGLETON : sender.getSender() );
-                    if (senderOrNil instanceof ContextObject senderContext) {
-                        sender = senderContext;
-                        ++depth;
-                        if (sender.hasModifiedSender()) {
-                            System.out.print("ReturnFromClosureNode: modified sender at depth: (");
-                            System.out.print(depth);
-                            System.out.print("): ");
-                            System.out.println(sender);
-                        }
-                    } else {
-                        assert senderOrNil == NilObject.SINGLETON;
-//                        canReturn = false;
-                        System.out.print("ReturnFromClosureNode: sender chain broken: (");
-                        System.out.print(depth);
-                        System.out.print("): ");
-                        System.out.println(FrameAccess.getContext(frame));
-                        break;
-                    }
+            if (homeContext.canBeReturnedTo()) {
+                /* Find the first marked context or homeContext, whichever occurs first. */
+                final ContextObject stopContext = ContextUtils.findStopContext(frame, homeContext, this);
+
+                /* Copy OpenSmalltalkVM: check if homeContext is marked -- perhaps overkill? */
+                if (stopContext == homeContext && !homeContext.isUnwindMarkedNonClosure()) {
+                    /* no unwind marked contexts */
+                    throw new NonLocalReturn(returnValue, homeContext.getFrameSender());
+                }
+
+                /*
+                 *  Can't use the unwind handling in NLR since sending value to the ensure block
+                 *  could result in a process switch that would mess up the context stack unwind.
+                 */
+                if (stopContext != null) {          /* stopContext is unwind marked */
+                    // send aboutToReturn:to:
+                    getGetOrCreateSendAboutToReturnNode().execute(frame, getGetOrCreateContextNode().executeGet(frame), returnValue, stopContext);
+                    throw CompilerDirectives.shouldNotReachHere();
                 }
             }
 
-            if (canReturn) {
-                throw new NonLocalReturn(returnValue, homeContext.getFrameSender());
-            } else {
-                CompilerDirectives.transferToInterpreter();
-                final ContextObject contextObject = GetOrCreateContextNode.getOrCreateUncached(frame);
-                final SqueakImageContext image = getContext();
-                image.cannotReturn.executeAsSymbolSlow(image, frame, contextObject, returnValue);
-                throw CompilerDirectives.shouldNotReachHere();
-            }
+            // We must return since the current process may continue.
+            // It is likely that we need to handle this differently.
+            sendCannotReturn(this, frame, returnValue);
+            return returnValue;
         }
+
+        private Dispatch2Node getGetOrCreateSendAboutToReturnNode() {
+            if (sendAboutToReturnNode == null) {
+                CompilerDirectives.transferToInterpreterAndInvalidate();
+                sendAboutToReturnNode = insert(Dispatch2Node.create(SqueakImageContext.getSlow().aboutToReturnSelector));
+            }
+            return sendAboutToReturnNode;
+        }
+
+        private GetOrCreateContextNode getGetOrCreateContextNode() {
+            if (getOrCreateContextNode == null) {
+                CompilerDirectives.transferToInterpreterAndInvalidate();
+                getOrCreateContextNode = insert(GetOrCreateContextNode.create());
+            }
+            return getOrCreateContextNode;
+        }
+
     }
 
     protected abstract static class AbstractReturnConstantNode extends AbstractNormalReturnNode {
@@ -196,6 +219,9 @@ public final class ReturnBytecodes {
     }
 
     public abstract static class AbstractBlockReturnNode extends AbstractReturnNode {
+
+        /* Return to caller */
+
         private final ConditionProfile hasModifiedSenderProfile = ConditionProfile.create();
 
         protected AbstractBlockReturnNode(final CompiledCodeObject code, final int index) {
@@ -211,10 +237,7 @@ public final class ReturnBytecodes {
                     throw new NonVirtualReturn(getReturnValue(frame), returnContext, FrameAccess.getContext(frame));
                 }
                 else {
-                    CompilerDirectives.transferToInterpreter();
-                    final ContextObject contextObject = GetOrCreateContextNode.getOrCreateUncached(frame);
-                    final SqueakImageContext image = getContext();
-                    image.cannotReturn.executeAsSymbolSlow(image, frame, contextObject, getReturnValue(frame));
+                    sendCannotReturn(this, frame, getReturnValue(frame));
                     throw CompilerDirectives.shouldNotReachHere();
                 }
             } else {

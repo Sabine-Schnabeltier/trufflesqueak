@@ -21,6 +21,7 @@ import com.oracle.truffle.api.frame.FrameSlotKind;
 import com.oracle.truffle.api.frame.MaterializedFrame;
 import com.oracle.truffle.api.frame.VirtualFrame;
 
+import com.oracle.truffle.api.nodes.Node;
 import de.hpi.swa.trufflesqueak.exceptions.SqueakExceptions.SqueakException;
 import de.hpi.swa.trufflesqueak.model.AbstractSqueakObject;
 import de.hpi.swa.trufflesqueak.model.ArrayObject;
@@ -31,6 +32,7 @@ import de.hpi.swa.trufflesqueak.model.FrameMarker;
 import de.hpi.swa.trufflesqueak.model.NativeObject;
 import de.hpi.swa.trufflesqueak.model.NilObject;
 import de.hpi.swa.trufflesqueak.model.PointersObject;
+import de.hpi.swa.trufflesqueak.nodes.AbstractNode;
 import de.hpi.swa.trufflesqueak.nodes.context.frame.FrameStackPushNode;
 import de.hpi.swa.trufflesqueak.nodes.context.frame.GetContextOrMarkerNode;
 
@@ -213,6 +215,11 @@ public final class FrameAccess {
         return (ContextObject) frame.getObject(SlotIndicies.THIS_CONTEXT.ordinal());
     }
 
+    public static boolean hasContext(final VirtualFrame frame) {
+        final ContextObject context = getContext(frame);
+        return context != null;
+    }
+
     public static boolean hasEscapedContext(final VirtualFrame frame) {
         final ContextObject context = getContext(frame);
         return context != null && context.hasEscaped();
@@ -221,6 +228,31 @@ public final class FrameAccess {
     public static boolean hasModifiedSender(final VirtualFrame frame) {
         final ContextObject context = getContext(frame);
         return context != null && context.hasModifiedSender();
+    }
+
+    public static boolean hasMaterializedSender(final VirtualFrame frame) {
+        return !(getSender(frame) instanceof FrameMarker);
+    }
+
+    public static boolean frameHasEscapedContext(final Frame frame) {
+        final ContextObject context = getContext(frame);
+        return context != null && context.hasEscaped();
+    }
+
+    public static boolean frameHasModifiedSender(final Frame frame) {
+        final ContextObject context = getContext(frame);
+        return context != null && context.hasModifiedSender();
+    }
+
+    public static boolean frameHasTerminated(final Frame frame) {
+        return getInstructionPointer(frame) == ContextObject.NIL_PC_VALUE;
+    }
+
+    public static boolean isUnwindMarkedNonClosure(final Frame frame) {
+        if (hasClosure(frame)) {
+            return false;
+        }
+        return getCodeObject(frame).isUnwindMarked();
     }
 
     public static void setContext(final Frame frame, final ContextObject context) {
