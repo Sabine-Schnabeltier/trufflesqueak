@@ -151,7 +151,6 @@ public class ContextPrimitives extends AbstractPrimitiveFactoryHolder {
         @TruffleBoundary
         private static void terminateBetween(final FrameMarker start, final ContextObject end) {
             assert start != null : "Unexpected `null` value";
-            final ContextObject[] bottomContextOnTruffleStack = new ContextObject[1];
             final ContextObject result = Truffle.getRuntime().iterateFrames(new FrameInstanceVisitor<>() {
                 boolean foundMyself;
 
@@ -159,7 +158,12 @@ public class ContextPrimitives extends AbstractPrimitiveFactoryHolder {
                 public ContextObject visitFrame(final FrameInstance frameInstance) {
                     final Frame current = frameInstance.getFrame(FrameInstance.FrameAccess.READ_ONLY);
                     if (!FrameAccess.isTruffleSqueakFrame(current)) {
-                        return null;
+                        // this test is needed only if there can be more than one ResumingContextNode on the Java stack
+                        if (foundMyself) {
+                            return FrameAccess.getResumingContextObjectOrSkip(frameInstance);
+                        } else {
+                            return null;
+                        }
                     }
                     if (!foundMyself) {
                         if (start == FrameAccess.getMarker(current)) {
@@ -170,7 +174,6 @@ public class ContextPrimitives extends AbstractPrimitiveFactoryHolder {
                         if (context == end) {
                             return end;
                         }
-                        bottomContextOnTruffleStack[0] = context;
                         final Frame currentWritable = frameInstance.getFrame(FrameInstance.FrameAccess.READ_WRITE);
                         // Terminate frame
                         FrameAccess.terminate(currentWritable);
@@ -178,8 +181,8 @@ public class ContextPrimitives extends AbstractPrimitiveFactoryHolder {
                     return null;
                 }
             });
-            if (result == null && bottomContextOnTruffleStack[0] != null) {
-                terminateBetweenRecursively(bottomContextOnTruffleStack[0], end);
+            if (result != null && result != end) {
+                terminateBetweenRecursively(result, end);
             }
         }
 

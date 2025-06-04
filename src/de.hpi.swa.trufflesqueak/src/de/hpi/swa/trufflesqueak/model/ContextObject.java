@@ -257,6 +257,17 @@ public final class ContextObject extends AbstractSqueakObjectWithClassAndHash {
         FrameAccess.setSender(getOrCreateTruffleFrame(), value);
     }
 
+    public void setNilSender() {
+        /* context is end of sender chain, set by Smalltalk */
+        if (truffleFrame != null) {
+            final Object sender = FrameAccess.getSender(getTruffleFrame());
+            if (!hasModifiedSender && sender != NilObject.SINGLETON) {
+                hasModifiedSender = true;
+            }
+        }
+        setSenderUnsafe(NilObject.SINGLETON);
+    }
+
     public void removeSender() {
         if (hasModifiedSender) {
             hasModifiedSender = false;
