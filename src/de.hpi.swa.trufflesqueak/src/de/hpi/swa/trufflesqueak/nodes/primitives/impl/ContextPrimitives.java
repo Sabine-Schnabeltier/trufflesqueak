@@ -158,7 +158,8 @@ public class ContextPrimitives extends AbstractPrimitiveFactoryHolder {
                 public ContextObject visitFrame(final FrameInstance frameInstance) {
                     final Frame current = frameInstance.getFrame(FrameInstance.FrameAccess.READ_ONLY);
                     if (!FrameAccess.isTruffleSqueakFrame(current)) {
-                        // this test is needed only if there can be more than one ResumingContextNode on the Java stack
+                        // this test is needed only if there can be more than one
+                        // ResumingContextNode on the Java stack
                         if (foundMyself) {
                             return FrameAccess.getResumingContextObjectOrSkip(frameInstance);
                         } else {
