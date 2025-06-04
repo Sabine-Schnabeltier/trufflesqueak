@@ -173,8 +173,7 @@ public class ContextPrimitives extends AbstractPrimitiveFactoryHolder {
                         bottomContextOnTruffleStack[0] = context;
                         final Frame currentWritable = frameInstance.getFrame(FrameInstance.FrameAccess.READ_WRITE);
                         // Terminate frame
-                        FrameAccess.setInstructionPointer(currentWritable, -1);
-                        FrameAccess.setSender(currentWritable, NilObject.SINGLETON);
+                        FrameAccess.terminate(currentWritable);
                     }
                     return null;
                 }
