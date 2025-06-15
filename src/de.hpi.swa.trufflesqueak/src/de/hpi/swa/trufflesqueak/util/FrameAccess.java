@@ -327,6 +327,14 @@ public final class FrameAccess {
         setSender(frame, NilObject.SINGLETON);
     }
 
+    public static void terminateContext(final Frame frame) {
+        // Makes sure that the ContextObject no longer indicates a modified sender.
+        terminate(frame);
+        if (frame.getObject(SlotIndicies.THIS_CONTEXT.ordinal()) instanceof final ContextObject context) {
+            context.clearModifiedSender();
+        }
+    }
+
     public static boolean isTruffleSqueakFrame(final Frame frame) {
         return frame.getArguments().length >= ArgumentIndicies.RECEIVER.ordinal() && frame.getFrameDescriptor().getInfo() instanceof CompiledCodeObject;
     }

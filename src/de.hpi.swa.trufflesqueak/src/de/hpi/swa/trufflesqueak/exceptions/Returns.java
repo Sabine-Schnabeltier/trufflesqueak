@@ -17,7 +17,7 @@ import de.hpi.swa.trufflesqueak.model.FrameMarker;
  * context and sender context.
  *
  * NonVirtualReturn passes a return value to a context that is not immediately above the current
- * Java execution node.
+ * Java execution node. If current's sender is not target, also execute unwind blocks.
  *
  * TopLevelReturn passes a return value to the ExecuteTopLevelContextNode at the top of the Java
  * stack.

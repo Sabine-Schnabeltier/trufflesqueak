@@ -17,6 +17,7 @@ import de.hpi.swa.trufflesqueak.image.SqueakImageContext;
 import de.hpi.swa.trufflesqueak.model.BooleanObject;
 import de.hpi.swa.trufflesqueak.model.CompiledCodeObject;
 import de.hpi.swa.trufflesqueak.model.ContextObject;
+import de.hpi.swa.trufflesqueak.model.FrameMarker;
 import de.hpi.swa.trufflesqueak.model.NilObject;
 import de.hpi.swa.trufflesqueak.nodes.AbstractNode;
 import de.hpi.swa.trufflesqueak.nodes.context.frame.FrameStackPopNode;
@@ -64,7 +65,7 @@ public final class ReturnBytecodes {
 
     private static final class ReturnFromMethodNode extends AbstractReturnKindNode {
 
-        /* Return to sender */
+        /* Return to sender (never needs to unwind) */
 
         private final ConditionProfile hasModifiedSenderProfile = ConditionProfile.create();
 
@@ -72,6 +73,7 @@ public final class ReturnBytecodes {
         protected Object execute(final VirtualFrame frame, final Object returnValue) {
             assert !FrameAccess.hasClosure(frame);
             if (hasModifiedSenderProfile.profile(FrameAccess.hasModifiedSender(frame))) {
+                // This should return to a new sender without executing unwind blocks.
                 assert FrameAccess.getSender(frame) instanceof ContextObject : "Sender must be a materialized ContextObject";
                 throw new NonLocalReturn(returnValue, FrameAccess.getSender(frame));
             } else {
@@ -82,7 +84,7 @@ public final class ReturnBytecodes {
 
     private static final class ReturnFromClosureNode extends AbstractReturnKindNode {
 
-        /* Return to closure's home context's sender */
+        /* Return to closure's home context's sender, executing unwind blocks */
 
         @Override
         protected Object execute(final VirtualFrame frame, final Object returnValue) {
@@ -165,7 +167,7 @@ public final class ReturnBytecodes {
 
     public abstract static class AbstractBlockReturnNode extends AbstractReturnNode {
 
-        /* Return to caller */
+        /* Return to caller (never needs to unwind) */
 
         private final ConditionProfile hasModifiedSenderProfile = ConditionProfile.create();
 
@@ -176,10 +178,10 @@ public final class ReturnBytecodes {
         @Override
         public final Object executeReturnSpecialized(final VirtualFrame frame) {
             if (hasModifiedSenderProfile.profile(FrameAccess.hasModifiedSender(frame))) {
-                // Target is sender of closure's home context.
-                final ContextObject homeContext = FrameAccess.getClosure(frame).getHomeContext();
-                if (homeContext.canBeReturnedTo()) {
-                    throw new NonLocalReturn(getReturnValue(frame), homeContext.getFrameSender());
+                // This should return to a new caller without executing unwind blocks.
+                final Object returnContextOrMarker = FrameAccess.getSender(frame);
+                if (returnContextOrMarker != NilObject.SINGLETON) {
+                    throw new NonLocalReturn(getReturnValue(frame), returnContextOrMarker);
                 } else {
                     CompilerDirectives.transferToInterpreter();
                     final ContextObject contextObject = GetOrCreateContextNode.getOrCreateUncached(frame);
