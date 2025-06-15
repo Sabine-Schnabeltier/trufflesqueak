@@ -134,8 +134,9 @@ public class ContextPrimitives extends AbstractPrimitiveFactoryHolder {
             return receiver;
         }
 
-        /** Returns true if endContext is found on the sender chain of startContext.
-         *  If terminate is true, terminate Contexts while following the sender chain.
+        /**
+         * Returns true if endContext is found on the sender chain of startContext. If terminate is
+         * true, terminate Contexts while following the sender chain.
          */
         private static boolean hasSenderChainBetweenTerminatingIf(final ContextObject startContext, final ContextObject endContext, final boolean terminate) {
             // First, terminate materialized Contexts.
