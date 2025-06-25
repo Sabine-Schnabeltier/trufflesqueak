@@ -65,6 +65,7 @@ public final class StartContextRootNode extends AbstractRootNode {
             interruptHandlerNode.execute(frame);
             return executeBytecodeNode.execute(frame, initialPC);
         } catch (final NonVirtualReturn | ProcessSwitch nvr) {
+            // TODO: NonVirtualReturn does not need to create a Context or mark it as escaped.
             /* {@link getGetOrCreateContextNode()} acts as {@link BranchProfile} */
             getGetOrCreateContextNode().executeGet(frame).markEscaped();
             throw nvr;

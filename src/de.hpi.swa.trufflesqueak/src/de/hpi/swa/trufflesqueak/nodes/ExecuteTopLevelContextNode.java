@@ -106,7 +106,7 @@ public final class ExecuteTopLevelContextNode extends RootNode {
                     activeContext = commonNLReturn(sender, nlr);
                     LogUtils.SCHEDULING.log(Level.FINE, "Non Local Return on top-level: {0}", activeContext);
                 } catch (final NonVirtualReturn nvr) {
-                    activeContext = commonReturn(nvr.getCurrentContext(), nvr.getTargetContext(), nvr.getReturnValue());
+                    activeContext = commonNVReturn(sender, nvr);
                     LogUtils.SCHEDULING.log(Level.FINE, "Non Virtual Return on top-level: {0}", activeContext);
                 }
             } catch (final ProcessSwitch ps) {
@@ -147,6 +147,8 @@ public final class ExecuteTopLevelContextNode extends RootNode {
                     // TODO: make this better
                     AboutToReturnNode.create(context.getCodeObject()).executeAboutToReturn(context.getTruffleFrame(), nlr);
                 } catch (NonVirtualReturn nvr) {
+                    // TODO: figure out what should happen here
+                    System.out.println("commonNLReturn caught an NVR");
                     return commonReturn(nvr.getCurrentContext(), nvr.getTargetContext(), nvr.getReturnValue());
                 }
             }
@@ -171,6 +173,92 @@ public final class ExecuteTopLevelContextNode extends RootNode {
     }
 
     @TruffleBoundary
+    private ContextObject commonNVReturn(final AbstractSqueakObject originalSender, final NonVirtualReturn nvr) {
+        // TODO: should not execute unwind-marked and should optionally continue an NLR
+        // Returning from startContext to its sender, targetContext.
+        final ContextObject startContext = nvr.getCurrentContext();
+        final ContextObject targetContext = nvr.getTargetContext();
+        final Object returnValue = nvr.getReturnValue();
+
+        // Make sure we can return to the given context
+        if (!targetContext.hasClosure() && !targetContext.canBeReturnedTo()) {
+            if (startContext == targetContext) {
+                throw returnToTopLevel(targetContext, returnValue);
+            }
+            return sendCannotReturn(startContext, returnValue);
+        }
+
+        // Make sure that targetContext is the sender of startContext.
+        if (targetContext != startContext.getFrameSender()) {
+            System.out.print("commonNVReturn -- ");
+            System.out.print("sender of: ");
+            System.out.print(startContext);
+            System.out.print(" is not: ");
+            System.out.println(targetContext);
+            DebugUtils.printSqStackTrace(startContext);
+            System.out.println("===========================================");
+        }
+
+        // Perform the return and exit if there is no suspended NLR.
+        startContext.terminate();
+        if (nvr.getSuspendedNLR() == null) {
+            targetContext.push(returnValue);
+            return targetContext;
+        }
+
+        // Make sure that the suspended NLR target is reachable.
+        final NonLocalReturn nlr = nvr.getSuspendedNLR();
+        final ContextObject nlrTargetContext = nlr.getTargetContext();
+        final Object nlrReturnValue = nlr.getReturnValue();
+        boolean hasUnwindMarkedContext = false;
+        ContextObject context = targetContext;
+        while (context != nlrTargetContext) {
+            if (context.getCodeObject().isUnwindMarked()) {
+                hasUnwindMarkedContext = true;
+            }
+            final AbstractSqueakObject currentSender = context.getSender();
+            if (currentSender instanceof final ContextObject o) {
+                context = o;
+            } else {
+                return sendCannotReturn(targetContext, nlrReturnValue);
+            }
+        }
+
+        // We're done if we found the NLR target and there are no unwind-marked Contexts.
+        if (!hasUnwindMarkedContext) {
+            context = targetContext;
+            while (context != nlrTargetContext) {
+                final ContextObject currentSender = (ContextObject) context.getSender();
+                context.terminate();
+                context = currentSender;
+            }
+            nlrTargetContext.push(nlrReturnValue);
+            return nlrTargetContext;
+        }
+
+        // We arrive here if there is an unwind-marked context in the sender chain.
+        context = targetContext;
+        while (context != nlrTargetContext) {
+            if (context.getCodeObject().isUnwindMarked()) {
+                try {
+                    // TODO: make this better
+                    AboutToReturnNode.create(context.getCodeObject()).executeAboutToReturn(context.getTruffleFrame(), nlr);
+                } catch (NonVirtualReturn nvr2) {
+                    // TODO: figure out what should happen here
+                    System.out.println("commonNLReturn caught an NVR");
+                    return commonReturn(nvr2.getCurrentContext(), nvr2.getTargetContext(), nvr2.getReturnValue());
+                }
+            }
+            final ContextObject currentSender = (ContextObject) context.getSender();
+            context.terminate();
+            context = currentSender;
+        }
+
+        nlrTargetContext.push(nlrReturnValue);
+        return nlrTargetContext;
+    }
+
+    @TruffleBoundary
     private ContextObject commonReturn(final ContextObject startContext, final ContextObject targetContext, final Object returnValue) {
         /* "make sure we can return to the given context" */
         if (!targetContext.hasClosure() && !targetContext.canBeReturnedTo()) {
@@ -192,12 +280,12 @@ public final class ExecuteTopLevelContextNode extends RootNode {
                 assert contextOrNil == NilObject.SINGLETON;
                 return sendCannotReturn(startContext, returnValue);
             }
-            assert !context.isPrimitiveContext();
-            if (context.getCodeObject().isUnwindMarked()) {
-                assert !context.hasClosure();
-                /* "context is marked; break out" */
-                return sendAboutToReturn(startContext, returnValue, context);
-            }
+//            assert !context.isPrimitiveContext();
+//            if (context.getCodeObject().isUnwindMarked()) {
+//                assert !context.hasClosure();
+//                /* "context is marked; break out" */
+//                return sendAboutToReturn(startContext, returnValue, context);
+//            }
             contextOrNil = context.getSender();
         }
         /*
@@ -228,6 +316,7 @@ public final class ExecuteTopLevelContextNode extends RootNode {
         try {
             sendAboutToReturnNode.execute(startContext.getTruffleFrame(), startContext, returnValue, context);
         } catch (final NonVirtualReturn nvr) {
+            System.out.println("sendAboutToReturn caught an NVR");
             return commonReturn(nvr.getCurrentContext(), nvr.getTargetContext(), nvr.getReturnValue());
         }
         throw CompilerDirectives.shouldNotReachHere("aboutToReturn should trigger a ProcessSwitch or a NonVirtualReturn");

@@ -13,11 +13,12 @@ import de.hpi.swa.trufflesqueak.model.ContextObject;
 import de.hpi.swa.trufflesqueak.model.FrameMarker;
 
 /**
- * NonLocalReturn passes a return value to a sender, executing unwind blocks found between current
- * context and sender context.
+ * NonLocalReturn passes a return value to a sender, executing unwind-marked blocks found between
+ * current context and sender context.
  *
  * NonVirtualReturn passes a return value to a context that is not immediately above the current
- * Java execution node. If current's sender is not target, also execute unwind blocks.
+ * Java execution node. It is used to handle modified senders and should not execute unwind-marked
+ * blocks.
  *
  * TopLevelReturn passes a return value to the ExecuteTopLevelContextNode at the top of the Java
  * stack.
@@ -66,26 +67,35 @@ public final class Returns {
         private static final long serialVersionUID = 1L;
         private final transient ContextObject targetContext;
         private final transient ContextObject currentContext;
+        private final transient NonLocalReturn suspendedNLR;
+        // TODO: we need to add an optional NLR that continues after the NVR
 
         public NonVirtualReturn(final Object returnValue, final ContextObject targetContext, final ContextObject currentContext) {
             super(returnValue);
             assert !targetContext.isDead() : "Cannot return to terminated context";
             this.targetContext = targetContext;
             this.currentContext = currentContext;
+            this.suspendedNLR = null;
         }
 
-        public ContextObject getTargetContext() {
-            return targetContext;
+        public NonVirtualReturn(final Object returnValue, final ContextObject targetContext, final ContextObject currentContext, NonLocalReturn suspendedNLR) {
+            super(returnValue);
+            assert !targetContext.isDead() : "Cannot return to terminated context";
+            this.targetContext = targetContext;
+            this.currentContext = currentContext;
+            this.suspendedNLR = suspendedNLR;
         }
 
-        public ContextObject getCurrentContext() {
-            return currentContext;
-        }
+        public ContextObject getTargetContext() { return targetContext; }
+
+        public ContextObject getCurrentContext() { return currentContext; }
+
+        public NonLocalReturn getSuspendedNLR() { return suspendedNLR; }
 
         @Override
         public String toString() {
             CompilerAsserts.neverPartOfCompilation();
-            return "NVR (value: " + returnValue + ", current: " + currentContext + ", target: " + targetContext + ")";
+            return "NVR (value: " + returnValue + ", current: " + currentContext + ", target: " + targetContext + ", NLR: " + suspendedNLR + ")";
         }
     }
 

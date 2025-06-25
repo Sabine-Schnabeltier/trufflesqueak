@@ -8,10 +8,14 @@ package de.hpi.swa.trufflesqueak.nodes.bytecodes;
 
 import com.oracle.truffle.api.CompilerAsserts;
 import com.oracle.truffle.api.CompilerDirectives;
+import com.oracle.truffle.api.frame.MaterializedFrame;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.profiles.ConditionProfile;
 
+import de.hpi.swa.trufflesqueak.exceptions.Returns;
 import de.hpi.swa.trufflesqueak.exceptions.Returns.NonLocalReturn;
+import de.hpi.swa.trufflesqueak.exceptions.Returns.NonVirtualReturn;
+import de.hpi.swa.trufflesqueak.exceptions.SqueakExceptions;
 import de.hpi.swa.trufflesqueak.exceptions.SqueakExceptions.SqueakException;
 import de.hpi.swa.trufflesqueak.image.SqueakImageContext;
 import de.hpi.swa.trufflesqueak.model.BooleanObject;
@@ -23,6 +27,9 @@ import de.hpi.swa.trufflesqueak.nodes.AbstractNode;
 import de.hpi.swa.trufflesqueak.nodes.context.frame.FrameStackPopNode;
 import de.hpi.swa.trufflesqueak.nodes.context.frame.GetOrCreateContextNode;
 import de.hpi.swa.trufflesqueak.util.FrameAccess;
+import de.hpi.swa.trufflesqueak.util.LogUtils;
+
+import java.util.logging.Level;
 
 public final class ReturnBytecodes {
 
@@ -73,9 +80,26 @@ public final class ReturnBytecodes {
         protected Object execute(final VirtualFrame frame, final Object returnValue) {
             assert !FrameAccess.hasClosure(frame);
             if (hasModifiedSenderProfile.profile(FrameAccess.hasModifiedSender(frame))) {
-                // This should return to a new sender without executing unwind blocks.
-                assert FrameAccess.getSender(frame) instanceof ContextObject : "Sender must be a materialized ContextObject";
-                throw new NonLocalReturn(returnValue, FrameAccess.getSender(frame));
+                // Return to a new sender without executing unwind blocks.
+                // TODO: Almost identical code in AbstractBlockReturnNode
+                CompilerDirectives.transferToInterpreter();
+                final ContextObject contextObject = GetOrCreateContextNode.getOrCreateUncached(frame);
+                final Object returnContextOrMarker = FrameAccess.getSender(frame);
+                if (returnContextOrMarker != NilObject.SINGLETON) {
+                    final ContextObject returnContext;
+                    if (returnContextOrMarker instanceof final ContextObject returnContextFromMarker) {
+                        returnContext = returnContextFromMarker;
+                    } else {
+                        final FrameMarker returnFrameMarker = (FrameMarker) returnContextOrMarker;
+                        final MaterializedFrame targetFrame = FrameAccess.findFrameForMarker(returnFrameMarker);
+                        returnContext = FrameAccess.getContext(targetFrame);
+                    }
+                    throw new NonVirtualReturn(returnValue, returnContext, contextObject);
+                } else {
+                    final SqueakImageContext image = getContext();
+                    image.cannotReturn.executeAsSymbolSlow(image, frame, contextObject, returnValue);
+                    throw CompilerDirectives.shouldNotReachHere();
+                }
             } else {
                 return returnValue;
             }
@@ -178,13 +202,22 @@ public final class ReturnBytecodes {
         @Override
         public final Object executeReturnSpecialized(final VirtualFrame frame) {
             if (hasModifiedSenderProfile.profile(FrameAccess.hasModifiedSender(frame))) {
-                // This should return to a new caller without executing unwind blocks.
+                // Return to a new caller without executing unwind blocks.
+                // TODO: Almost identical code in ReturnFromMethodNode
+                CompilerDirectives.transferToInterpreter();
+                final ContextObject contextObject = GetOrCreateContextNode.getOrCreateUncached(frame);
                 final Object returnContextOrMarker = FrameAccess.getSender(frame);
                 if (returnContextOrMarker != NilObject.SINGLETON) {
-                    throw new NonLocalReturn(getReturnValue(frame), returnContextOrMarker);
+                    final ContextObject returnContext;
+                    if (returnContextOrMarker instanceof final ContextObject returnContextFromMarker) {
+                        returnContext = returnContextFromMarker;
+                    } else {
+                        final FrameMarker returnFrameMarker = (FrameMarker) returnContextOrMarker;
+                        final MaterializedFrame targetFrame = FrameAccess.findFrameForMarker(returnFrameMarker);
+                        returnContext = FrameAccess.getContext(targetFrame);
+                    }
+                    throw new NonVirtualReturn(getReturnValue(frame), returnContext, contextObject);
                 } else {
-                    CompilerDirectives.transferToInterpreter();
-                    final ContextObject contextObject = GetOrCreateContextNode.getOrCreateUncached(frame);
                     final SqueakImageContext image = getContext();
                     image.cannotReturn.executeAsSymbolSlow(image, frame, contextObject, getReturnValue(frame));
                     throw CompilerDirectives.shouldNotReachHere();

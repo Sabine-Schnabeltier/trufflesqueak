@@ -21,6 +21,7 @@ import de.hpi.swa.trufflesqueak.model.CompiledCodeObject;
 import de.hpi.swa.trufflesqueak.model.ContextObject;
 import de.hpi.swa.trufflesqueak.model.FrameMarker;
 import de.hpi.swa.trufflesqueak.model.NilObject;
+import de.hpi.swa.trufflesqueak.util.DebugUtils;
 import de.hpi.swa.trufflesqueak.util.FrameAccess;
 
 public abstract class HandleNonLocalReturnNode extends AbstractNode {
@@ -40,6 +41,11 @@ public abstract class HandleNonLocalReturnNode extends AbstractNode {
     protected final Object doHandle(final VirtualFrame frame, final NonLocalReturn nlr,
                     @Bind final Node node,
                     @Cached final InlinedConditionProfile hasModifiedSenderProfile) {
+
+        // If the method is not unwind-marked, do nothing. If frame's sender was not modified,
+        // evaluate the unwind-marked method's Block.  Otherwise, send aboutToReturn: (which handles
+        // all unwind-marked Contexts and results in our sender set to the NLR target).
+        boolean hadModifiedSender = FrameAccess.hasModifiedSender(frame);
         aboutToReturnNode.executeAboutToReturn(frame, nlr); // handle ensure: or ifCurtailed:
         if (hasModifiedSenderProfile.profile(node, FrameAccess.hasModifiedSender(frame))) {
             // Sender might have changed.
@@ -55,9 +61,18 @@ public abstract class HandleNonLocalReturnNode extends AbstractNode {
                 throw SqueakExceptions.SqueakException.create("Nil resuming context in HandleNonLocalReturnNode");
             }
             final ContextObject newSender = FrameAccess.getSenderContext(frame);
+            System.out.print("NVR within NLR target: ");
+            System.out.print(nlr.getTargetContext());
+            System.out.print(" newSender: ");
+            System.out.print(newSender);
+            System.out.print(" hadModifiedSender: ");
+            System.out.println(hadModifiedSender);
+            DebugUtils.printSqStackTrace();
+            System.out.println("===========================================");
             FrameAccess.terminate(frame);
             // TODO: `target == newSender` may could use special handling?
-            throw new NonVirtualReturn(nlr.getReturnValue(), targetContext, newSender);
+            // TODO: should embed original NLR into NVR for continuation
+            throw new NonVirtualReturn(nlr.getReturnValue(), targetContext, newSender, /*nlr*/ null);
         } else {
             FrameAccess.terminate(frame);
             throw nlr;

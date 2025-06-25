@@ -102,7 +102,13 @@ public final class SendBytecodes {
                 }
             } catch (final NonVirtualReturn nvr) {
                 if (nvrProfile.profile(nvr.getTargetContext() == FrameAccess.getContext(frame))) {
-                    result = nvr.getReturnValue();
+                    // TODO: handle NLR continuation here
+                    if (nvr.getSuspendedNLR() == null) {
+                        result = nvr.getReturnValue();
+                    } else {
+                        System.out.println("continue suspended NLR");
+                        throw nvr.getSuspendedNLR();
+                    }
                 } else {
                     throw nvr;
                 }

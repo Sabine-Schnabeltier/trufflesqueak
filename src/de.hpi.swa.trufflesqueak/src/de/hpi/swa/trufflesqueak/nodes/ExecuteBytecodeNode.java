@@ -52,6 +52,7 @@ public final class ExecuteBytecodeNode extends AbstractExecuteContextNode implem
         try {
             return interpretBytecode(frame, startPC);
         } catch (final NonLocalReturn nlr) {
+            // TODO: do we need to catch NVRs here as well?
             /* {@link getHandleNonLocalReturnNode()} acts as {@link BranchProfile} */
             return getHandleNonLocalReturnNode().executeHandle(frame, nlr);
         } catch (final StackOverflowError e) {
