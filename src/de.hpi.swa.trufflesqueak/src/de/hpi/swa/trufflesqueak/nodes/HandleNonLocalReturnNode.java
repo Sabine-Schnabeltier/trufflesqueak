@@ -22,6 +22,9 @@ import de.hpi.swa.trufflesqueak.model.ContextObject;
 import de.hpi.swa.trufflesqueak.model.FrameMarker;
 import de.hpi.swa.trufflesqueak.model.NilObject;
 import de.hpi.swa.trufflesqueak.util.FrameAccess;
+import de.hpi.swa.trufflesqueak.util.LogUtils;
+
+import java.util.logging.Level;
 
 public abstract class HandleNonLocalReturnNode extends AbstractNode {
     @Child private AboutToReturnNode aboutToReturnNode;
@@ -43,6 +46,7 @@ public abstract class HandleNonLocalReturnNode extends AbstractNode {
         aboutToReturnNode.executeAboutToReturn(frame, nlr); // handle ensure: or ifCurtailed:
         if (hasModifiedSenderProfile.profile(node, FrameAccess.hasModifiedSender(frame))) {
             // Sender might have changed.
+            LogUtils.SCHEDULING.log(Level.FINE, "HandleNonLocalReturnNode with modified sender: {0}", FrameAccess.getSender(frame));
             final ContextObject targetContext;
             final Object targetContextOrMarker = nlr.getTargetContextOrMarker();
             if (targetContextOrMarker instanceof final ContextObject target) {

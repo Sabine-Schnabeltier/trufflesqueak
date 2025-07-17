@@ -101,17 +101,17 @@ public final class ExecuteTopLevelContextNode extends RootNode {
                     image.resetContextStackDepth();
                     final Object result = callNode.call(activeContext.getCallTarget());
                     activeContext = returnTo(activeContext, sender, result);
-                    LogUtils.SCHEDULING.log(Level.FINE, "Local Return on top-level: {0}", activeContext);
+                    LogUtils.SCHEDULING.log(Level.FINER, "Local Return on top-level: {0}", activeContext);
                 } catch (final NonLocalReturn nlr) {
                     activeContext = commonNLReturn(sender, nlr);
-                    LogUtils.SCHEDULING.log(Level.FINE, "Non Local Return on top-level: {0}", activeContext);
+                    LogUtils.SCHEDULING.log(Level.FINER, "Non Local Return on top-level: {0}", activeContext);
                 } catch (final NonVirtualReturn nvr) {
                     activeContext = commonReturn(nvr.getCurrentContext(), nvr.getTargetContext(), nvr.getReturnValue());
-                    LogUtils.SCHEDULING.log(Level.FINE, "Non Virtual Return on top-level: {0}", activeContext);
+                    LogUtils.SCHEDULING.log(Level.FINER, "Non Virtual Return on top-level: {0}", activeContext);
                 }
             } catch (final ProcessSwitch ps) {
                 activeContext = getNextActiveContextNode.execute();
-                LogUtils.SCHEDULING.log(Level.FINE, "Process Switch: {0}", activeContext);
+                LogUtils.SCHEDULING.log(Level.FINER, "Process Switch: {0}", activeContext);
             }
         }
     }

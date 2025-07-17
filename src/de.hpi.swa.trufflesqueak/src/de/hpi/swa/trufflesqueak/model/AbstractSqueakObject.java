@@ -7,6 +7,7 @@
 package de.hpi.swa.trufflesqueak.model;
 
 import java.lang.reflect.Method;
+import java.util.concurrent.atomic.AtomicReference;
 
 import com.oracle.truffle.api.CompilerAsserts;
 import com.oracle.truffle.api.CompilerDirectives;
@@ -41,6 +42,7 @@ import de.hpi.swa.trufflesqueak.nodes.dispatch.DispatchSelectorNaryNode.Dispatch
 import de.hpi.swa.trufflesqueak.nodes.dispatch.DispatchSelectorNaryNode.DispatchIndirectNaryNode.TryPrimitiveNaryNode;
 import de.hpi.swa.trufflesqueak.nodes.dispatch.LookupClassGuard;
 import de.hpi.swa.trufflesqueak.util.FrameAccess;
+import de.hpi.swa.trufflesqueak.util.ReflectionUtils;
 
 @SuppressWarnings("static-method")
 @ExportLibrary(ReflectionLibrary.class)
@@ -143,7 +145,9 @@ public abstract class AbstractSqueakObject implements TruffleObject {
                         return callNode.call(method.getCallTarget(), FrameAccess.newWith(NilObject.SINGLETON, null, receiver, arguments));
                     }
                 } else {
-                    image.printToStdErr(selector, "method:", methodObject);
+                    if (methodObject != null) {
+                        image.printToStdErr(selector, "method:", methodObject);
+                    }
                 }
             }
             CompilerDirectives.transferToInterpreter();
@@ -152,7 +156,7 @@ public abstract class AbstractSqueakObject implements TruffleObject {
             // return ReflectionLibrary.getFactory().getUncached(receiver).send(DEFAULT,
             // message, arguments);
             final LibraryFactory<?> lib = message.getFactory();
-            final Method genericDispatchMethod = lib.getClass().getDeclaredMethod("genericDispatch", Library.class, Object.class, Message.class, Object[].class, int.class);
+            final Method genericDispatchMethod = ReflectionUtils.lookupMethod(lib.getClass(), "genericDispatch", Library.class, Object.class, Message.class, Object[].class, int.class);
             genericDispatchMethod.setAccessible(true);
             return genericDispatchMethod.invoke(lib, lib.getUncached(DEFAULT), receiver, message, rawArguments, 0);
         }

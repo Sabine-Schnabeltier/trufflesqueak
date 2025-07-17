@@ -530,4 +530,43 @@ public final class FrameAccess {
         }
         throw SqueakException.create("Could not find frame for:", frameMarker);
     }
+
+    @TruffleBoundary
+    public static boolean neitherContextOnTruffleStack(final ContextObject context1, final ContextObject context2) {
+
+        final FrameMarker marker1 = context1.hasTruffleFrame() ? context1.getFrameMarker() : null;
+        final FrameMarker marker2 = context2 == null ? null : (context2.hasTruffleFrame() ? context2.getFrameMarker() : null);
+
+//        LogUtils.SCHEDULING.fine(() -> "Iterating frames to check for Contexts on Truffle stack " + context1.toString() + " & " + context2.toString());
+
+        final Object result = Truffle.getRuntime().iterateFrames(frameInstance -> {
+
+            final Frame current = frameInstance.getFrame(FrameInstance.FrameAccess.READ_ONLY);
+            if (isTruffleSqueakFrame(current)) {
+                final FrameMarker marker = getMarker(current);
+//                LogUtils.SCHEDULING.fine(() -> "found " + marker.toString() + ": " + FrameAccess.getCodeObject(current).toString());
+                if (marker == marker1 || marker == marker2) {
+                    return marker;
+                } else {
+                    return null;
+                }
+            }
+            else {
+                return getResumingContextObjectOrSkip(frameInstance);
+            }
+        });
+
+//        LogUtils.SCHEDULING.fine(() -> "result = " + result.toString());
+
+        if (result == marker1) {
+            return false;
+        }
+        if (marker2 != null && result == marker2) {
+            return false;
+        }
+        if (result instanceof ContextObject resumingContextObject) {
+            return resumingContextObject != context1 && resumingContextObject != context2;
+        }
+        return true;
+    }
 }

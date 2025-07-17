@@ -7,7 +7,9 @@
 package de.hpi.swa.trufflesqueak.nodes.primitives.impl;
 
 import java.util.List;
+import java.util.logging.Level;
 
+import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.RootCallTarget;
 import com.oracle.truffle.api.Truffle;
@@ -17,27 +19,37 @@ import com.oracle.truffle.api.dsl.GenerateNodeFactory;
 import com.oracle.truffle.api.dsl.ImportStatic;
 import com.oracle.truffle.api.dsl.NodeFactory;
 import com.oracle.truffle.api.dsl.Specialization;
+import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.frame.Frame;
 import com.oracle.truffle.api.frame.FrameInstance;
 import com.oracle.truffle.api.frame.FrameInstanceVisitor;
 import com.oracle.truffle.api.nodes.Node;
 import com.oracle.truffle.api.nodes.RootNode;
 
+import de.hpi.swa.trufflesqueak.exceptions.ProcessSwitch;
 import de.hpi.swa.trufflesqueak.model.AbstractSqueakObject;
 import de.hpi.swa.trufflesqueak.model.ContextObject;
 import de.hpi.swa.trufflesqueak.model.FrameMarker;
 import de.hpi.swa.trufflesqueak.model.NilObject;
+import de.hpi.swa.trufflesqueak.model.layout.ObjectLayouts;
 import de.hpi.swa.trufflesqueak.model.layout.ObjectLayouts.CONTEXT;
+import de.hpi.swa.trufflesqueak.nodes.accessing.AbstractPointersObjectNodes;
+import de.hpi.swa.trufflesqueak.nodes.accessing.AbstractPointersObjectNodes.AbstractPointersObjectWriteNode;
 import de.hpi.swa.trufflesqueak.nodes.accessing.ContextObjectNodes.ContextObjectReadNode;
 import de.hpi.swa.trufflesqueak.nodes.accessing.ContextObjectNodes.ContextObjectWriteNode;
+import de.hpi.swa.trufflesqueak.nodes.context.frame.FrameStackPushNode;
+import de.hpi.swa.trufflesqueak.nodes.context.frame.GetOrCreateContextNode;
 import de.hpi.swa.trufflesqueak.nodes.primitives.AbstractPrimitiveFactoryHolder;
 import de.hpi.swa.trufflesqueak.nodes.primitives.AbstractPrimitiveNode;
+import de.hpi.swa.trufflesqueak.nodes.primitives.AbstractPrimitiveNode.AbstractPrimitiveWithFrameNode;
 import de.hpi.swa.trufflesqueak.nodes.primitives.Primitive.Primitive0WithFallback;
 import de.hpi.swa.trufflesqueak.nodes.primitives.Primitive.Primitive1WithFallback;
 import de.hpi.swa.trufflesqueak.nodes.primitives.Primitive.Primitive2WithFallback;
 import de.hpi.swa.trufflesqueak.nodes.primitives.SqueakPrimitive;
+import de.hpi.swa.trufflesqueak.nodes.process.GetActiveProcessNode;
 import de.hpi.swa.trufflesqueak.shared.SqueakLanguageConfig;
 import de.hpi.swa.trufflesqueak.util.FrameAccess;
+import de.hpi.swa.trufflesqueak.util.LogUtils;
 
 public class ContextPrimitives extends AbstractPrimitiveFactoryHolder {
 
@@ -80,6 +92,9 @@ public class ContextPrimitives extends AbstractPrimitiveFactoryHolder {
         @Specialization(guards = "!receiver.hasMaterializedSender()")
         protected static final AbstractSqueakObject doFindNextAvoidingMaterialization(final ContextObject receiver, final ContextObject previousContext) {
             // Sender is not materialized, so avoid materialization by walking Truffle frames.
+            if (true) {
+                return doFindNext(receiver, previousContext);
+            }
             final boolean[] foundMyself = {false};
             final AbstractSqueakObject result = Truffle.getRuntime().iterateFrames((frameInstance) -> {
                 final Frame current = frameInstance.getFrame(FrameInstance.FrameAccess.READ_ONLY);
@@ -114,23 +129,41 @@ public class ContextPrimitives extends AbstractPrimitiveFactoryHolder {
 
     @GenerateNodeFactory
     @SqueakPrimitive(indices = 196)
-    protected abstract static class PrimTerminateToNode extends AbstractPrimitiveNode implements Primitive1WithFallback {
+    protected abstract static class PrimTerminateToNode extends AbstractPrimitiveWithFrameNode implements Primitive1WithFallback {
+
         @Specialization
-        protected static final ContextObject doUnwindAndTerminate(final ContextObject receiver, final ContextObject previousContext) {
+        protected static final ContextObject doUnwindAndTerminate(final VirtualFrame frame, final ContextObject receiver, final ContextObject previousContext,
+                               @Bind final Node node,
+                               @Cached final FrameStackPushNode pushNode,
+                               @Cached(inline = true) final GetOrCreateContextNode getOrCreateContextNode,
+                               @Cached final GetActiveProcessNode getActiveProcessNode,
+                               @Cached final AbstractPointersObjectWriteNode writeNode) {
             /*
              * Terminate all the Contexts between me and previousContext, if previousContext is on
              * my Context stack. Make previousContext my sender.
              */
+            LogUtils.SCHEDULING.log(Level.FINER, "Terminate: {0}", receiver);
+            LogUtils.SCHEDULING.log(Level.FINER, "   to: {0}", previousContext);
+
             if (hasSenderChainFromToAndTerminateIf(receiver, previousContext, false)) {
                 hasSenderChainFromToAndTerminateIf(receiver, previousContext, true);
             }
-            receiver.setSender(previousContext);
-            return receiver;
+            receiver.setSenderForTerminateToPrimitive(previousContext);
+
+            // From testing, it appears that at least one of the Contexts will be on the Java stack,
+            // so an unwind of the Java stack is necessary.
+
+            // Push receiver (for the later resume)), then suspend current context and throw ProcessSwitch to unwind Java stack and resume
+            pushNode.execute(frame, receiver);
+            final ContextObject activeContext = getOrCreateContextNode.executeGet(frame, node);
+            writeNode.execute(node, getActiveProcessNode.execute(node), ObjectLayouts.PROCESS.SUSPENDED_CONTEXT, activeContext);
+            throw ProcessSwitch.SINGLETON;
         }
 
         @Specialization
-        protected static final ContextObject doTerminate(final ContextObject receiver, @SuppressWarnings("unused") final NilObject nil) {
-            receiver.removeSender();
+        protected static final ContextObject doTerminate(final VirtualFrame frame, final ContextObject receiver, @SuppressWarnings("unused") final NilObject nil) {
+            receiver.setNilSenderForTerminateToPrimitive();
+            LogUtils.SCHEDULING.log(Level.FINE, "Terminate: {0} to: nil", receiver);
             return receiver;
         }
 
@@ -242,12 +275,13 @@ public class ContextPrimitives extends AbstractPrimitiveFactoryHolder {
         @Specialization(guards = {"receiver.hasMaterializedSender()"})
         protected final AbstractSqueakObject findNext(final ContextObject receiver) {
             ContextObject context = receiver;
-            while (context.hasMaterializedSender()) {
+            while (/*context.hasMaterializedSender()*/ true) {
                 if (context.getCodeObject().isExceptionHandlerMarked()) {
                     assert !context.hasClosure();
                     return context;
                 }
-                final AbstractSqueakObject sender = context.getMaterializedSender();
+//                final AbstractSqueakObject sender = context.getMaterializedSender();
+                final AbstractSqueakObject sender = context.getSender();
                 if (sender instanceof final ContextObject o) {
                     context = o;
                 } else {
@@ -255,12 +289,15 @@ public class ContextPrimitives extends AbstractPrimitiveFactoryHolder {
                     return NilObject.SINGLETON;
                 }
             }
-            return findNextAvoidingMaterialization(context);
+//            return findNextAvoidingMaterialization(context);
         }
 
         @TruffleBoundary
         @Specialization(guards = {"!receiver.hasMaterializedSender()"})
         protected final AbstractSqueakObject findNextAvoidingMaterialization(final ContextObject receiver) {
+            if (true) {
+                findNext(receiver);
+            }
             final boolean[] foundMyself = new boolean[1];
             final Object[] lastSender = new Object[1];
             final ContextObject result = Truffle.getRuntime().iterateFrames(frameInstance -> {

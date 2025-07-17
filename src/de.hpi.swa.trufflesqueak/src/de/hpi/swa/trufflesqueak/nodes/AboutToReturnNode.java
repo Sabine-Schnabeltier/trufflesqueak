@@ -30,6 +30,9 @@ import de.hpi.swa.trufflesqueak.nodes.dispatch.DispatchClosureNode;
 import de.hpi.swa.trufflesqueak.nodes.dispatch.DispatchSelector2NodeFactory.Dispatch2NodeGen;
 import de.hpi.swa.trufflesqueak.nodes.dispatch.DispatchSelector2Node.Dispatch2Node;
 import de.hpi.swa.trufflesqueak.util.FrameAccess;
+import de.hpi.swa.trufflesqueak.util.LogUtils;
+
+import java.util.logging.Level;
 
 @SuppressWarnings("truffle-inlining")
 public abstract class AboutToReturnNode extends AbstractNode {
@@ -77,6 +80,7 @@ public abstract class AboutToReturnNode extends AbstractNode {
         protected static final void doAboutToReturn(final VirtualFrame frame, final NonLocalReturn nlr,
                         @Cached("createAboutToReturnSend()") final Dispatch2Node sendAboutToReturnNode) {
             assert nlr.getTargetContextOrMarker() instanceof ContextObject;
+            LogUtils.SCHEDULING.log(Level.FINE, "AboutToReturnNode with modified sender: {0}", FrameAccess.getSender(frame));
             sendAboutToReturnNode.execute(frame, FrameAccess.getContext(frame), nlr.getReturnValue(), nlr.getTargetContextOrMarker());
         }
     }

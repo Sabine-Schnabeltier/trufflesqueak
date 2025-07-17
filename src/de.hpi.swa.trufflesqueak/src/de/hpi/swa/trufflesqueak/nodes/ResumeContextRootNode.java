@@ -15,6 +15,10 @@ import com.oracle.truffle.api.profiles.IntValueProfile;
 import de.hpi.swa.trufflesqueak.SqueakLanguage;
 import de.hpi.swa.trufflesqueak.image.SqueakImageContext;
 import de.hpi.swa.trufflesqueak.model.ContextObject;
+import de.hpi.swa.trufflesqueak.util.FrameAccess;
+import de.hpi.swa.trufflesqueak.util.LogUtils;
+
+import java.util.logging.Level;
 
 public final class ResumeContextRootNode extends AbstractRootNode {
     private ContextObject activeContext;
@@ -37,7 +41,11 @@ public final class ResumeContextRootNode extends AbstractRootNode {
     public Object execute(final VirtualFrame frame) {
         try {
             assert !activeContext.isDead() : "Terminated contexts cannot be resumed";
+            activeContext.clearModifiedSender();
             final int pc = instructionPointerProfile.profile(activeContext.getInstructionPointerForBytecodeLoop());
+            if (pc < 1) {
+                LogUtils.SCHEDULING.log(Level.FINE, "ResumeContextNode with bad PC: {0}", pc);
+            }
             if (CompilerDirectives.isPartialEvaluationConstant(pc)) {
                 return executeBytecodeNode.execute(activeContext.getTruffleFrame(), pc);
             } else {

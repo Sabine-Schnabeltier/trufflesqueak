@@ -7,7 +7,9 @@
 package de.hpi.swa.trufflesqueak.model;
 
 import java.util.Arrays;
+import java.util.logging.Level;
 
+import de.hpi.swa.trufflesqueak.util.LogUtils;
 import org.graalvm.collections.UnmodifiableEconomicMap;
 
 import com.oracle.truffle.api.CallTarget;
@@ -247,11 +249,41 @@ public final class ContextObject extends AbstractSqueakObjectWithClassAndHash {
     public void setSender(final ContextObject value) {
         if (truffleFrame != null) {
             final Object sender = FrameAccess.getSender(getTruffleFrame());
+            // Avoid marking modified sender when materializing Contexts.
             if (!hasModifiedSender && sender != value && sender != value.getFrameMarker()) {
+                LogUtils.SCHEDULING.log(Level.FINE, "Modifying sender: {0}", this);
+                LogUtils.SCHEDULING.log(Level.FINE, "   was: {0}", sender);
+                LogUtils.SCHEDULING.log(Level.FINE, "   now: {0}", value);
                 hasModifiedSender = true;
+                if (!FrameAccess.neitherContextOnTruffleStack(this, value)) {
+                    LogUtils.SCHEDULING.log(Level.FINE, "SETSENDER: Context on Truffle stack!");
+                }
             }
         }
         setSenderUnsafe(value);
+    }
+
+    public void setSenderForTerminateToPrimitive(final ContextObject value) {
+        setSenderUnsafe(value);
+    }
+
+    public void setNilSenderForTerminateToPrimitive() {
+        FrameAccess.setSender(getOrCreateTruffleFrame(), NilObject.SINGLETON);
+    }
+
+    public void setNilSender() {
+        if (truffleFrame != null) {
+            final Object sender = FrameAccess.getSender(getTruffleFrame());
+            if (!hasModifiedSender && sender != NilObject.SINGLETON) {
+                LogUtils.SCHEDULING.log(Level.FINE, "Nilling sender: {0}", this);
+                LogUtils.SCHEDULING.log(Level.FINE, "   was: {0}", sender);
+                hasModifiedSender = true;
+            }
+        }
+        if (!FrameAccess.neitherContextOnTruffleStack(this, null)) {
+            LogUtils.SCHEDULING.log(Level.FINE, "SETNILSENDER: Context on Truffle stack!");
+        }
+        setSenderUnsafe(NilObject.SINGLETON);
     }
 
     public void setSenderUnsafe(final AbstractSqueakObject value) {
@@ -404,6 +436,10 @@ public final class ContextObject extends AbstractSqueakObjectWithClassAndHash {
 
     public void markEscaped() {
         escaped = true;
+    }
+
+    public void clearModifiedSender() {
+        hasModifiedSender = false;
     }
 
     public boolean hasModifiedSender() {
