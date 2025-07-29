@@ -139,6 +139,11 @@ public final class FrameAccess {
 
     public static void setSender(final Frame frame, final AbstractSqueakObject value) {
         frame.getArguments()[ArgumentIndicies.SENDER_OR_SENDER_MARKER.ordinal()] = value;
+        /* FrameMarker contains shadow copy */
+        final FrameMarker frameMarker = getMarker(frame);
+        if (frameMarker != null) {
+            frameMarker.setSender(value);
+        }
     }
 
     public static BlockClosureObject getClosure(final Frame frame) {
@@ -201,6 +206,9 @@ public final class FrameAccess {
 
     public static void setMarker(final Frame frame, final FrameMarker marker) {
         frame.setObjectStatic(SlotIndicies.THIS_MARKER.ordinal(), marker);
+        /* FrameMarker contains shadow copy */
+        marker.setSender(getSender(frame));
+        marker.setContext(getContext(frame));
     }
 
     public static void initializeMarker(final Frame frame) {
@@ -230,6 +238,11 @@ public final class FrameAccess {
         assert getContext(frame) == null : "ContextObject already allocated";
         frame.getFrameDescriptor().setSlotKind(SlotIndicies.THIS_CONTEXT.ordinal(), FrameSlotKind.Object);
         frame.setObject(SlotIndicies.THIS_CONTEXT.ordinal(), context);
+        /* FrameMarker contains shadow copy */
+        final FrameMarker frameMarker = getMarker(frame);
+        if (frameMarker != null) {
+            frameMarker.setContext(context);
+        }
     }
 
     public static int getInstructionPointer(final Frame frame) {
