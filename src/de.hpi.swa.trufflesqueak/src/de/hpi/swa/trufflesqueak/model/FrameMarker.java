@@ -11,7 +11,40 @@ import com.oracle.truffle.api.frame.MaterializedFrame;
 
 import de.hpi.swa.trufflesqueak.util.FrameAccess;
 
+/**
+ * TruffleSqueak FrameMarker:
+ *
+ * <pre>
+ *              +---------------------------------+
+ * sender    -> | FrameMarker: virtual sender     |
+ *              | ContextObject: materialized     |
+ *              | nil: terminated / top-level     |
+ *              +---------------------------------+
+ * context   -> | ContextObject / null            |
+ *              +---------------------------------+
+ * </pre>
+ */
+
 public final class FrameMarker {
+    private Object sender;
+    private ContextObject context;
+
+    public Object getSender() {
+        return sender;
+    }
+
+    public void setSender(final Object markerContextOrNil) {
+        sender = markerContextOrNil;
+    }
+
+    public ContextObject getContext() {
+        return context;
+    }
+
+    public void setContext(final ContextObject contextObject) {
+        context = contextObject;
+    }
+
     @Override
     public String toString() {
         CompilerAsserts.neverPartOfCompilation();
