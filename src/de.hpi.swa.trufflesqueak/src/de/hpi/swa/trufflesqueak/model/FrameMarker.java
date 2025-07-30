@@ -53,10 +53,10 @@ public final class FrameMarker {
 
     public ContextObject getMaterializedContext() {
         final MaterializedFrame targetFrame = FrameAccess.findFrameForMarker(this);
-        final ContextObject context = FrameAccess.getContext(targetFrame);
-        if (context != null) {
-            assert context.getFrameMarker() == this;
-            return context;
+        final ContextObject theContext = FrameAccess.getContext(targetFrame);
+        if (theContext != null) {
+            assert theContext.getFrameMarker() == this;
+            return theContext;
         } else {
             assert this == FrameAccess.getMarker(targetFrame) : "Frame does not match";
             final CompiledCodeObject code = FrameAccess.getCodeObject(targetFrame);
