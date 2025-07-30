@@ -114,7 +114,6 @@ public final class FrameAccess {
     }
 
     private static void addDefaultSlots(final Builder builder) {
-        builder.addSlot(FrameSlotKind.Static, null, null);  // SlotIndicies.THIS_MARKER
         builder.addSlot(FrameSlotKind.Illegal, null, null); // SlotIndicies.THIS_CONTEXT
         builder.addSlot(FrameSlotKind.Static, null, null);  // SlotIndicies.INSTRUCTION_POINTER
         builder.addSlot(FrameSlotKind.Static, null, null);  // SlotIndicies.STACK_POINTER
@@ -564,4 +563,50 @@ public final class FrameAccess {
         }
         throw SqueakException.create("Could not find frame for:", frameMarker);
     }
+
+    public static boolean isContextOnSenderChain(final Frame startingFrame, final ContextObject endingContext) {
+        Object currentLink = FrameAccess.getMarker(startingFrame);
+
+        if (currentLink == null) {
+            FrameAccess.initializeMarker(startingFrame);
+            currentLink = FrameAccess.getMarker(startingFrame);
+//            LogUtils.ITERATE_FRAMES.info("isContextOnSenderChain: startingFrame = " + startingFrame + " (class: " + startingFrame.getClass().getName() + ")");
+//            LogUtils.ITERATE_FRAMES.info("isContextOnSenderChain: STARTING Current link = " + currentLink);
+//            return true;
+        }
+
+        while (currentLink != null && currentLink != NilObject.SINGLETON) {
+
+            // Check if the current link itself is the endingContext
+            if (currentLink == endingContext) {
+//                LogUtils.ITERATE_FRAMES.info("isContextOnSenderChain: startingFrame = " + startingFrame + " (class: " + startingFrame.getClass().getName() + ")");
+//                LogUtils.ITERATE_FRAMES.info("isContextOnSenderChain: Found endingContext (direct match).");
+                return true;
+            }
+
+            if (currentLink instanceof final FrameMarker fm) {
+                // If it's a FrameMarker, first check its associated context
+                if (fm.getContext() == endingContext) {
+//                    LogUtils.ITERATE_FRAMES.info("isContextOnSenderChain: startingFrame = " + startingFrame + " (class: " + startingFrame.getClass().getName() + ")");
+//                    LogUtils.ITERATE_FRAMES.info("isContextOnSenderChain: Found endingContext via FrameMarker's context.");
+                    return true;
+                }
+                // Then move to the next sender in the chain (can be FrameMarker or ContextObject)
+                currentLink = fm.getSender();
+            } else if (currentLink instanceof final ContextObject co) {
+                // If it's a ContextObject, move to its frameSender
+                currentLink = co.getFrameSender(); // Assuming getFrameSender returns Object (FrameMarker or ContextObject or NilObject)
+            } else {
+                // This branch should ideally not be reached if the sender chain is well-formed
+                LogUtils.ITERATE_FRAMES.info("isContextOnSenderChain: startingFrame = " + startingFrame + " (class: " + startingFrame.getClass().getName() + ")");
+                LogUtils.ITERATE_FRAMES.info("isContextOnSenderChain: Unexpected link type in chain: " + currentLink.getClass().getName());
+                return false;
+            }
+        }
+
+        LogUtils.ITERATE_FRAMES.info("isContextOnSenderChain: startingFrame = " + startingFrame + " (class: " + startingFrame.getClass().getName() + ")");
+        LogUtils.ITERATE_FRAMES.info("isContextOnSenderChain: Exiting loop (reached end of chain or null).");
+        return false; // Reached the end of the chain without finding endingContext
+    }
+
 }

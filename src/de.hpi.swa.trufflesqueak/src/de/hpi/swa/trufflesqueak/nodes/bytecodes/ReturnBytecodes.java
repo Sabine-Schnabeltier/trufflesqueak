@@ -23,6 +23,7 @@ import de.hpi.swa.trufflesqueak.nodes.AbstractNode;
 import de.hpi.swa.trufflesqueak.nodes.context.frame.FrameStackPopNode;
 import de.hpi.swa.trufflesqueak.nodes.context.frame.GetOrCreateContextNode;
 import de.hpi.swa.trufflesqueak.util.FrameAccess;
+import de.hpi.swa.trufflesqueak.util.LogUtils;
 
 public final class ReturnBytecodes {
 
@@ -92,9 +93,12 @@ public final class ReturnBytecodes {
             assert FrameAccess.hasClosure(frame);
             // Target is sender of closure's home context.
             final ContextObject homeContext = FrameAccess.getClosure(frame).getHomeContext();
-            if (homeContext.canBeReturnedTo()) {
+            if (homeContext.canBeReturnedTo() /*&& FrameAccess.isContextOnSenderChain(frame, homeContext)*/) {
                 throw new NonLocalReturn(returnValue, homeContext.getFrameSender());
             } else {
+//                LogUtils.ITERATE_FRAMES.info("ReturnFromClosureNode: cannot return to " + homeContext);
+//                throw SqueakException.create("Could not return to ", homeContext);
+
                 CompilerDirectives.transferToInterpreter();
                 final ContextObject contextObject = GetOrCreateContextNode.getOrCreateUncached(frame);
                 final SqueakImageContext image = getContext();
