@@ -241,6 +241,14 @@ public final class ContextObject extends AbstractSqueakObjectWithClassAndHash {
         return (AbstractSqueakObject) FrameAccess.getSender(getTruffleFrame());
     }
 
+    public boolean isUnwindMarked() {
+        return !hasClosure() && getCodeObject().isUnwindMarked();
+    }
+
+    public boolean isExceptionHandlerMarked() {
+        return getCodeObject().isExceptionHandlerMarked();
+    }
+
     /**
      * Sets the sender of a ContextObject.
      */

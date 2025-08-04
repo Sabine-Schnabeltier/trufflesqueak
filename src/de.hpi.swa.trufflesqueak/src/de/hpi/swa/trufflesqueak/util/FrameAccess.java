@@ -564,49 +564,70 @@ public final class FrameAccess {
         throw SqueakException.create("Could not find frame for:", frameMarker);
     }
 
-    public static boolean isContextOnSenderChain(final Frame startingFrame, final ContextObject endingContext) {
+    /** Walk the sender chain starting at the given Frame and terminating at the ending Context
+     *
+     * @return  null if endingContext is not on sender chain; first marked Context if found; endingContext otherwise
+     */
+    public static ContextObject ifContextOnSenderChainReturn(final Frame startingFrame, final ContextObject endingContext,
+                                                      final boolean returnFirstUnwindMarked, final boolean returnFirstExceptionHandlerMarked) {
+        // ToDo: should endingContext be allowed to be null to indicate return first marked?
         Object currentLink = FrameAccess.getMarker(startingFrame);
+        ContextObject firstMarkedContext = null;
 
         if (currentLink == null) {
+            // ToDo: shouldn't all frames have FrameMarkers already?
             FrameAccess.initializeMarker(startingFrame);
             currentLink = FrameAccess.getMarker(startingFrame);
-//            LogUtils.ITERATE_FRAMES.info("isContextOnSenderChain: startingFrame = " + startingFrame + " (class: " + startingFrame.getClass().getName() + ")");
-//            LogUtils.ITERATE_FRAMES.info("isContextOnSenderChain: STARTING Current link = " + currentLink);
-//            return true;
         }
 
         while (currentLink != null && currentLink != NilObject.SINGLETON) {
-
-            // Check if the current link itself is the endingContext
-            if (currentLink == endingContext) {
-//                LogUtils.ITERATE_FRAMES.info("isContextOnSenderChain: startingFrame = " + startingFrame + " (class: " + startingFrame.getClass().getName() + ")");
-//                LogUtils.ITERATE_FRAMES.info("isContextOnSenderChain: Found endingContext (direct match).");
-                return true;
-            }
-
-            if (currentLink instanceof final FrameMarker fm) {
-                // If it's a FrameMarker, first check its associated context
-                if (fm.getContext() == endingContext) {
-//                    LogUtils.ITERATE_FRAMES.info("isContextOnSenderChain: startingFrame = " + startingFrame + " (class: " + startingFrame.getClass().getName() + ")");
-//                    LogUtils.ITERATE_FRAMES.info("isContextOnSenderChain: Found endingContext via FrameMarker's context.");
-                    return true;
+            switch (currentLink) {
+                case FrameMarker fm -> {
+                    // If it's a FrameMarker, first check its associated ContextObject
+                    final ContextObject co = fm.getContext();
+                    if (co == endingContext) {
+                        return firstMarkedContext == null ? endingContext : firstMarkedContext;
+                    }
+                    // Watch for marked ContextObjects
+                    if (co != null && firstMarkedContext == null) {
+                        if (returnFirstUnwindMarked && co.isUnwindMarked()) {
+                            firstMarkedContext = co;
+                        } else if (returnFirstExceptionHandlerMarked && co.isExceptionHandlerMarked()) {
+                            firstMarkedContext = co;
+                        }
+                    }
+                    // Then move to the next sender in the chain (can be FrameMarker or ContextObject)
+                    currentLink = fm.getSender();
                 }
-                // Then move to the next sender in the chain (can be FrameMarker or ContextObject)
-                currentLink = fm.getSender();
-            } else if (currentLink instanceof final ContextObject co) {
-                // If it's a ContextObject, move to its frameSender
-                currentLink = co.getFrameSender(); // Assuming getFrameSender returns Object (FrameMarker or ContextObject or NilObject)
-            } else {
-                // This branch should ideally not be reached if the sender chain is well-formed
-                LogUtils.ITERATE_FRAMES.info("isContextOnSenderChain: startingFrame = " + startingFrame + " (class: " + startingFrame.getClass().getName() + ")");
-                LogUtils.ITERATE_FRAMES.info("isContextOnSenderChain: Unexpected link type in chain: " + currentLink.getClass().getName());
-                return false;
+                case ContextObject co -> {
+                    // If it's a Context, first check if it is the endingContext
+                    if (currentLink == endingContext) {
+                        return firstMarkedContext == null ? endingContext : firstMarkedContext;
+                    }
+                    // Watch for marked ContextObjects
+                    if (firstMarkedContext == null) {
+                        if (returnFirstUnwindMarked && co.isUnwindMarked()) {
+                            firstMarkedContext = co;
+                        } else if (returnFirstExceptionHandlerMarked && co.isExceptionHandlerMarked()) {
+                            firstMarkedContext = co;
+                        }
+                    }
+                    // Then move to its frameSender
+                    currentLink = co.getFrameSender();
+                }
+                default -> {
+                    // This branch should ideally not be reached if the sender chain is well-formed
+                    LogUtils.ITERATE_FRAMES.info("isContextOnSenderChain: startingFrame = " + startingFrame + " (class: " + startingFrame.getClass().getName() + ")");
+                    LogUtils.ITERATE_FRAMES.info("isContextOnSenderChain: Unexpected link type in chain: " + currentLink.getClass().getName());
+                    return null;
+                }
             }
         }
 
+        // Reached the end of the chain without finding endingContext
         LogUtils.ITERATE_FRAMES.info("isContextOnSenderChain: startingFrame = " + startingFrame + " (class: " + startingFrame.getClass().getName() + ")");
         LogUtils.ITERATE_FRAMES.info("isContextOnSenderChain: Exiting loop (reached end of chain or null).");
-        return false; // Reached the end of the chain without finding endingContext
+        return null;
     }
 
 }

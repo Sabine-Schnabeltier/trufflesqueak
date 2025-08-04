@@ -22,6 +22,8 @@ import de.hpi.swa.trufflesqueak.model.NilObject;
 import de.hpi.swa.trufflesqueak.nodes.AbstractNode;
 import de.hpi.swa.trufflesqueak.nodes.context.frame.FrameStackPopNode;
 import de.hpi.swa.trufflesqueak.nodes.context.frame.GetOrCreateContextNode;
+import de.hpi.swa.trufflesqueak.nodes.dispatch.DispatchSelector2Node.Dispatch2Node;
+import de.hpi.swa.trufflesqueak.nodes.dispatch.DispatchSelector2NodeFactory.Dispatch2NodeGen;
 import de.hpi.swa.trufflesqueak.util.FrameAccess;
 import de.hpi.swa.trufflesqueak.util.LogUtils;
 
@@ -85,6 +87,7 @@ public final class ReturnBytecodes {
     }
 
     private static final class ReturnFromClosureNode extends AbstractReturnKindNode {
+        @Child private Dispatch2Node sendAboutToReturnNode;
 
         /* Return to closure's home context's sender, executing unwind blocks */
 
@@ -93,8 +96,14 @@ public final class ReturnBytecodes {
             assert FrameAccess.hasClosure(frame);
             // Target is sender of closure's home context.
             final ContextObject homeContext = FrameAccess.getClosure(frame).getHomeContext();
-            if (homeContext.canBeReturnedTo() /*&& FrameAccess.isContextOnSenderChain(frame, homeContext)*/) {
-                throw new NonLocalReturn(returnValue, homeContext.getFrameSender());
+            final ContextObject firstMarkedContext = FrameAccess.ifContextOnSenderChainReturn(frame, homeContext, true, false);
+            if (homeContext.canBeReturnedTo() && firstMarkedContext != null) {
+                if (firstMarkedContext == homeContext) {
+                    throw new NonLocalReturn(returnValue, homeContext.getFrameSender());
+                } else {
+                    getSendAboutToReturnNode().execute(frame, FrameAccess.getContext(frame), returnValue, firstMarkedContext);
+                    throw CompilerDirectives.shouldNotReachHere();
+                }
             } else {
 //                LogUtils.ITERATE_FRAMES.info("ReturnFromClosureNode: cannot return to " + homeContext);
 //                throw SqueakException.create("Could not return to ", homeContext);
@@ -106,6 +115,15 @@ public final class ReturnBytecodes {
                 throw CompilerDirectives.shouldNotReachHere();
             }
         }
+
+        private Dispatch2Node getSendAboutToReturnNode() {
+            if (sendAboutToReturnNode == null) {
+                CompilerDirectives.transferToInterpreterAndInvalidate();
+                sendAboutToReturnNode = insert(Dispatch2NodeGen.create(SqueakImageContext.getSlow().aboutToReturnSelector));
+            }
+            return sendAboutToReturnNode;
+        }
+
     }
 
     protected abstract static class AbstractReturnConstantNode extends AbstractNormalReturnNode {
