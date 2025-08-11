@@ -22,7 +22,12 @@ import de.hpi.swa.trufflesqueak.model.NilObject;
 import de.hpi.swa.trufflesqueak.nodes.AbstractNode;
 import de.hpi.swa.trufflesqueak.nodes.context.frame.FrameStackPopNode;
 import de.hpi.swa.trufflesqueak.nodes.context.frame.GetOrCreateContextNode;
+import de.hpi.swa.trufflesqueak.nodes.dispatch.DispatchSelector1Node.Dispatch1Node;
+import de.hpi.swa.trufflesqueak.nodes.dispatch.DispatchSelector1NodeFactory.Dispatch1NodeGen;
+import de.hpi.swa.trufflesqueak.nodes.dispatch.DispatchSelector2Node.Dispatch2Node;
+import de.hpi.swa.trufflesqueak.nodes.dispatch.DispatchSelector2NodeFactory.Dispatch2NodeGen;
 import de.hpi.swa.trufflesqueak.util.FrameAccess;
+import de.hpi.swa.trufflesqueak.util.LogUtils;
 
 public final class ReturnBytecodes {
 
@@ -84,6 +89,9 @@ public final class ReturnBytecodes {
     }
 
     private static final class ReturnFromClosureNode extends AbstractReturnKindNode {
+        @Child private GetOrCreateContextNode getOrCreateContextNode;
+        @Child private Dispatch2Node sendAboutToReturnNode;
+        @Child private Dispatch1Node sendCannotReturnNode;
 
         /* Return to closure's home context's sender, executing unwind blocks */
 
@@ -92,16 +100,49 @@ public final class ReturnBytecodes {
             assert FrameAccess.hasClosure(frame);
             // Target is sender of closure's home context.
             final ContextObject homeContext = FrameAccess.getClosure(frame).getHomeContext();
-            if (homeContext.canBeReturnedTo()) {
-                throw new NonLocalReturn(returnValue, homeContext.getFrameSender());
+            final ContextObject firstMarkedContext = FrameAccess.ifContextOnSenderChainReturn(frame, homeContext, true, false);
+            if (homeContext.canBeReturnedTo() && firstMarkedContext != null) {
+                if (firstMarkedContext == homeContext) {
+                    throw new NonLocalReturn(returnValue, homeContext.getFrameSender());
+                } else {
+                    getSendAboutToReturnNode().execute(frame, getGetOrCreateContextNode().executeGet(frame), returnValue, firstMarkedContext);
+                    throw CompilerDirectives.shouldNotReachHere();
+                }
             } else {
-                CompilerDirectives.transferToInterpreter();
-                final ContextObject contextObject = GetOrCreateContextNode.getOrCreateUncached(frame);
-                final SqueakImageContext image = getContext();
-                image.cannotReturn.executeAsSymbolSlow(image, frame, contextObject, returnValue);
+//                CompilerDirectives.transferToInterpreter();
+                LogUtils.SCHEDULING.info("ReturnFromClosureNode: sendCannotReturn");
+//                final ContextObject contextObject = GetOrCreateContextNode.getOrCreateUncached(frame);
+//                final SqueakImageContext image = getContext();
+//                image.cannotReturn.executeAsSymbolSlow(image, frame, contextObject, returnValue);
+                getSendCannotReturnNode().execute(frame, getGetOrCreateContextNode().executeGet(frame), returnValue);
                 throw CompilerDirectives.shouldNotReachHere();
             }
         }
+
+        private GetOrCreateContextNode getGetOrCreateContextNode() {
+            if (getOrCreateContextNode == null) {
+                CompilerDirectives.transferToInterpreterAndInvalidate();
+                getOrCreateContextNode = insert(GetOrCreateContextNode.create());
+            }
+            return getOrCreateContextNode;
+        }
+
+        private Dispatch2Node getSendAboutToReturnNode() {
+            if (sendAboutToReturnNode == null) {
+                CompilerDirectives.transferToInterpreterAndInvalidate();
+                sendAboutToReturnNode = insert(Dispatch2NodeGen.create(SqueakImageContext.getSlow().aboutToReturnSelector));
+            }
+            return sendAboutToReturnNode;
+        }
+
+        private Dispatch1Node getSendCannotReturnNode() {
+            if (sendCannotReturnNode == null) {
+                CompilerDirectives.transferToInterpreterAndInvalidate();
+                sendCannotReturnNode = insert(Dispatch1NodeGen.create(SqueakImageContext.getSlow().cannotReturn));
+            }
+            return sendCannotReturnNode;
+        }
+
     }
 
     protected abstract static class AbstractReturnConstantNode extends AbstractNormalReturnNode {
