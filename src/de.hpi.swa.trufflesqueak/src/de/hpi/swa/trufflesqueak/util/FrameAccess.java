@@ -139,6 +139,11 @@ public final class FrameAccess {
 
     public static void setSender(final Frame frame, final AbstractSqueakObject value) {
         frame.getArguments()[ArgumentIndicies.SENDER_OR_SENDER_MARKER.ordinal()] = value;
+        /* FrameMarker contains shadow copy */
+        final FrameMarker frameMarker = getMarker(frame);
+        if (frameMarker != null) {
+            frameMarker.setSender(value);
+        }
     }
 
     public static BlockClosureObject getClosure(final Frame frame) {
@@ -201,6 +206,9 @@ public final class FrameAccess {
 
     public static void setMarker(final Frame frame, final FrameMarker marker) {
         frame.setObjectStatic(SlotIndicies.THIS_MARKER.ordinal(), marker);
+        /* FrameMarker contains shadow copy */
+        marker.setSender(getSender(frame));
+        marker.setContext(getContext(frame));
     }
 
     public static void initializeMarker(final Frame frame) {
@@ -230,6 +238,11 @@ public final class FrameAccess {
         assert getContext(frame) == null : "ContextObject already allocated";
         frame.getFrameDescriptor().setSlotKind(SlotIndicies.THIS_CONTEXT.ordinal(), FrameSlotKind.Object);
         frame.setObject(SlotIndicies.THIS_CONTEXT.ordinal(), context);
+        /* FrameMarker contains shadow copy */
+        final FrameMarker frameMarker = getMarker(frame);
+        if (frameMarker != null) {
+            frameMarker.setContext(context);
+        }
     }
 
     public static int getInstructionPointer(final Frame frame) {
@@ -551,4 +564,71 @@ public final class FrameAccess {
         }
         throw SqueakException.create("Could not find frame for:", frameMarker);
     }
+
+    /** Walk the sender chain starting at the given Frame and terminating at the ending Context
+     *
+     * @return  null if endingContext is not on sender chain; first marked Context if found; endingContext otherwise
+     */
+    public static ContextObject ifContextOnSenderChainReturn(final Frame startingFrame, final ContextObject endingContext,
+                                                      final boolean returnFirstUnwindMarked, final boolean returnFirstExceptionHandlerMarked) {
+        // ToDo: should endingContext be allowed to be null to indicate return first marked?
+        Object currentLink = FrameAccess.getMarker(startingFrame);
+        ContextObject firstMarkedContext = null;
+
+        if (currentLink == null) {
+            // ToDo: shouldn't all frames have FrameMarkers already?
+            FrameAccess.initializeMarker(startingFrame);
+            currentLink = FrameAccess.getMarker(startingFrame);
+        }
+
+        while (currentLink != null && currentLink != NilObject.SINGLETON) {
+            switch (currentLink) {
+                case FrameMarker fm -> {
+                    // If it's a FrameMarker, first check its associated ContextObject
+                    final ContextObject co = fm.getContext();
+                    if (co == endingContext) {
+                        return firstMarkedContext == null ? endingContext : firstMarkedContext;
+                    }
+                    // Watch for marked ContextObjects
+                    if (co != null && firstMarkedContext == null) {
+                        if (returnFirstUnwindMarked && co.isUnwindMarked()) {
+                            firstMarkedContext = co;
+                        } else if (returnFirstExceptionHandlerMarked && co.isExceptionHandlerMarked()) {
+                            firstMarkedContext = co;
+                        }
+                    }
+                    // Then move to the next sender in the chain (can be FrameMarker or ContextObject)
+                    currentLink = fm.getSender();
+                }
+                case ContextObject co -> {
+                    // If it's a Context, first check if it is the endingContext
+                    if (currentLink == endingContext) {
+                        return firstMarkedContext == null ? endingContext : firstMarkedContext;
+                    }
+                    // Watch for marked ContextObjects
+                    if (firstMarkedContext == null) {
+                        if (returnFirstUnwindMarked && co.isUnwindMarked()) {
+                            firstMarkedContext = co;
+                        } else if (returnFirstExceptionHandlerMarked && co.isExceptionHandlerMarked()) {
+                            firstMarkedContext = co;
+                        }
+                    }
+                    // Then move to its frameSender
+                    currentLink = co.getFrameSender();
+                }
+                default -> {
+                    // This branch should ideally not be reached if the sender chain is well-formed
+                    LogUtils.ITERATE_FRAMES.info("isContextOnSenderChain: startingFrame = " + startingFrame + " (class: " + startingFrame.getClass().getName() + ")");
+                    LogUtils.ITERATE_FRAMES.info("isContextOnSenderChain: Unexpected link type in chain: " + currentLink.getClass().getName());
+                    return null;
+                }
+            }
+        }
+
+        // Reached the end of the chain without finding endingContext
+        LogUtils.ITERATE_FRAMES.info("isContextOnSenderChain: startingFrame = " + startingFrame + " (class: " + startingFrame.getClass().getName() + ")");
+        LogUtils.ITERATE_FRAMES.info("isContextOnSenderChain: Exiting loop (reached end of chain or null).");
+        return null;
+    }
+
 }
