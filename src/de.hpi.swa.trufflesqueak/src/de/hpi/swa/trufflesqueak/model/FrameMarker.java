@@ -11,7 +11,41 @@ import com.oracle.truffle.api.frame.MaterializedFrame;
 
 import de.hpi.swa.trufflesqueak.util.FrameAccess;
 
+/**
+ * TruffleSqueak FrameMarker.
+ *
+ * <pre>
+ *              +---------------------------------+
+ * sender    -> | FrameMarker: virtual sender     |
+ *              | ContextObject: materialized     |
+ *              | nil: terminated / top-level     |
+ *              | null: not yet set               |
+ *              +---------------------------------+
+ * context   -> | ContextObject / null            |
+ *              +---------------------------------+
+ * </pre>
+ */
+
 public final class FrameMarker {
+    private Object sender;
+    private ContextObject context;
+
+    public Object getSender() {
+        return sender;
+    }
+
+    public void setSender(final Object markerContextOrNil) {
+        sender = markerContextOrNil;
+    }
+
+    public ContextObject getContext() {
+        return context;
+    }
+
+    public void setContext(final ContextObject contextObject) {
+        context = contextObject;
+    }
+
     @Override
     public String toString() {
         CompilerAsserts.neverPartOfCompilation();
@@ -19,15 +53,19 @@ public final class FrameMarker {
     }
 
     public ContextObject getMaterializedContext() {
-        final MaterializedFrame targetFrame = FrameAccess.findFrameForMarker(this);
-        final ContextObject context = FrameAccess.getContext(targetFrame);
         if (context != null) {
-            assert context.getFrameMarker() == this;
             return context;
         } else {
-            assert this == FrameAccess.getMarker(targetFrame) : "Frame does not match";
-            final CompiledCodeObject code = FrameAccess.getCodeObject(targetFrame);
-            return ContextObject.create(code.getSqueakClass().getImage(), targetFrame, code);
+            final MaterializedFrame targetFrame = FrameAccess.findFrameForMarker(this);
+            final ContextObject theContext = FrameAccess.getContext(targetFrame);
+            if (theContext != null) {
+                assert theContext.getFrameMarker() == this;
+                return theContext;
+            } else {
+                assert this == FrameAccess.getMarker(targetFrame) : "Frame does not match";
+                final CompiledCodeObject code = FrameAccess.getCodeObject(targetFrame);
+                return ContextObject.create(code.getSqueakClass().getImage(), targetFrame, code);
+            }
         }
     }
 }

@@ -55,7 +55,8 @@ public final class ExecuteBytecodeNode extends AbstractExecuteContextNode implem
         } catch (final NonLocalReturn nlr) {
             /* {@link getHandleNonLocalReturnNode()} acts as {@link BranchProfile} */
             assert !FrameAccess.isDead(frame) : "ExecuteBytecodeNode: encountered dead frame during NLR";
-            return getHandleNonLocalReturnNode().executeHandle(frame, nlr);
+            FrameAccess.terminateContextOrFrame(frame);
+            throw nlr;
         } catch (final StackOverflowError e) {
             CompilerDirectives.transferToInterpreter();
             throw getContext().tryToSignalLowSpace(frame, e);
@@ -163,6 +164,7 @@ public final class ExecuteBytecodeNode extends AbstractExecuteContextNode implem
         return bytecodeNodes[pcZeroBased];
     }
 
+    @SuppressWarnings("unused")
     private HandleNonLocalReturnNode getHandleNonLocalReturnNode() {
         if (handleNonLocalReturnNode == null) {
             CompilerDirectives.transferToInterpreterAndInvalidate();

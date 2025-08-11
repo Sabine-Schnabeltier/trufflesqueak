@@ -19,6 +19,7 @@ import com.oracle.truffle.api.nodes.RootNode;
 
 import de.hpi.swa.trufflesqueak.SqueakLanguage;
 import de.hpi.swa.trufflesqueak.exceptions.ProcessSwitch;
+import de.hpi.swa.trufflesqueak.exceptions.Returns.CannotReturnToTarget;
 import de.hpi.swa.trufflesqueak.exceptions.Returns.NonLocalReturn;
 import de.hpi.swa.trufflesqueak.exceptions.Returns.NonVirtualReturn;
 import de.hpi.swa.trufflesqueak.exceptions.Returns.TopLevelReturn;
@@ -108,6 +109,9 @@ public final class ExecuteTopLevelContextNode extends RootNode {
                 } catch (final NonVirtualReturn nvr) {
                     activeContext = commonNVReturn(activeContext, nvr);
                     LogUtils.SCHEDULING.log(Level.FINE, "Non Virtual Return on top-level: {0}", activeContext);
+                } catch (final CannotReturnToTarget cr) {
+                    activeContext = sendCannotReturn(cr.getStartingContext(), cr.getReturnValue());
+                    LogUtils.SCHEDULING.log(Level.FINE, "Cannot Return on top-level: {0}", activeContext);
                 }
             } catch (final ProcessSwitch ps) {
                 activeContext = getNextActiveContextNode.execute();
@@ -120,6 +124,7 @@ public final class ExecuteTopLevelContextNode extends RootNode {
     private ContextObject sendCannotReturnOrReturnToTopLevel(final ContextObject startContext, final ContextObject targetContext, final Object returnValue) {
         // Exit the interpreter loop if the target is the context that started the loop.
         if (targetContext != null && targetContext == initialContext) {
+            LogUtils.SCHEDULING.fine("sendCannotReturnOrReturnToTopLevel " + targetContext + " with return value: " + returnValue);
             throw returnToTopLevel(targetContext, returnValue);
         }
         return sendCannotReturn(startContext, returnValue);
@@ -130,6 +135,8 @@ public final class ExecuteTopLevelContextNode extends RootNode {
         if (!(sender instanceof final ContextObject senderContext)) {
             assert sender == NilObject.SINGLETON;
             return sendCannotReturnOrReturnToTopLevel(activeContext, activeContext, returnValue);
+        } else if (senderContext.isDead()) {
+            return sendCannotReturnOrReturnToTopLevel(activeContext, senderContext, returnValue);
         }
         final ContextObject context;
         if (senderContext.isPrimitiveContext()) {
@@ -218,8 +225,12 @@ public final class ExecuteTopLevelContextNode extends RootNode {
     }
 
     private ContextObject sendCannotReturn(final ContextObject startContext, final Object returnValue) {
-        sendCannotReturnNode.execute(startContext.getTruffleFrame(), startContext, returnValue);
-        throw CompilerDirectives.shouldNotReachHere("cannotReturn should trigger a ProcessSwitch");
+        try {
+            sendCannotReturnNode.execute(startContext.getTruffleFrame(), startContext, returnValue);
+        } catch (final NonVirtualReturn nvr) {
+            return commonNVReturn(startContext, nvr);
+        }
+        throw CompilerDirectives.shouldNotReachHere("cannotReturn should trigger a ProcessSwitch or a NonVirtualReturn");
     }
 
     /**
@@ -229,13 +240,10 @@ public final class ExecuteTopLevelContextNode extends RootNode {
     private ContextObject sendAboutToReturn(final ContextObject homeContext, final Object returnValue, final ContextObject unwindMarkedContextOrNil, final ContextObject activeContext) {
         try {
             sendAboutToReturnNode.execute(activeContext.getTruffleFrame(), homeContext, returnValue, unwindMarkedContextOrNil);
-        } catch (final ProcessSwitch ps) {
-            LogUtils.SCHEDULING.warning("ExecuteTopLevelContextNode: ProcessSwitch during AboutToReturn!");
-            throw ps;
         } catch (final NonVirtualReturn nvr) {
             return commonNVReturn(activeContext, nvr);
         }
-        throw CompilerDirectives.shouldNotReachHere("aboutToReturn should trigger a ProcessSwitch or a NonVirtualReturn");
+        throw CompilerDirectives.shouldNotReachHere("sendAboutToReturn should trigger a ProcessSwitch or a NonVirtualReturn");
     }
 
     private static void ensureCachedContextCanRunAgain(final ContextObject activeContext) {

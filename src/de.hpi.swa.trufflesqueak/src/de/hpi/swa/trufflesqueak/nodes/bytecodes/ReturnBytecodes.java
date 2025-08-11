@@ -8,9 +8,11 @@ package de.hpi.swa.trufflesqueak.nodes.bytecodes;
 
 import com.oracle.truffle.api.CompilerAsserts;
 import com.oracle.truffle.api.CompilerDirectives;
+import com.oracle.truffle.api.frame.Frame;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.profiles.ConditionProfile;
 
+import de.hpi.swa.trufflesqueak.exceptions.Returns.CannotReturnToTarget;
 import de.hpi.swa.trufflesqueak.exceptions.Returns.NonLocalReturn;
 import de.hpi.swa.trufflesqueak.exceptions.Returns.NonVirtualReturn;
 import de.hpi.swa.trufflesqueak.exceptions.SqueakExceptions.SqueakException;
@@ -18,11 +20,15 @@ import de.hpi.swa.trufflesqueak.image.SqueakImageContext;
 import de.hpi.swa.trufflesqueak.model.BooleanObject;
 import de.hpi.swa.trufflesqueak.model.CompiledCodeObject;
 import de.hpi.swa.trufflesqueak.model.ContextObject;
+import de.hpi.swa.trufflesqueak.model.FrameMarker;
 import de.hpi.swa.trufflesqueak.model.NilObject;
 import de.hpi.swa.trufflesqueak.nodes.AbstractNode;
 import de.hpi.swa.trufflesqueak.nodes.context.frame.FrameStackPopNode;
 import de.hpi.swa.trufflesqueak.nodes.context.frame.GetOrCreateContextNode;
+import de.hpi.swa.trufflesqueak.nodes.dispatch.DispatchSelector2Node.Dispatch2Node;
+import de.hpi.swa.trufflesqueak.nodes.dispatch.DispatchSelector2NodeFactory.Dispatch2NodeGen;
 import de.hpi.swa.trufflesqueak.util.FrameAccess;
+import de.hpi.swa.trufflesqueak.util.LogUtils;
 
 public final class ReturnBytecodes {
 
@@ -84,6 +90,8 @@ public final class ReturnBytecodes {
     }
 
     private static final class ReturnFromClosureNode extends AbstractReturnKindNode {
+        @Child private GetOrCreateContextNode getOrCreateContextNode;
+        @Child private Dispatch2Node sendAboutToReturnNode;
 
         /* Return to closure's home context's sender, executing unwind blocks */
 
@@ -93,15 +101,98 @@ public final class ReturnBytecodes {
             // Target is sender of closure's home context.
             final ContextObject homeContext = FrameAccess.getClosure(frame).getHomeContext();
             if (homeContext.canBeReturnedTo()) {
-                throw new NonLocalReturn(returnValue, homeContext);
-            } else {
-                CompilerDirectives.transferToInterpreter();
-                final ContextObject contextObject = GetOrCreateContextNode.getOrCreateUncached(frame);
-                final SqueakImageContext image = getContext();
-                image.cannotReturn.executeAsSymbolSlow(image, frame, contextObject, returnValue);
-                throw CompilerDirectives.shouldNotReachHere();
+                final ContextObject firstMarkedContext = ifHomeContextOnSenderChainReturnFirstUnwindMarkedOrRaiseNLR(frame, homeContext, returnValue);
+                if (firstMarkedContext != null) {
+                    getSendAboutToReturnNode().execute(frame, getGetOrCreateContextNode().executeGet(frame), returnValue, firstMarkedContext);
+                    throw CompilerDirectives.shouldNotReachHere();
+                }
             }
+            LogUtils.SCHEDULING.info("ReturnFromClosureNode: sendCannotReturn");
+            throw new CannotReturnToTarget(returnValue, getGetOrCreateContextNode().executeGet(frame));
         }
+
+        /**
+         * Walk the sender chain starting at the given Frame and terminating at homeContext.
+         *
+         * @return null if homeContext is not on sender chain; return first marked Context if found;
+         *         raise NLR otherwise
+         */
+        private static ContextObject ifHomeContextOnSenderChainReturnFirstUnwindMarkedOrRaiseNLR(final Frame startingFrame, final ContextObject homeContext, final Object returnValue) {
+            Object currentLink = FrameAccess.getMarker(startingFrame);
+            ContextObject firstMarkedContext = null;
+
+            if (currentLink == null) {
+                FrameAccess.initializeMarker(startingFrame);
+                currentLink = FrameAccess.getMarker(startingFrame);
+            }
+
+            while (currentLink != null && currentLink != NilObject.SINGLETON) {
+                switch (currentLink) {
+                    case FrameMarker fm -> {
+                        // If it's a FrameMarker, first check its associated ContextObject
+                        final ContextObject co = fm.getContext();
+                        if (co == homeContext) {
+                            if (firstMarkedContext == null) {
+                                throw new NonLocalReturn(returnValue, homeContext);
+                            }
+                            return firstMarkedContext;
+                        }
+                        // Watch for marked ContextObjects
+                        if (firstMarkedContext == null && co != null) {
+                            if (co.isUnwindMarked()) {
+                                firstMarkedContext = co;
+                            }
+                        }
+                        // Then move to the next sender in the chain (can be FrameMarker or
+                        // ContextObject)
+                        currentLink = fm.getSender();
+                    }
+                    case ContextObject co -> {
+                        // If it's a Context, first check if it is the homeContext
+                        if (co == homeContext) {
+                            if (firstMarkedContext == null) {
+                                throw new NonLocalReturn(returnValue, homeContext);
+                            }
+                            return firstMarkedContext;
+                        }
+                        // Watch for marked ContextObjects
+                        if (firstMarkedContext == null) {
+                            if (co.isUnwindMarked()) {
+                                firstMarkedContext = co;
+                            }
+                        }
+                        // Then move to its frameSender
+                        currentLink = co.getFrameSender();
+                    }
+                    default -> {
+                        // This branch should not be reached if the sender chain is well-formed
+                        assert false : "Unexpected link type in sender chain: " +
+                                        currentLink.getClass().getName() + " in frame " + startingFrame;
+                        return null;
+                    }
+                }
+            }
+
+            // Reached the end of the chain without finding homeContext.
+            return null;
+        }
+
+        private GetOrCreateContextNode getGetOrCreateContextNode() {
+            if (getOrCreateContextNode == null) {
+                CompilerDirectives.transferToInterpreterAndInvalidate();
+                getOrCreateContextNode = insert(GetOrCreateContextNode.create());
+            }
+            return getOrCreateContextNode;
+        }
+
+        private Dispatch2Node getSendAboutToReturnNode() {
+            if (sendAboutToReturnNode == null) {
+                CompilerDirectives.transferToInterpreterAndInvalidate();
+                sendAboutToReturnNode = insert(Dispatch2NodeGen.create(SqueakImageContext.getSlow().aboutToReturnSelector));
+            }
+            return sendAboutToReturnNode;
+        }
+
     }
 
     protected abstract static class AbstractReturnConstantNode extends AbstractNormalReturnNode {
