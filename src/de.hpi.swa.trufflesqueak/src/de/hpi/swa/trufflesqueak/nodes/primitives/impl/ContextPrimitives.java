@@ -9,19 +9,13 @@ package de.hpi.swa.trufflesqueak.nodes.primitives.impl;
 import java.util.List;
 
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
-import com.oracle.truffle.api.RootCallTarget;
-import com.oracle.truffle.api.Truffle;
 import com.oracle.truffle.api.dsl.Bind;
 import com.oracle.truffle.api.dsl.Cached;
 import com.oracle.truffle.api.dsl.GenerateNodeFactory;
 import com.oracle.truffle.api.dsl.ImportStatic;
 import com.oracle.truffle.api.dsl.NodeFactory;
 import com.oracle.truffle.api.dsl.Specialization;
-import com.oracle.truffle.api.frame.Frame;
-import com.oracle.truffle.api.frame.FrameInstance;
-import com.oracle.truffle.api.frame.FrameInstanceVisitor;
 import com.oracle.truffle.api.nodes.Node;
-import com.oracle.truffle.api.nodes.RootNode;
 
 import de.hpi.swa.trufflesqueak.model.AbstractSqueakObject;
 import de.hpi.swa.trufflesqueak.model.ContextObject;
@@ -36,8 +30,6 @@ import de.hpi.swa.trufflesqueak.nodes.primitives.Primitive.Primitive0WithFallbac
 import de.hpi.swa.trufflesqueak.nodes.primitives.Primitive.Primitive1WithFallback;
 import de.hpi.swa.trufflesqueak.nodes.primitives.Primitive.Primitive2WithFallback;
 import de.hpi.swa.trufflesqueak.nodes.primitives.SqueakPrimitive;
-import de.hpi.swa.trufflesqueak.shared.SqueakLanguageConfig;
-import de.hpi.swa.trufflesqueak.util.FrameAccess;
 
 public class ContextPrimitives extends AbstractPrimitiveFactoryHolder {
 
@@ -59,56 +51,56 @@ public class ContextPrimitives extends AbstractPrimitiveFactoryHolder {
     @GenerateNodeFactory
     @SqueakPrimitive(indices = 195)
     protected abstract static class PrimFindNextUnwindContextUpToNode extends AbstractPrimitiveNode implements Primitive1WithFallback {
-        @Specialization(guards = "receiver.hasMaterializedSender()")
+
+        @TruffleBoundary
+        @Specialization
         protected static final AbstractSqueakObject doFindNext(final ContextObject receiver, final AbstractSqueakObject previousContextOrNil) {
-            ContextObject current = receiver;
-            while (current != previousContextOrNil) {
-                final Object sender = current.getSender();
-                if (sender == NilObject.SINGLETON || sender == previousContextOrNil) {
-                    break;
-                } else {
-                    current = (ContextObject) sender;
-                    if (!current.hasClosure() && current.getCodeObject().isUnwindMarked()) {
-                        return current;
+
+            // Search starts with sender.
+            if (receiver == previousContextOrNil) {
+                return NilObject.SINGLETON;
+            }
+            Object currentLink = receiver.getFrameSender();
+
+            while (currentLink != null && currentLink != NilObject.SINGLETON) {
+                switch (currentLink) {
+                    case FrameMarker fm -> {
+                        // If it's a FrameMarker, first check its associated ContextObject
+                        final ContextObject co = fm.getContext();
+                        if (co == previousContextOrNil) {
+                            return NilObject.SINGLETON;
+                        }
+                        // Watch for marked ContextObjects
+                        if (co != null && co.isUnwindMarked()) {
+                            return co;
+                        }
+                        // Then move to the next sender in the chain (can be FrameMarker or
+                        // ContextObject)
+                        currentLink = fm.getSender();
+                    }
+                    case ContextObject co -> {
+                        // If it's a Context, first check if it is the endingContext
+                        if (co == previousContextOrNil) {
+                            return NilObject.SINGLETON;
+                        }
+                        // Watch for marked ContextObjects
+                        if (co.isUnwindMarked()) {
+                            return co;
+                        }
+                        // Then move to its frameSender
+                        currentLink = co.getFrameSender();
+                    }
+                    default -> {
+                        // This branch should not be reached if the sender chain is well-formed
+                        assert false : "Unexpected link type in sender chain: " +
+                                        currentLink.getClass().getName() + " in Context " + receiver;
+                        return NilObject.SINGLETON;
                     }
                 }
             }
+
+            // Reached the end of the chain without finding endingContext
             return NilObject.SINGLETON;
-        }
-
-        @TruffleBoundary
-        @Specialization(guards = "!receiver.hasMaterializedSender()")
-        protected static final AbstractSqueakObject doFindNextAvoidingMaterialization(final ContextObject receiver, final ContextObject previousContext) {
-            // Sender is not materialized, so avoid materialization by walking Truffle frames.
-            final boolean[] foundMyself = {false};
-            final AbstractSqueakObject result = Truffle.getRuntime().iterateFrames((frameInstance) -> {
-                final Frame current = frameInstance.getFrame(FrameInstance.FrameAccess.READ_ONLY);
-                if (!FrameAccess.isTruffleSqueakFrame(current)) {
-                    return null; // Foreign frame cannot be unwind marked.
-                }
-                final ContextObject context = FrameAccess.getContext(current);
-                if (!foundMyself[0]) {
-                    if (receiver == context) {
-                        foundMyself[0] = true;
-                    }
-                } else {
-                    if (previousContext == context) {
-                        return NilObject.SINGLETON;
-                    }
-                    if (!FrameAccess.hasClosure(current) && FrameAccess.getCodeObject(current).isUnwindMarked()) {
-                        assert context != null : "Contexts are always created for methods marked for unwind";
-                        return context;
-                    }
-                }
-                return null;
-            });
-            assert foundMyself[0] : "Did not find receiver with virtual sender on Truffle stack";
-            return NilObject.nullToNil(result);
-        }
-
-        @Specialization(guards = "!receiver.hasMaterializedSender()")
-        protected static final AbstractSqueakObject doFindNextAvoidingMaterializationNil(final ContextObject receiver, @SuppressWarnings("unused") final NilObject nil) {
-            return doFindNext(receiver, nil);
         }
     }
 
@@ -138,179 +130,101 @@ public class ContextPrimitives extends AbstractPrimitiveFactoryHolder {
          * Returns true if endContext is found on the sender chain of startContext. If terminate is
          * true, terminate Contexts while following the sender chain.
          */
-        private static boolean hasSenderChainFromToAndTerminateIf(final ContextObject startContext, final ContextObject endContext, final boolean terminate) {
-            // First, terminate materialized Contexts.
-            ContextObject currentContext = startContext;
-            while (currentContext.hasMaterializedSender()) {
-                final AbstractSqueakObject sender = currentContext.getSender();
-                if (terminate && currentContext != startContext) {
-                    currentContext.terminate();
-                }
-                if (sender == NilObject.SINGLETON || sender == endContext) {
-                    return sender == endContext;
-                } else {
-                    currentContext = (ContextObject) sender;
-                }
-            }
-            // Continue search from currentContext within frames on Truffle stack.
-            // currentContext has not been terminated.
-            return hasSenderChainFromToFramesAndTerminateIf(startContext, endContext, currentContext, terminate);
-        }
+        @TruffleBoundary
+        public static boolean hasSenderChainFromToAndTerminateIf(final ContextObject startContext, final AbstractSqueakObject endContext, final boolean terminate) {
+            // Search starts with sender.
+            Object currentLink = startContext.getFrameSender();
 
-        private static boolean hasSenderChainFromToFramesAndTerminateIf(final ContextObject startContext, final ContextObject endContext, final ContextObject intermediateContext,
-                        final boolean terminate) {
-            // Traverse sender chain from startContext to endContext, continuing with the frame
-            // associated with intermediateContext (which has not been terminated).
-            final FrameMarker intermediateMarker = (FrameMarker) intermediateContext.getFrameSender();
-            final ContextObject result = Truffle.getRuntime().iterateFrames(new FrameInstanceVisitor<>() {
-                boolean foundMyself;
-
-                @Override
-                public ContextObject visitFrame(final FrameInstance frameInstance) {
-                    final Frame currentFrame = frameInstance.getFrame(FrameInstance.FrameAccess.READ_ONLY);
-                    // Exit on ResumingContextObject
-                    if (!FrameAccess.isTruffleSqueakFrame(currentFrame)) {
-                        if (foundMyself) {
-                            return FrameAccess.getResumingContextObjectOrSkip(frameInstance);
-                        } else {
-                            if (FrameAccess.getResumingContextObjectOrSkip(frameInstance) == null) {
-                                return null;
-                            } else {
-                                return intermediateContext;
-                            }
+            while (currentLink != null && currentLink != NilObject.SINGLETON) {
+                switch (currentLink) {
+                    case FrameMarker fm -> {
+                        // If it's a FrameMarker, first check its associated ContextObject
+                        final ContextObject co = fm.getContext();
+                        if (co == endContext) {
+                            return true;
+                        }
+                        // Then move to the next sender in the chain (can be FrameMarker or
+                        // ContextObject)
+                        currentLink = fm.getSender();
+                        // Terminate if requested.
+                        if (terminate && co != null) {
+                            co.terminate();
                         }
                     }
-                    // Only examine frames after finding intermediateContext.
-                    if (!foundMyself) {
-                        if (intermediateMarker == FrameAccess.getMarker(currentFrame)) {
-                            foundMyself = true;
+                    case ContextObject co -> {
+                        // If it's a Context, first check if it is the endingContext
+                        if (co == endContext) {
+                            return true;
                         }
-                        return null;
+                        // Then move to its frameSender
+                        currentLink = co.getFrameSender();
+                        // Terminate if requested.
+                        if (terminate) {
+                            co.terminate();
+                        }
                     }
-                    // Exit if we find the ending Context.
-                    final ContextObject context = FrameAccess.getContext(currentFrame);
-                    if (context == endContext) {
-                        return endContext;
+                    default -> {
+                        // This branch should not be reached if the sender chain is well-formed
+                        assert false : "Unexpected link type in sender chain: " +
+                                        currentLink.getClass().getName() + " in Context " + startContext;
+                        return false;
                     }
-                    // Terminate frame and any associated Context.
-                    if (terminate) {
-                        final Frame currentWritable = frameInstance.getFrame(FrameInstance.FrameAccess.READ_WRITE);
-                        FrameAccess.terminateContextOrFrame(currentWritable);
-                    }
-                    return null;
                 }
-            });
-            // result is endContext (if found), intermediateContext (if not found in the frames),
-            // resumingContext (at end of frames), or null (if something went wrong?).
-            if (result == endContext) {
-                return true;
             }
-            if (result == null) {
-                // Some of the Cuis process tests end up with Contexts with FrameMarker senders
-                // that are not found on the Truffle stack.
-                return false;
-            }
-            // Terminate the remaining Contexts until finding either endContext or nil.
-            return hasSenderChainFromToRemainingAndTerminateIf(startContext, endContext, result, terminate);
-        }
 
-        private static boolean hasSenderChainFromToRemainingAndTerminateIf(final ContextObject startContext, final ContextObject endContext, final ContextObject intermediateContext,
-                        final boolean terminate) {
-            // Traverse sender chain from startContext to endContext, continuing with the context
-            // associated with intermediateContext (which has not been terminated).
-
-            // Terminate the remaining Contexts until finding either endContext or nil.
-            ContextObject currentContext = intermediateContext;
-            while (true) {
-                final AbstractSqueakObject sender = currentContext.getSender();
-                if (terminate && currentContext != startContext) {
-                    currentContext.terminate();
-                }
-                if (sender == NilObject.SINGLETON || sender == endContext) {
-                    return sender == endContext;
-                } else {
-                    currentContext = (ContextObject) sender;
-                }
-            }
+            // Reached the end of the chain without finding endContext
+            return false;
         }
     }
 
     @GenerateNodeFactory
     @SqueakPrimitive(indices = 197)
     protected abstract static class PrimNextHandlerContextNode extends AbstractPrimitiveNode implements Primitive0WithFallback {
-        @TruffleBoundary
-        @Specialization(guards = {"receiver.hasMaterializedSender()"})
-        protected final AbstractSqueakObject findNext(final ContextObject receiver) {
-            ContextObject context = receiver;
-            while (context.hasMaterializedSender()) {
-                if (context.getCodeObject().isExceptionHandlerMarked()) {
-                    assert !context.hasClosure();
-                    return context;
-                }
-                final AbstractSqueakObject sender = context.getMaterializedSender();
-                if (sender instanceof final ContextObject o) {
-                    context = o;
-                } else {
-                    assert sender == NilObject.SINGLETON;
-                    return NilObject.SINGLETON;
-                }
-            }
-            return findNextAvoidingMaterialization(context);
-        }
 
         @TruffleBoundary
-        @Specialization(guards = {"!receiver.hasMaterializedSender()"})
-        protected final AbstractSqueakObject findNextAvoidingMaterialization(final ContextObject receiver) {
-            final boolean[] foundMyself = new boolean[1];
-            final Object[] lastSender = new Object[1];
-            final ContextObject result = Truffle.getRuntime().iterateFrames(frameInstance -> {
-                final Frame current = frameInstance.getFrame(FrameInstance.FrameAccess.READ_ONLY);
-                if (!FrameAccess.isTruffleSqueakFrame(current)) {
-                    final RootNode rootNode = ((RootCallTarget) frameInstance.getCallTarget()).getRootNode();
-                    if (rootNode.isInternal() || rootNode.getLanguageInfo().getId().equals(SqueakLanguageConfig.ID)) {
-                        /* Skip internal and all other nodes that belong to TruffleSqueak. */
-                        return null;
-                    } else {
-                        /*
-                         * Found a frame of another language. Stop here by returning the receiver
-                         * context. This special case will be handled later on.
-                         */
-                        return receiver;
+        @Specialization
+        protected static final AbstractSqueakObject doFindNext(final ContextObject receiver) {
+            /*
+             * TODO: The following has been omitted from this implementation. Perhaps a fake Context
+             * could be inserted into the sender chain so that it would not require special
+             * handling? "Foreign frame found during frame iteration. Inject a fake context which
+             * will throw the Smalltalk exception as polyglot exception."
+             */
+
+            // Search starts with receiver.
+            Object currentLink = receiver.getFrameSender();
+
+            while (currentLink != null && currentLink != NilObject.SINGLETON) {
+                switch (currentLink) {
+                    case FrameMarker fm -> {
+                        // Watch for marked ContextObjects
+                        final ContextObject co = fm.getContext();
+                        if (co != null && co.isExceptionHandlerMarked()) {
+                            return co;
+                        }
+                        // Then move to the next sender in the chain (can be FrameMarker or
+                        // ContextObject)
+                        currentLink = fm.getSender();
+                    }
+                    case ContextObject co -> {
+                        // Watch for marked ContextObjects
+                        if (co.isExceptionHandlerMarked()) {
+                            return co;
+                        }
+                        // Then move to its frameSender
+                        currentLink = co.getFrameSender();
+                    }
+                    default -> {
+                        // This branch should not be reached if the sender chain is well-formed
+                        assert false : "Unexpected link type in sender chain: " +
+                                        currentLink.getClass().getName() + " in Context " + receiver;
+                        return NilObject.SINGLETON;
                     }
                 }
-                final ContextObject context = FrameAccess.getContext(current);
-                if (!foundMyself[0]) {
-                    if (context == receiver) {
-                        foundMyself[0] = true;
-                    }
-                } else {
-                    if (FrameAccess.getCodeObject(current).isExceptionHandlerMarked()) {
-                        assert context != null : "Contexts are always created for methods marked as exception handler";
-                        return context;
-                    } else {
-                        lastSender[0] = FrameAccess.getSender(current);
-                    }
-                }
-                return null;
-            });
-            if (result == receiver) {
-                /*
-                 * Foreign frame found during frame iteration. Inject a fake context which will
-                 * throw the Smalltalk exception as polyglot exception.
-                 */
-                return getContext().getInteropExceptionThrowingContext();
-            } else if (result == null) {
-                if (!foundMyself[0]) {
-                    return findNext(receiver); // Fallback to other version.
-                }
-                if (lastSender[0] instanceof final ContextObject o) {
-                    return findNext(o);
-                } else {
-                    return NilObject.SINGLETON;
-                }
-            } else {
-                return result;
             }
+
+            // Reached the end of the chain without finding endingContext
+            return NilObject.SINGLETON;
         }
     }
 
