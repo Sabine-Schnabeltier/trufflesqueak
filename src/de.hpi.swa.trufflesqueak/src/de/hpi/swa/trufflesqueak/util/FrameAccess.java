@@ -565,12 +565,14 @@ public final class FrameAccess {
         throw SqueakException.create("Could not find frame for:", frameMarker);
     }
 
-    /** Walk the sender chain starting at the given Frame and terminating at the ending Context
+    /**
+     * Walk the sender chain starting at the given Frame and terminating at the ending Context
      *
-     * @return  null if endingContext is not on sender chain; first marked Context if found; endingContext otherwise
+     * @return null if endingContext is not on sender chain; first marked Context if found;
+     *         endingContext otherwise
      */
     public static ContextObject ifContextOnSenderChainReturn(final Frame startingFrame, final ContextObject endingContext,
-                                                      final boolean returnFirstUnwindMarked, final boolean returnFirstExceptionHandlerMarked) {
+                    final boolean returnFirstUnwindMarked, final boolean returnFirstExceptionHandlerMarked) {
         // ToDo: should endingContext be allowed to be null to indicate return first marked?
         Object currentLink = FrameAccess.getMarker(startingFrame);
         ContextObject firstMarkedContext = null;
@@ -597,7 +599,8 @@ public final class FrameAccess {
                             firstMarkedContext = co;
                         }
                     }
-                    // Then move to the next sender in the chain (can be FrameMarker or ContextObject)
+                    // Then move to the next sender in the chain (can be FrameMarker or
+                    // ContextObject)
                     currentLink = fm.getSender();
                 }
                 case ContextObject co -> {
