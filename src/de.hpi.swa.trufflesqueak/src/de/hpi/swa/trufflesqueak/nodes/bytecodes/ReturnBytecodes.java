@@ -109,11 +109,7 @@ public final class ReturnBytecodes {
                     throw CompilerDirectives.shouldNotReachHere();
                 }
             } else {
-//                CompilerDirectives.transferToInterpreter();
                 LogUtils.SCHEDULING.info("ReturnFromClosureNode: sendCannotReturn");
-//                final ContextObject contextObject = GetOrCreateContextNode.getOrCreateUncached(frame);
-//                final SqueakImageContext image = getContext();
-//                image.cannotReturn.executeAsSymbolSlow(image, frame, contextObject, returnValue);
                 getSendCannotReturnNode().execute(frame, getGetOrCreateContextNode().executeGet(frame), returnValue);
                 throw CompilerDirectives.shouldNotReachHere();
             }
