@@ -128,18 +128,7 @@ public final class ExecuteBytecodeNode extends AbstractExecuteContextNode implem
                 pc = returnNode.getSuccessorIndex();
                 FrameAccess.setInstructionPointer(frame, pc);
                 returnValue = returnNode.executeReturn(frame);
-                final int actualNextPc = FrameAccess.getInstructionPointer(frame);
-                if (pc != actualNextPc) {
-                    /*
-                     * pc has changed, which can happen if a context is restarted (e.g. as part of
-                     * Exception>>retry). For now, we continue in the interpreter to avoid confusing
-                     * the Graal compiler.
-                     */
-                    CompilerDirectives.transferToInterpreter();
-                    pc = actualNextPc;
-                } else {
-                    pc = LOCAL_RETURN_PC;
-                }
+                pc = LOCAL_RETURN_PC;
                 continue bytecode_loop;
             } else {
                 /* All other bytecode nodes. */
