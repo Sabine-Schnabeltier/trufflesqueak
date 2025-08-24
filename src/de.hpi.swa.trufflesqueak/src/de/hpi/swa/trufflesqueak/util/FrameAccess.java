@@ -621,16 +621,16 @@ public final class FrameAccess {
                 }
                 default -> {
                     // This branch should ideally not be reached if the sender chain is well-formed
-                    LogUtils.ITERATE_FRAMES.info("isContextOnSenderChain: startingFrame = " + startingFrame + " (class: " + startingFrame.getClass().getName() + ")");
-                    LogUtils.ITERATE_FRAMES.info("isContextOnSenderChain: Unexpected link type in chain: " + currentLink.getClass().getName());
+                    assert false : "Unexpected link type in sender chain: " +
+                            currentLink.getClass().getName() + " in frame " + startingFrame;
                     return null;
                 }
             }
         }
 
         // Reached the end of the chain without finding endingContext
-        LogUtils.ITERATE_FRAMES.info("isContextOnSenderChain: startingFrame = " + startingFrame + " (class: " + startingFrame.getClass().getName() + ")");
-        LogUtils.ITERATE_FRAMES.info("isContextOnSenderChain: Exiting loop (reached end of chain or null).");
+//        LogUtils.ITERATE_FRAMES.info("isContextOnSenderChain: startingFrame = " + startingFrame + " (class: " + startingFrame.getClass().getName() + ")");
+//        LogUtils.ITERATE_FRAMES.info("isContextOnSenderChain: Exiting loop (reached end of chain or null).");
         return null;
     }
 
