@@ -19,6 +19,7 @@ import com.oracle.truffle.api.nodes.RootNode;
 
 import de.hpi.swa.trufflesqueak.SqueakLanguage;
 import de.hpi.swa.trufflesqueak.exceptions.ProcessSwitch;
+import de.hpi.swa.trufflesqueak.exceptions.Returns.CannotReturnToTarget;
 import de.hpi.swa.trufflesqueak.exceptions.Returns.NonLocalReturn;
 import de.hpi.swa.trufflesqueak.exceptions.Returns.NonVirtualReturn;
 import de.hpi.swa.trufflesqueak.exceptions.Returns.TopLevelReturn;
@@ -101,13 +102,28 @@ public final class ExecuteTopLevelContextNode extends RootNode {
                     image.resetContextStackDepth();
                     final Object result = callNode.call(activeContext.getCallTarget());
                     activeContext = returnTo(activeContext, sender, result);
+                    if (activeContext.isDead()) {
+                        LogUtils.SCHEDULING.warning("about to die");
+                    }
                     LogUtils.SCHEDULING.log(Level.FINE, "Local Return on top-level: {0}", activeContext);
                 } catch (final NonLocalReturn nlr) {
                     activeContext = commonNLReturn(sender, activeContext, nlr);
+                    if (activeContext.isDead()) {
+                        LogUtils.SCHEDULING.warning("about to die");
+                    }
                     LogUtils.SCHEDULING.log(Level.FINE, "Non Local Return on top-level: {0}", activeContext);
                 } catch (final NonVirtualReturn nvr) {
                     activeContext = commonNVReturn(activeContext, nvr);
+                    if (activeContext.isDead()) {
+                        LogUtils.SCHEDULING.warning("about to die");
+                    }
                     LogUtils.SCHEDULING.log(Level.FINE, "Non Virtual Return on top-level: {0}", activeContext);
+                } catch (final CannotReturnToTarget cr) {
+                    activeContext = sendCannotReturn(cr.getStartingContext(), cr.getReturnValue());
+                    if (activeContext.isDead()) {
+                        LogUtils.SCHEDULING.warning("about to die");
+                    }
+                    LogUtils.SCHEDULING.log(Level.FINE, "Non Local Return on top-level: {0}", activeContext);
                 }
             } catch (final ProcessSwitch ps) {
                 activeContext = getNextActiveContextNode.execute();
@@ -131,6 +147,8 @@ public final class ExecuteTopLevelContextNode extends RootNode {
         if (!(sender instanceof final ContextObject senderContext)) {
             assert sender == NilObject.SINGLETON;
             return sendCannotReturnOrReturnToTopLevel(activeContext, activeContext, returnValue);
+        } else if (senderContext.isDead()) {
+            return sendCannotReturnOrReturnToTopLevel(activeContext, senderContext, returnValue);
         }
         final ContextObject context;
         if (senderContext.isPrimitiveContext()) {
@@ -209,6 +227,9 @@ public final class ExecuteTopLevelContextNode extends RootNode {
                     AboutToReturnNode.create(context.getCodeObject()).executeAboutToReturn(context.getTruffleFrame(), nlr);
                 } catch (NonVirtualReturn nvr) {
                     return commonNVReturn(context, nvr);
+                } catch (final CannotReturnToTarget cr) {
+                    // ToDo: Is this needed? I suppose an ensure Block could try to return to another process...
+                    return sendCannotReturn(cr.getStartingContext(), cr.getReturnValue());
                 } catch (ProcessSwitch ps) {
                     LogUtils.SCHEDULING.warning("commonNLReturn: ProcessSwitch during AboutToReturn!");
                     throw ps;
@@ -228,8 +249,12 @@ public final class ExecuteTopLevelContextNode extends RootNode {
     }
 
     private ContextObject sendCannotReturn(final ContextObject startContext, final Object returnValue) {
-        sendCannotReturnNode.execute(startContext.getTruffleFrame(), startContext, returnValue);
-        throw CompilerDirectives.shouldNotReachHere("cannotReturn should trigger a ProcessSwitch");
+        Object result = sendCannotReturnNode.execute(startContext.getTruffleFrame(), startContext, returnValue);
+        if (result instanceof ContextObject newContext) {
+            return newContext;
+        } else {
+            throw CompilerDirectives.shouldNotReachHere("cannotReturn should trigger a ProcessSwitch");
+        }
     }
 
     @SuppressWarnings("unused")

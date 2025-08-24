@@ -11,6 +11,7 @@ import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.profiles.ConditionProfile;
 
+import de.hpi.swa.trufflesqueak.exceptions.Returns.CannotReturnToTarget;
 import de.hpi.swa.trufflesqueak.exceptions.Returns.NonLocalReturn;
 import de.hpi.swa.trufflesqueak.exceptions.Returns.NonVirtualReturn;
 import de.hpi.swa.trufflesqueak.exceptions.SqueakExceptions.SqueakException;
@@ -100,19 +101,18 @@ public final class ReturnBytecodes {
             assert FrameAccess.hasClosure(frame);
             // Target is sender of closure's home context.
             final ContextObject homeContext = FrameAccess.getClosure(frame).getHomeContext();
-            final ContextObject firstMarkedContext = FrameAccess.ifContextOnSenderChainReturn(frame, homeContext, true, false);
-            if (homeContext.canBeReturnedTo() && firstMarkedContext != null) {
+            if (homeContext.canBeReturnedTo()) {
+                final ContextObject firstMarkedContext = FrameAccess.ifContextOnSenderChainReturn(frame, homeContext, true, false);
                 if (firstMarkedContext == homeContext) {
                     throw new NonLocalReturn(returnValue, homeContext);
-                } else {
+                } else if (firstMarkedContext != null) {
                     getSendAboutToReturnNode().execute(frame, getGetOrCreateContextNode().executeGet(frame), returnValue, firstMarkedContext);
                     throw CompilerDirectives.shouldNotReachHere();
                 }
-            } else {
-                LogUtils.SCHEDULING.info("ReturnFromClosureNode: sendCannotReturn");
-                getSendCannotReturnNode().execute(frame, getGetOrCreateContextNode().executeGet(frame), returnValue);
-                throw CompilerDirectives.shouldNotReachHere();
             }
+            LogUtils.SCHEDULING.info("ReturnFromClosureNode: sendCannotReturn");
+//            getSendCannotReturnNode().execute(frame, getGetOrCreateContextNode().executeGet(frame), returnValue);
+            throw new CannotReturnToTarget(returnValue, getGetOrCreateContextNode().executeGet(frame));
         }
 
         private GetOrCreateContextNode getGetOrCreateContextNode() {
