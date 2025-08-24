@@ -119,7 +119,10 @@ public final class ExecuteBytecodeNode extends AbstractExecuteContextNode implem
                 pc = successor;
                 continue bytecode_loop;
             } else if (node instanceof final AbstractReturnNode returnNode) {
-                /* Save pc in frame since ReturnFromClosureNode could send aboutToReturn or cannotReturn */
+                /*
+                 * Save pc in frame since ReturnFromClosureNode could send aboutToReturn or
+                 * cannotReturn
+                 */
                 pc = returnNode.getSuccessorIndex();
                 FrameAccess.setInstructionPointer(frame, pc);
                 returnValue = returnNode.executeReturn(frame);
