@@ -399,7 +399,7 @@ public final class BlockClosurePrimitives extends AbstractPrimitiveFactoryHolder
         protected static final Object doValue(final VirtualFrame frame, final BlockClosureObject closure,
                         @Bind final SqueakImageContext image,
                         @Cached final PrimClosureValue0Node primClosureValue0Node) {
-            image.interrupt.delayNextContextSwitch();
+//            image.interrupt.delayNextContextSwitch();
             return primClosureValue0Node.execute(frame, closure);
         }
     }
@@ -411,7 +411,7 @@ public final class BlockClosurePrimitives extends AbstractPrimitiveFactoryHolder
         protected static final Object doValue(final VirtualFrame frame, final BlockClosureObject closure, final ArrayObject argArray,
                         @Bind final SqueakImageContext image,
                         @Cached final PrimClosureValueNaryNode primClosureValueNaryNode) {
-            image.interrupt.delayNextContextSwitch();
+//            image.interrupt.delayNextContextSwitch();
             return primClosureValueNaryNode.execute(frame, closure, argArray);
         }
     }

@@ -7,6 +7,7 @@
 package de.hpi.swa.trufflesqueak.nodes.interrupts;
 
 import java.util.ArrayDeque;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.LockSupport;
 
 import com.oracle.truffle.api.CompilerAsserts;
@@ -30,19 +31,20 @@ public final class CheckForInterruptsState {
      */
     private long interruptCheckNanos = DEFAULT_INTERRUPT_CHECK_NANOS;
 
-    private boolean isActive = true;
-    private volatile long nanosToWait;
-    private long nextWakeupTick;
-    private boolean interruptPending;
-    private boolean hasPendingFinalizations;
+    // Main thread controls this flag to enable/disable interrupt signals.
+    private final AtomicBoolean interruptEnabled = new AtomicBoolean(true);
 
-    /**
-     * `shouldTrigger` is set to `true` by a dedicated thread. To guarantee atomicity, it would be
-     * necessary to mark this field as `volatile` or use an `AtomicBoolean`. However, such a field
-     * cannot be moved by the Graal compiler during compilation. Since atomicity is not needed for
-     * the interrupt handler mechanism, we can use a standard boolean here for better compilation.
-     */
-    private boolean shouldTrigger;
+    // This volatile flag is for the fast, initial check by the main thread.
+    // It is set only when interrupts are enabled.
+    private volatile boolean interruptPending = false;
+
+    // This AtomicBoolean is always set on an interrupt, regardless of `interruptEnabled`.
+    // It serves as the definitive, atomic record of an interrupt occurring.
+    private final AtomicBoolean interruptRequest = new AtomicBoolean(false);
+
+    private volatile boolean userInterruptPending;
+    private long nextWakeupTick;
+    private boolean hasPendingFinalizations;
 
     private Thread thread;
 
@@ -71,19 +73,11 @@ public final class CheckForInterruptsState {
         @Override
         public void run() {
             while (true) {
-                // Check for interrupts
-                shouldTrigger |= interruptPending || nextWakeUpTickTrigger() || hasPendingFinalizations || hasSemaphoresToSignal();
-                if (nanosToWait > 0) {
-                    /*
-                     * An interrupt has triggered recently, so give it some time to do useful work
-                     * before the next check may trigger another one.
-                     */
-                    shouldTrigger = false; // ensure disabled (in case enabled by the last check)
-                    LockSupport.parkNanos(nanosToWait);
-                    nanosToWait = 0;
-                } else {
-                    LockSupport.parkNanos(interruptCheckNanos);
+                // Check for wake up tick trigger (class Delay) only.
+                if (nextWakeUpTickTrigger()) {
+                    signalInterrupt();
                 }
+                LockSupport.parkNanos(interruptCheckNanos);
                 // Handle thread interrupts
                 if (Thread.interrupted()) {
                     break;
@@ -112,56 +106,57 @@ public final class CheckForInterruptsState {
     /* Interrupt trigger state */
 
     public boolean shouldSkip() {
-        if (!isActive) {
+        // Fast, initial check using the volatile flag.
+        if (interruptPending) {
+            return shouldSkipSlow();
+        }
+        return true;
+    }
+
+    @TruffleBoundary
+    private boolean shouldSkipSlow() {
+        // Skip if interrupts are disabled.
+        interruptPending = false;
+        if (!interruptEnabled.get()) {
             return true;
         }
-        if (shouldTrigger) {
-            shouldTrigger = false; // reset trigger
-            return false;
-        } else {
-            return true;
+
+        // Perform the definitive atomic check and clear.
+       return !interruptRequest.getAndSet(false);
+    }
+
+    /* Record that some type interrupt has occurred. Can be called by other threads */
+    public void signalInterrupt() {
+        // Always set the definitive interruptRequest flag.
+        interruptRequest.set(true);
+
+        // Only set the fast interruptPending flag if interrupts are enabled.
+        if (interruptEnabled.get()) {
+            interruptPending = true;
         }
-    }
-
-    private void delayNextCheck() {
-        // wait a full interval to ensure interrupts are not triggered more than once per interval
-        delayNextCheck(interruptCheckNanos);
-    }
-
-    /** Used for #primitiveClosureValueNoContextSwitch. */
-    public void delayNextContextSwitch() {
-        // wait 20 times longer than usual
-        delayNextCheck(20 * interruptCheckNanos);
-    }
-
-    private void delayNextCheck(final long delayNanos) {
-        // avoid any immediate triggers
-        shouldTrigger = false;
-        // let CheckForInterruptsThread wait before the next check
-        nanosToWait = delayNanos;
     }
 
     /* Enable / disable interrupts */
 
     public boolean isActive() {
-        return isActive;
+        return interruptEnabled.get();
     }
 
     public void activate() {
-        isActive = true;
+        interruptEnabled.set(true);
+        interruptPending = interruptRequest.get();
     }
 
     public void deactivate() {
-        isActive = false;
+        interruptEnabled.set(false);
     }
 
     /* User interrupt */
 
     public boolean tryInterruptPending() {
-        if (interruptPending) {
+        if (userInterruptPending) {
             LogUtils.INTERRUPTS.fine("User interrupt");
-            interruptPending = false; // reset
-            delayNextCheck();
+            userInterruptPending = false; // reset
             return true;
         } else {
             return false;
@@ -169,8 +164,8 @@ public final class CheckForInterruptsState {
     }
 
     public void setInterruptPending() {
-        interruptPending = true;
-        shouldTrigger = true;
+        userInterruptPending = true;
+        signalInterrupt();
     }
 
     /* Timer interrupt */
@@ -190,7 +185,6 @@ public final class CheckForInterruptsState {
         if (nextWakeUpTickTrigger()) {
             LogUtils.INTERRUPTS.fine("Timer interrupt");
             nextWakeupTick = 0; // reset
-            delayNextCheck();
             return true;
         } else {
             return false;
@@ -214,7 +208,6 @@ public final class CheckForInterruptsState {
         if (hasPendingFinalizations) {
             LogUtils.INTERRUPTS.fine("Finalization interrupt");
             hasPendingFinalizations = false;
-            delayNextCheck();
             return true;
         } else {
             return false;
@@ -223,7 +216,7 @@ public final class CheckForInterruptsState {
 
     public void setPendingFinalizations() {
         hasPendingFinalizations = true;
-        shouldTrigger = true;
+        signalInterrupt();
     }
 
     /* Semaphore interrupts */
@@ -235,7 +228,6 @@ public final class CheckForInterruptsState {
     public boolean trySemaphoresToSignal() {
         if (hasSemaphoresToSignal()) {
             LogUtils.INTERRUPTS.fine("Semaphore interrupt");
-            delayNextCheck();
             return true;
         } else {
             return false;
@@ -249,7 +241,7 @@ public final class CheckForInterruptsState {
     @TruffleBoundary
     public void signalSemaphoreWithIndex(final int index) {
         semaphoresToSignal.addLast(index);
-        shouldTrigger = true;
+        signalInterrupt();
     }
 
     /*
@@ -257,8 +249,8 @@ public final class CheckForInterruptsState {
      */
 
     public void clear() {
+        userInterruptPending = false;
         nextWakeupTick = 0;
-        interruptPending = false;
         hasPendingFinalizations = false;
         clearWeakPointersQueue();
         semaphoresToSignal.clear();
@@ -266,7 +258,7 @@ public final class CheckForInterruptsState {
 
     public void reset() {
         CompilerAsserts.neverPartOfCompilation("Resetting interrupt handler only supported for testing purposes");
-        isActive = true;
+        activate();
         shutdown();
         clear();
     }
