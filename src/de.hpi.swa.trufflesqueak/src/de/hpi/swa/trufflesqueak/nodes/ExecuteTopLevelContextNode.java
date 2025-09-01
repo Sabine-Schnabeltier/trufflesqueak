@@ -211,23 +211,6 @@ public final class ExecuteTopLevelContextNode extends RootNode {
         // Terminate the Contexts on sender chain.
         context = senderContext;
         while (context != targetContext) {
-            if (context.getCodeObject().isUnwindMarked()) {
-                try {
-                    /*
-                     * TODO: Not sure whether we can mix the virtualized
-                     * Context>>aboutToReturn:through: with sending the actual message. Clearing the
-                     * modified sender forces the use of the virtualized implementation of
-                     * aboutToReturn.
-                     */
-                    context.clearModifiedSender();
-                    AboutToReturnNode.create(context.getCodeObject()).executeAboutToReturn(context.getTruffleFrame(), nlr);
-                } catch (NonVirtualReturn nvr) {
-                    return commonNVReturn(context, nvr);
-                } catch (ProcessSwitch ps) {
-                    LogUtils.SCHEDULING.warning("commonNLReturn: ProcessSwitch during AboutToReturn!");
-                    throw ps;
-                }
-            }
             final ContextObject currentSender = (ContextObject) context.getSender();
             context.terminate();
             context = currentSender;

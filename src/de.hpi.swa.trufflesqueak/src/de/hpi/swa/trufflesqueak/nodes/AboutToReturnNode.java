@@ -66,6 +66,7 @@ public abstract class AboutToReturnNode extends AbstractNode {
             completeTempWriteNode.executeWrite(frame, BooleanObject.TRUE);
             final BlockClosureObject closure = (BlockClosureObject) blockArgumentNode.executeRead(frame);
             try {
+                LogUtils.SCHEDULING.warning("AboutToReturnNode: doAboutToReturnVirtualized");
                 dispatchNode.execute(node, closure, FrameAccess.newClosureArgumentsTemplate(closure, getContextOrMarkerNode.execute(frame), 0));
             } catch (ProcessSwitch ps) {
                 LogUtils.SCHEDULING.warning("AboutToReturnNode: ProcessSwitch during AboutToReturn! ");
