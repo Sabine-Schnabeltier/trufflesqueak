@@ -23,8 +23,6 @@ import de.hpi.swa.trufflesqueak.model.NilObject;
 import de.hpi.swa.trufflesqueak.nodes.AbstractNode;
 import de.hpi.swa.trufflesqueak.nodes.context.frame.FrameStackPopNode;
 import de.hpi.swa.trufflesqueak.nodes.context.frame.GetOrCreateContextNode;
-import de.hpi.swa.trufflesqueak.nodes.dispatch.DispatchSelector1Node.Dispatch1Node;
-import de.hpi.swa.trufflesqueak.nodes.dispatch.DispatchSelector1NodeFactory.Dispatch1NodeGen;
 import de.hpi.swa.trufflesqueak.nodes.dispatch.DispatchSelector2Node.Dispatch2Node;
 import de.hpi.swa.trufflesqueak.nodes.dispatch.DispatchSelector2NodeFactory.Dispatch2NodeGen;
 import de.hpi.swa.trufflesqueak.util.FrameAccess;
@@ -92,7 +90,6 @@ public final class ReturnBytecodes {
     private static final class ReturnFromClosureNode extends AbstractReturnKindNode {
         @Child private GetOrCreateContextNode getOrCreateContextNode;
         @Child private Dispatch2Node sendAboutToReturnNode;
-        @Child private Dispatch1Node sendCannotReturnNode;
 
         /* Return to closure's home context's sender, executing unwind blocks */
 
@@ -111,7 +108,6 @@ public final class ReturnBytecodes {
                 }
             }
             LogUtils.SCHEDULING.info("ReturnFromClosureNode: sendCannotReturn");
-//            getSendCannotReturnNode().execute(frame, getGetOrCreateContextNode().executeGet(frame), returnValue);
             throw new CannotReturnToTarget(returnValue, getGetOrCreateContextNode().executeGet(frame));
         }
 
@@ -129,14 +125,6 @@ public final class ReturnBytecodes {
                 sendAboutToReturnNode = insert(Dispatch2NodeGen.create(SqueakImageContext.getSlow().aboutToReturnSelector));
             }
             return sendAboutToReturnNode;
-        }
-
-        private Dispatch1Node getSendCannotReturnNode() {
-            if (sendCannotReturnNode == null) {
-                CompilerDirectives.transferToInterpreterAndInvalidate();
-                sendCannotReturnNode = insert(Dispatch1NodeGen.create(SqueakImageContext.getSlow().cannotReturn));
-            }
-            return sendCannotReturnNode;
         }
 
     }
