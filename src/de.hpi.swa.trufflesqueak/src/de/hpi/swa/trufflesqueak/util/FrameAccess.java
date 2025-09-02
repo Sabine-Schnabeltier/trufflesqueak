@@ -572,7 +572,7 @@ public final class FrameAccess {
      *         endingContext otherwise
      */
     public static ContextObject ifContextOnSenderChainReturn(final Frame startingFrame, final ContextObject endingContext,
-                    final boolean returnFirstUnwindMarked, final boolean returnFirstExceptionHandlerMarked) {
+                                                             final boolean returnFirstUnwindMarked, final boolean returnFirstExceptionHandlerMarked) {
         // ToDo: should endingContext be allowed to be null to indicate return first marked?
         Object currentLink = FrameAccess.getMarker(startingFrame);
         ContextObject firstMarkedContext = null;
@@ -605,7 +605,7 @@ public final class FrameAccess {
                 }
                 case ContextObject co -> {
                     // If it's a Context, first check if it is the endingContext
-                    if (currentLink == endingContext) {
+                    if (co == endingContext) {
                         return firstMarkedContext == null ? endingContext : firstMarkedContext;
                     }
                     // Watch for marked ContextObjects
@@ -632,6 +632,57 @@ public final class FrameAccess {
 //        LogUtils.ITERATE_FRAMES.info("isContextOnSenderChain: startingFrame = " + startingFrame + " (class: " + startingFrame.getClass().getName() + ")");
 //        LogUtils.ITERATE_FRAMES.info("isContextOnSenderChain: Exiting loop (reached end of chain or null).");
         return null;
+    }
+
+    /**
+     * Walk the sender chain starting at the given Frame and terminating at the ending Context or nil
+     *
+     * @return first marked Context if found;
+     *         nil otherwise
+     */
+    public static AbstractSqueakObject getNextMarkedContext(final ContextObject startingContext, final AbstractSqueakObject endingContextOrNil) {
+        // Search starts with sender.
+        Object currentLink = startingContext.getFrameSender();
+
+        while (currentLink != null && currentLink != NilObject.SINGLETON) {
+            switch (currentLink) {
+                case FrameMarker fm -> {
+                    // If it's a FrameMarker, first check its associated ContextObject
+                    final ContextObject co = fm.getContext();
+                    if (co == endingContextOrNil) {
+                        return NilObject.SINGLETON;
+                    }
+                    // Watch for marked ContextObjects
+                    if (co != null && co.isUnwindMarked()) {
+                        return co;
+                    }
+                    // Then move to the next sender in the chain (can be FrameMarker or
+                    // ContextObject)
+                    currentLink = fm.getSender();
+                }
+                case ContextObject co -> {
+                    // If it's a Context, first check if it is the endingContext
+                    if (co == endingContextOrNil) {
+                        return NilObject.SINGLETON;
+                    }
+                    // Watch for marked ContextObjects
+                    if (co.isUnwindMarked()) {
+                        return co;
+                    }
+                    // Then move to its frameSender
+                    currentLink = co.getFrameSender();
+                }
+                default -> {
+                    // This branch should ideally not be reached if the sender chain is well-formed
+                    assert false : "Unexpected link type in sender chain: " +
+                            currentLink.getClass().getName() + " in Context " + startingContext;
+                    return NilObject.SINGLETON;
+                }
+            }
+        }
+
+        // Reached the end of the chain without finding endingContext
+        return NilObject.SINGLETON;
     }
 
 }

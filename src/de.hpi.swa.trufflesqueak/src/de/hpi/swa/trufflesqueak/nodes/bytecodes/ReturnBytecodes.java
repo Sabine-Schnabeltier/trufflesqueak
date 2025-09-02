@@ -150,7 +150,7 @@ public final class ReturnBytecodes {
                     }
                     case ContextObject co -> {
                         // If it's a Context, first check if it is the homeContext
-                        if (currentLink == homeContext) {
+                        if (co == homeContext) {
                             if (firstMarkedContext == null) {
                                 throw new NonLocalReturn(returnValue, homeContext);
                             }
