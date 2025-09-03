@@ -62,8 +62,16 @@ public class ContextPrimitives extends AbstractPrimitiveFactoryHolder {
             }
             Object currentLink = receiver.getFrameSender();
 
-            while (currentLink != null && currentLink != NilObject.SINGLETON) {
+            while (true) {
                 switch (currentLink) {
+                    case null -> {
+                        // Reached the end of the chain without finding endingContext.
+                        return NilObject.SINGLETON;
+                    }
+                    case NilObject nil -> {
+                        // Reached the end of the chain without finding endingContext.
+                        return NilObject.SINGLETON;
+                    }
                     case FrameMarker fm -> {
                         // If it's a FrameMarker, first check its associated ContextObject
                         final ContextObject co = fm.getContext();
@@ -98,9 +106,6 @@ public class ContextPrimitives extends AbstractPrimitiveFactoryHolder {
                     }
                 }
             }
-
-            // Reached the end of the chain without finding endingContext
-            return NilObject.SINGLETON;
         }
     }
 
@@ -135,8 +140,16 @@ public class ContextPrimitives extends AbstractPrimitiveFactoryHolder {
             // Search starts with sender.
             Object currentLink = startContext.getFrameSender();
 
-            while (currentLink != null && currentLink != NilObject.SINGLETON) {
+            while (true) {
                 switch (currentLink) {
+                    case null -> {
+                        // Reached the end of the chain without finding endContext.
+                        return false;
+                    }
+                    case NilObject nil -> {
+                        // Reached the end of the chain without finding endContext.
+                        return false;
+                    }
                     case FrameMarker fm -> {
                         // If it's a FrameMarker, first check its associated ContextObject
                         final ContextObject co = fm.getContext();
@@ -171,9 +184,6 @@ public class ContextPrimitives extends AbstractPrimitiveFactoryHolder {
                     }
                 }
             }
-
-            // Reached the end of the chain without finding endContext
-            return false;
         }
     }
 
@@ -194,8 +204,16 @@ public class ContextPrimitives extends AbstractPrimitiveFactoryHolder {
             // Search starts with receiver.
             Object currentLink = receiver.getFrameSender();
 
-            while (currentLink != null && currentLink != NilObject.SINGLETON) {
+            while (true) {
                 switch (currentLink) {
+                    case null -> {
+                        // Reached the end of the chain without finding endingContext.
+                        return NilObject.SINGLETON;
+                    }
+                    case NilObject nil -> {
+                        // Reached the end of the chain without finding endingContext.
+                        return NilObject.SINGLETON;
+                    }
                     case FrameMarker fm -> {
                         // Watch for marked ContextObjects
                         final ContextObject co = fm.getContext();
@@ -222,9 +240,6 @@ public class ContextPrimitives extends AbstractPrimitiveFactoryHolder {
                     }
                 }
             }
-
-            // Reached the end of the chain without finding endingContext
-            return NilObject.SINGLETON;
         }
     }
 

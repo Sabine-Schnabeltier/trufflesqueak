@@ -8,7 +8,7 @@ package de.hpi.swa.trufflesqueak.nodes.bytecodes;
 
 import com.oracle.truffle.api.CompilerAsserts;
 import com.oracle.truffle.api.CompilerDirectives;
-import com.oracle.truffle.api.frame.Frame;
+import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.profiles.ConditionProfile;
 
@@ -101,7 +101,7 @@ public final class ReturnBytecodes {
             // Target is sender of closure's home context.
             final ContextObject homeContext = FrameAccess.getClosure(frame).getHomeContext();
             if (homeContext.canBeReturnedTo()) {
-                final ContextObject firstMarkedContext = ifHomeContextOnSenderChainReturnFirstUnwindMarkedOrRaiseNLR(frame, homeContext, returnValue);
+                final ContextObject firstMarkedContext = ifHomeContextOnSenderChainReturnFirstUnwindMarkedOrRaiseNLR(FrameAccess.getMarkerNonNull(frame), homeContext, returnValue);
                 if (firstMarkedContext != null) {
                     getSendAboutToReturnNode().execute(frame, getGetOrCreateContextNode().executeGet(frame), returnValue, firstMarkedContext);
                     throw CompilerDirectives.shouldNotReachHere();
@@ -117,17 +117,21 @@ public final class ReturnBytecodes {
          * @return null if homeContext is not on sender chain; return first marked Context if found;
          *         raise NLR otherwise
          */
-        private static ContextObject ifHomeContextOnSenderChainReturnFirstUnwindMarkedOrRaiseNLR(final Frame startingFrame, final ContextObject homeContext, final Object returnValue) {
-            Object currentLink = FrameAccess.getMarker(startingFrame);
+        @TruffleBoundary
+        private static ContextObject ifHomeContextOnSenderChainReturnFirstUnwindMarkedOrRaiseNLR(final FrameMarker startingFrameMarker, final ContextObject homeContext, final Object returnValue) {
+            Object currentLink = startingFrameMarker;
             ContextObject firstMarkedContext = null;
 
-            if (currentLink == null) {
-                FrameAccess.initializeMarker(startingFrame);
-                currentLink = FrameAccess.getMarker(startingFrame);
-            }
-
-            while (currentLink != null && currentLink != NilObject.SINGLETON) {
+            while (true) {
                 switch (currentLink) {
+                    case null -> {
+                        // Reached the end of the chain without finding homeContext.
+                        return null;
+                    }
+                    case NilObject nil -> {
+                        // Reached the end of the chain without finding homeContext.
+                        return null;
+                    }
                     case FrameMarker fm -> {
                         // If it's a FrameMarker, first check its associated ContextObject
                         final ContextObject co = fm.getContext();
@@ -167,14 +171,11 @@ public final class ReturnBytecodes {
                     default -> {
                         // This branch should not be reached if the sender chain is well-formed
                         assert false : "Unexpected link type in sender chain: " +
-                                        currentLink.getClass().getName() + " in frame " + startingFrame;
+                                        currentLink.getClass().getName() + " in frame " + startingFrameMarker;
                         return null;
                     }
                 }
             }
-
-            // Reached the end of the chain without finding homeContext.
-            return null;
         }
 
         private GetOrCreateContextNode getGetOrCreateContextNode() {
