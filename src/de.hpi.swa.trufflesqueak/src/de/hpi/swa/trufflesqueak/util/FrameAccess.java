@@ -565,5 +565,4 @@ public final class FrameAccess {
         }
         throw SqueakException.create("Could not find frame for:", frameMarker);
     }
-
 }

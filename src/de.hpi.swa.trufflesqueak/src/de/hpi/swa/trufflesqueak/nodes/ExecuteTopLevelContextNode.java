@@ -124,7 +124,6 @@ public final class ExecuteTopLevelContextNode extends RootNode {
     private ContextObject sendCannotReturnOrReturnToTopLevel(final ContextObject startContext, final ContextObject targetContext, final Object returnValue) {
         // Exit the interpreter loop if the target is the context that started the loop.
         if (targetContext != null && targetContext == initialContext) {
-            LogUtils.SCHEDULING.fine("sendCannotReturnOrReturnToTopLevel " + targetContext + " with return value: " + returnValue);
             throw returnToTopLevel(targetContext, returnValue);
         }
         return sendCannotReturn(startContext, returnValue);
@@ -243,7 +242,7 @@ public final class ExecuteTopLevelContextNode extends RootNode {
         } catch (final NonVirtualReturn nvr) {
             return commonNVReturn(activeContext, nvr);
         }
-        throw CompilerDirectives.shouldNotReachHere("sendAboutToReturn should trigger a ProcessSwitch or a NonVirtualReturn");
+        throw CompilerDirectives.shouldNotReachHere("aboutToReturn should trigger a ProcessSwitch or a NonVirtualReturn");
     }
 
     private static void ensureCachedContextCanRunAgain(final ContextObject activeContext) {

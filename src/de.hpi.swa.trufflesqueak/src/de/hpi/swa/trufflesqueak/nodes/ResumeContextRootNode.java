@@ -40,9 +40,6 @@ public final class ResumeContextRootNode extends AbstractRootNode {
             assert !activeContext.isDead() : "Terminated contexts cannot be resumed";
             activeContext.clearModifiedSender();
             final int pc = instructionPointerProfile.profile(activeContext.getInstructionPointerForBytecodeLoop());
-            if (pc <= 0) {
-                LogUtils.SCHEDULING.warning("pc is negative!");
-            }
             if (CompilerDirectives.isPartialEvaluationConstant(pc)) {
                 return executeBytecodeNode.execute(activeContext.getTruffleFrame(), pc);
             } else {
