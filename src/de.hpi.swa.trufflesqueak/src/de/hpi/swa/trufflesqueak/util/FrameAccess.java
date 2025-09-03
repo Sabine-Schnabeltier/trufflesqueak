@@ -204,6 +204,15 @@ public final class FrameAccess {
         return (FrameMarker) frame.getObjectStatic(SlotIndicies.THIS_MARKER.ordinal());
     }
 
+    public static FrameMarker getMarkerNonNull(final Frame frame) {
+        final FrameMarker frameMarker = getMarker(frame);
+        if (frameMarker == null) {
+            return initializeMarker(frame);
+        } else {
+            return frameMarker;
+        }
+    }
+
     public static void setMarker(final Frame frame, final FrameMarker marker) {
         frame.setObjectStatic(SlotIndicies.THIS_MARKER.ordinal(), marker);
         /* FrameMarker contains shadow copy */
@@ -211,8 +220,11 @@ public final class FrameAccess {
         marker.setContext(getContext(frame));
     }
 
-    public static void initializeMarker(final Frame frame) {
-        setMarker(frame, new FrameMarker());
+    public static FrameMarker initializeMarker(final Frame frame) {
+        /* FrameMarker contains shadow copy */
+        final FrameMarker frameMarker = new FrameMarker(getSender(frame), getContext(frame));
+        frame.setObjectStatic(SlotIndicies.THIS_MARKER.ordinal(), frameMarker);
+        return frameMarker;
     }
 
     @SuppressWarnings("unused")

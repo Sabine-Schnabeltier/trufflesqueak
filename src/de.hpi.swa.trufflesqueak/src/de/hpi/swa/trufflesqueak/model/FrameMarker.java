@@ -30,6 +30,14 @@ public final class FrameMarker {
     private Object sender;
     private ContextObject context;
 
+    public FrameMarker() {
+    }
+
+    public FrameMarker(final Object sender, final ContextObject context) {
+        this.sender = sender;
+        this.context = context;
+    }
+
     public Object getSender() {
         return sender;
     }
