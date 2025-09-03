@@ -189,7 +189,7 @@ public final class ReturnBytecodes {
         private Dispatch2Node getSendAboutToReturnNode() {
             if (sendAboutToReturnNode == null) {
                 CompilerDirectives.transferToInterpreterAndInvalidate();
-                sendAboutToReturnNode = insert(Dispatch2NodeGen.create(SqueakImageContext.getSlow().aboutToReturnSelector));
+                sendAboutToReturnNode = insert(Dispatch2NodeGen.create(getContext().aboutToReturnSelector));
             }
             return sendAboutToReturnNode;
         }
