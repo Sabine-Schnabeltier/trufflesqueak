@@ -30,46 +30,38 @@ public abstract class AddLinkToListNode extends AbstractNode {
     public static void executeUncached(final PointersObject process, final PointersObject list, final boolean addLast) {
         final AbstractPointersObjectReadNode readNode = AbstractPointersObjectReadNode.getUncached();
         final AbstractPointersObjectWriteNode writeNode = AbstractPointersObjectWriteNode.getUncached();
-        if (addLast) {
-            addLastLinkToList(null, process, list, addLast, readNode, writeNode);
-        } else {
-            addFirstLinkToList(null, process, list, addLast, readNode, writeNode);
-        }
+        addLinkToList(null, process, list, addLast, readNode, readNode, writeNode, writeNode, writeNode, writeNode);
     }
 
-    public abstract void execute(Node node, PointersObject process, PointersObject list, final boolean addLast);
+    public abstract void execute(Node node, PointersObject process, PointersObject list, boolean addLast);
 
     /**
+     * <pre>
      * Adding as the firstLink versus the lastLink differ in two ways.
-     *
      * 1. LAST_LINK and FIRST_LINK are interchanged
      * 2. process.nextLink = firstLink versus lastLink.nextLink = process
+     * </pre>
      */
-    @Specialization(guards = "!addLast")
-    protected static final void addFirstLinkToList(final Node node, final PointersObject process, final PointersObject list, final boolean addLast,
-                    @Shared("read") @Cached final AbstractPointersObjectReadNode readNode,
-                    @Shared("write") @Cached final AbstractPointersObjectWriteNode writeNode) {
-        if (list.isEmptyList(readNode, node)) {
-            writeNode.execute(node, list, LINKED_LIST.LAST_LINK, process);
+    @Specialization
+    protected static final void addLinkToList(final Node node, final PointersObject process, final PointersObject list, final boolean addLast,
+                    @Cached final AbstractPointersObjectReadNode readEmptyNode,
+                    @Cached final AbstractPointersObjectReadNode readNode,
+                    @Cached final AbstractPointersObjectWriteNode writeFirstLinkNode,
+                    @Cached final AbstractPointersObjectWriteNode writeLastLinkNode,
+                    @Cached final AbstractPointersObjectWriteNode writeNextLinkNode,
+                    @Cached final AbstractPointersObjectWriteNode writeListNode) {
+        writeListNode.execute(node, process, PROCESS.LIST, list);
+        if (list.isEmptyList(readEmptyNode, node)) {
+            writeFirstLinkNode.execute(node, list, LINKED_LIST.FIRST_LINK, process);
+            writeLastLinkNode.execute(node, list, LINKED_LIST.LAST_LINK, process);
+        } else if (addLast) {
+            final PointersObject lastLink = readNode.executePointers(node, list, LINKED_LIST.LAST_LINK);
+            writeLastLinkNode.execute(node, list, LINKED_LIST.LAST_LINK, process);
+            writeNextLinkNode.execute(node, lastLink, PROCESS.NEXT_LINK, process);
         } else {
             final PointersObject firstLink = readNode.executePointers(node, list, LINKED_LIST.FIRST_LINK);
-            writeNode.execute(node, process, PROCESS.NEXT_LINK, firstLink);
+            writeFirstLinkNode.execute(node, list, LINKED_LIST.FIRST_LINK, process);
+            writeNextLinkNode.execute(node, process, PROCESS.NEXT_LINK, firstLink);
         }
-        writeNode.execute(node, list, LINKED_LIST.FIRST_LINK, process);
-        writeNode.execute(node, process, PROCESS.LIST, list);
-    }
-
-    @Specialization(guards = "addLast")
-    protected static final void addLastLinkToList(final Node node, final PointersObject process, final PointersObject list, final boolean addLast,
-                    @Shared("read") @Cached final AbstractPointersObjectReadNode readNode,
-                    @Shared("write") @Cached final AbstractPointersObjectWriteNode writeNode) {
-        if (list.isEmptyList(readNode, node)) {
-            writeNode.execute(node, list, LINKED_LIST.FIRST_LINK, process);
-        } else {
-            final PointersObject lastLink = readNode.executePointers(node, list, LINKED_LIST.LAST_LINK);
-            writeNode.execute(node, lastLink, PROCESS.NEXT_LINK, process);
-        }
-        writeNode.execute(node, list, LINKED_LIST.LAST_LINK, process);
-        writeNode.execute(node, process, PROCESS.LIST, list);
     }
 }
