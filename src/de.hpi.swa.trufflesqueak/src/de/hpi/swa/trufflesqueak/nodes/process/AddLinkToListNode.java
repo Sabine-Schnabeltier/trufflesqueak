@@ -37,7 +37,7 @@ public abstract class AddLinkToListNode extends AbstractNode {
         }
     }
 
-    public abstract void execute(Node node, PointersObject process, PointersObject list, final boolean addLast);
+    public abstract void execute(Node node, PointersObject process, PointersObject list, boolean addLast);
 
     /**
      * <pre>
