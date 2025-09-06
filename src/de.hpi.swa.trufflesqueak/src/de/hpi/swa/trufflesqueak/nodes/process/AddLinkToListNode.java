@@ -40,10 +40,11 @@ public abstract class AddLinkToListNode extends AbstractNode {
     public abstract void execute(Node node, PointersObject process, PointersObject list, final boolean addLast);
 
     /**
+     * <pre>
      * Adding as the firstLink versus the lastLink differ in two ways.
-     *
      * 1. LAST_LINK and FIRST_LINK are interchanged
      * 2. process.nextLink = firstLink versus lastLink.nextLink = process
+     * </pre>
      */
     @Specialization(guards = "!addLast")
     protected static final void addFirstLinkToList(final Node node, final PointersObject process, final PointersObject list, @SuppressWarnings("unused") final boolean addLast,

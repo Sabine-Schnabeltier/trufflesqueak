@@ -35,11 +35,11 @@ public final class CheckForInterruptsState {
     private final AtomicBoolean interruptEnabled = new AtomicBoolean(true);
 
     /**
-     * This volatile flag is for the fast, initial check by the main thread.
-     * It is set only when interrupts are enabled. To guarantee atomicity, it is
-     * necessary to mark this field as `volatile`. Since atomicity is not needed for
-     * the interrupt handler mechanism, we could use a standard boolean here, but
-     * initial tests indicate that there is no performance improvement by doing so.
+     * This volatile flag is for the fast, initial check by the main thread. It is set only when
+     * interrupts are enabled. To guarantee atomicity, it is necessary to mark this field as
+     * `volatile`. Since atomicity is not needed for the interrupt handler mechanism, we could use a
+     * standard boolean here, but initial tests indicate that there is no performance improvement by
+     * doing so.
      */
     private volatile boolean interruptPending = false;
 
@@ -127,7 +127,7 @@ public final class CheckForInterruptsState {
         }
 
         // Perform the definitive atomic check and clear.
-       return !interruptRequest.getAndSet(false);
+        return !interruptRequest.getAndSet(false);
     }
 
     /* Record that some type interrupt has occurred. Can be called by other threads */
