@@ -41,7 +41,7 @@ public final class CheckForInterruptsState {
      * standard boolean here, but initial tests indicate that there is no performance improvement by
      * doing so.
      */
-    private volatile boolean interruptPending = false;
+    private /*volatile*/ boolean interruptPending = false;
 
     // This AtomicBoolean is always set on an interrupt, regardless of `interruptEnabled`.
     // It serves as the definitive, atomic record of an interrupt occurring.
