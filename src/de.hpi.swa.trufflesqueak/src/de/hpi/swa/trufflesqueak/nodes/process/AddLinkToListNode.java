@@ -46,7 +46,7 @@ public abstract class AddLinkToListNode extends AbstractNode {
      * 2. process.nextLink = firstLink versus lastLink.nextLink = process
      */
     @Specialization(guards = "!addLast")
-    protected static final void addFirstLinkToList(final Node node, final PointersObject process, final PointersObject list, final boolean addLast,
+    protected static final void addFirstLinkToList(final Node node, final PointersObject process, final PointersObject list, @SuppressWarnings("unused") final boolean addLast,
                     @Shared("read") @Cached final AbstractPointersObjectReadNode readNode,
                     @Shared("write") @Cached final AbstractPointersObjectWriteNode writeNode) {
         if (list.isEmptyList(readNode, node)) {
@@ -60,7 +60,7 @@ public abstract class AddLinkToListNode extends AbstractNode {
     }
 
     @Specialization(guards = "addLast")
-    protected static final void addLastLinkToList(final Node node, final PointersObject process, final PointersObject list, final boolean addLast,
+    protected static final void addLastLinkToList(final Node node, final PointersObject process, final PointersObject list, @SuppressWarnings("unused") final boolean addLast,
                     @Shared("read") @Cached final AbstractPointersObjectReadNode readNode,
                     @Shared("write") @Cached final AbstractPointersObjectWriteNode writeNode) {
         if (list.isEmptyList(readNode, node)) {
