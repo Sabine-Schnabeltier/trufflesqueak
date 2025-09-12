@@ -48,17 +48,17 @@ public abstract class AboutToReturnNode extends AbstractNode {
     @ImportStatic(FrameStackReadNode.class)
     protected abstract static class AboutToReturnImplNode extends AboutToReturnNode {
 
-        @Override
-        public final void execute(final VirtualFrame frame, final NonLocalReturn nlr) {
-            try {
-                executeSpecialized(frame, nlr);
-            } catch (ProcessSwitch ps) {
-                LogUtils.SCHEDULING.warning("AboutToReturnNode: ProcessSwitch during AboutToReturn!");
-                throw ps;
-            }
-        }
+//        @Override
+//        public final void execute(final VirtualFrame frame, final NonLocalReturn nlr) {
+//            try {
+//                executeSpecialized(frame, nlr);
+//            } catch (ProcessSwitch ps) {
+//                LogUtils.SCHEDULING.warning("AboutToReturnNode: ProcessSwitch during AboutToReturn!");
+//                throw ps;
+//            }
+//        }
 
-        public abstract void executeSpecialized(VirtualFrame frame, NonLocalReturn nlr);
+        public abstract void execute(VirtualFrame frame, NonLocalReturn nlr);
 
         /*
          * Virtualized version of Context>>aboutToReturn:through:, more specifically

@@ -8,21 +8,34 @@ package de.hpi.swa.trufflesqueak.nodes.bytecodes;
 
 import com.oracle.truffle.api.CompilerAsserts;
 import com.oracle.truffle.api.CompilerDirectives;
+import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
+import com.oracle.truffle.api.Truffle;
+import com.oracle.truffle.api.frame.Frame;
+import com.oracle.truffle.api.frame.FrameInstance;
+import com.oracle.truffle.api.frame.FrameInstanceVisitor;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.profiles.ConditionProfile;
 
+import de.hpi.swa.trufflesqueak.exceptions.Returns.CannotReturnToTarget;
 import de.hpi.swa.trufflesqueak.exceptions.Returns.NonLocalReturn;
 import de.hpi.swa.trufflesqueak.exceptions.Returns.NonVirtualReturn;
 import de.hpi.swa.trufflesqueak.exceptions.SqueakExceptions.SqueakException;
 import de.hpi.swa.trufflesqueak.image.SqueakImageContext;
+import de.hpi.swa.trufflesqueak.model.AbstractSqueakObject;
 import de.hpi.swa.trufflesqueak.model.BooleanObject;
 import de.hpi.swa.trufflesqueak.model.CompiledCodeObject;
 import de.hpi.swa.trufflesqueak.model.ContextObject;
+import de.hpi.swa.trufflesqueak.model.FrameMarker;
 import de.hpi.swa.trufflesqueak.model.NilObject;
 import de.hpi.swa.trufflesqueak.nodes.AbstractNode;
 import de.hpi.swa.trufflesqueak.nodes.context.frame.FrameStackPopNode;
 import de.hpi.swa.trufflesqueak.nodes.context.frame.GetOrCreateContextNode;
+import de.hpi.swa.trufflesqueak.nodes.dispatch.DispatchSelector2Node.Dispatch2Node;
+import de.hpi.swa.trufflesqueak.nodes.dispatch.DispatchSelector2NodeFactory.Dispatch2NodeGen;
 import de.hpi.swa.trufflesqueak.util.FrameAccess;
+import de.hpi.swa.trufflesqueak.util.LogUtils;
+
+import java.util.List;
 
 public final class ReturnBytecodes {
 
@@ -84,6 +97,8 @@ public final class ReturnBytecodes {
     }
 
     private static final class ReturnFromClosureNode extends AbstractReturnKindNode {
+        @Child private GetOrCreateContextNode getOrCreateContextNode;
+        @Child private Dispatch2Node sendAboutToReturnNode;
 
         /* Return to closure's home context's sender, executing unwind blocks */
 
@@ -93,15 +108,104 @@ public final class ReturnBytecodes {
             // Target is sender of closure's home context.
             final ContextObject homeContext = FrameAccess.getClosure(frame).getHomeContext();
             if (homeContext.canBeReturnedTo()) {
-                throw new NonLocalReturn(returnValue, homeContext);
-            } else {
-                CompilerDirectives.transferToInterpreter();
-                final ContextObject contextObject = GetOrCreateContextNode.getOrCreateUncached(frame);
-                final SqueakImageContext image = getContext();
-                image.cannotReturn.executeAsSymbolSlow(image, frame, contextObject, returnValue);
-                throw CompilerDirectives.shouldNotReachHere();
+                final ContextObject firstMarkedContext = ifHomeContextOnSenderChainReturnFirstUnwindMarkedOrRaiseNLR(homeContext, returnValue);
+                if (firstMarkedContext != null) {
+                    getSendAboutToReturnNode().execute(frame, getGetOrCreateContextNode().executeGet(frame), returnValue, firstMarkedContext);
+                    throw CompilerDirectives.shouldNotReachHere();
+                }
             }
+            throw new CannotReturnToTarget(returnValue, getGetOrCreateContextNode().executeGet(frame));
         }
+
+        /**
+         * Walk the sender chain starting at the given Frame and terminating at homeContext.
+         *
+         * @return null if homeContext is not on sender chain; return first marked Context if found;
+         *         raise NLR otherwise
+         */
+        @TruffleBoundary
+        private static ContextObject ifHomeContextOnSenderChainReturnFirstUnwindMarkedOrRaiseNLR(final ContextObject homeContext, final Object returnValue) {
+            // Traverse sender chain from senderFrameMarkerOrContext to endContext.
+            // If the homeContext found on the sender chain, return the first unwind-marked Context.
+            // If the homeContext not found on the sender chain, return null.
+
+            // Search the frames first.
+            final ContextObject[] current_marked = Truffle.getRuntime().iterateFrames(new FrameInstanceVisitor<>() {
+                ContextObject firstMarkedContext = null;
+
+                @Override
+                public ContextObject[] visitFrame(final FrameInstance frameInstance) {
+                    final Frame currentFrame = frameInstance.getFrame(FrameInstance.FrameAccess.READ_ONLY);
+                    // Exit on ResumingContextObject
+                    if (!FrameAccess.isTruffleSqueakFrame(currentFrame)) {
+                        final ContextObject resumingContext = FrameAccess.getResumingContextObjectOrSkip(frameInstance);
+                        if (resumingContext == null) {
+                            return null;
+                        } else {
+                            if (firstMarkedContext == null && resumingContext.isUnwindMarked()) {
+                                firstMarkedContext = resumingContext;
+                            }
+                            return new ContextObject[] {resumingContext, firstMarkedContext};
+                        }
+                    }
+                    // Exit if we find the homeContext.
+                    final ContextObject context = FrameAccess.getContext(currentFrame);
+                    if (context == homeContext) {
+                        if (firstMarkedContext == null) {
+                            throw new NonLocalReturn(returnValue, homeContext);
+                        }
+                        return new ContextObject[] {homeContext, firstMarkedContext};
+                    }
+                    // Watch for marked ContextObjects.
+                    if (firstMarkedContext == null && context != null && context.isUnwindMarked()) {
+                        firstMarkedContext = context;
+                    }
+                    return null;
+                }
+            });
+            if (current_marked == null) {
+                LogUtils.ITERATE_FRAMES.warning("ifHomeContextOnSenderChainReturnFirstUnwindMarkedOrRaiseNLR did not find resumingContext!");
+                return null;
+            }
+            // current_marked is a pair of values: homeContext (or resumingContext) and firstMarkedContext (or null)
+            ContextObject currentContext = current_marked[0];
+            ContextObject firstMarked = current_marked[1];
+
+            // Continue searching through Contexts until we find either the homeContext or nil.
+            while (currentContext != homeContext) {
+                final AbstractSqueakObject sender = currentContext.getSender();
+                if (sender == NilObject.SINGLETON) {
+                    // cannot return
+                    return null;
+                } else {
+                    currentContext = (ContextObject) sender;
+                    if (firstMarked == null && currentContext.isUnwindMarked()) {
+                        firstMarked = currentContext;
+                    }
+                }
+            }
+            if (firstMarked == null) {
+                throw new NonLocalReturn(returnValue, homeContext);
+            }
+            return firstMarked;
+        }
+
+        private GetOrCreateContextNode getGetOrCreateContextNode() {
+            if (getOrCreateContextNode == null) {
+                CompilerDirectives.transferToInterpreterAndInvalidate();
+                getOrCreateContextNode = insert(GetOrCreateContextNode.create());
+            }
+            return getOrCreateContextNode;
+        }
+
+        private Dispatch2Node getSendAboutToReturnNode() {
+            if (sendAboutToReturnNode == null) {
+                CompilerDirectives.transferToInterpreterAndInvalidate();
+                sendAboutToReturnNode = insert(Dispatch2NodeGen.create(getContext().aboutToReturnSelector));
+            }
+            return sendAboutToReturnNode;
+        }
+
     }
 
     protected abstract static class AbstractReturnConstantNode extends AbstractNormalReturnNode {
