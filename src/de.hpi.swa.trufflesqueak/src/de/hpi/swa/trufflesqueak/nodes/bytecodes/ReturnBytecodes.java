@@ -104,7 +104,7 @@ public final class ReturnBytecodes {
             // Target is sender of closure's home context.
             final ContextObject homeContext = FrameAccess.getClosure(frame).getHomeContext();
             if (homeContext.canBeReturnedTo()) {
-                final ContextObject firstMarkedContext = ifHomeContextOnSenderChainReturnFirstUnwindMarkedOrRaiseNLR(homeContext, returnValue);
+                final ContextObject firstMarkedContext = firstUnwindMarkedOrThrowNLR(homeContext, returnValue);
                 if (firstMarkedContext != null) {
                     getSendAboutToReturnNode().execute(frame, getGetOrCreateContextNode().executeGet(frame), returnValue, firstMarkedContext);
                     throw CompilerDirectives.shouldNotReachHere();
@@ -114,17 +114,13 @@ public final class ReturnBytecodes {
         }
 
         /**
-         * Walk the sender chain starting at the given Frame and terminating at homeContext.
+         * Walk the sender chain starting at the current Frame and terminating at homeContext.
          *
          * @return null if homeContext is not on sender chain; return first marked Context if found;
          *         raise NLR otherwise
          */
         @TruffleBoundary
-        private static ContextObject ifHomeContextOnSenderChainReturnFirstUnwindMarkedOrRaiseNLR(final ContextObject homeContext, final Object returnValue) {
-            // Traverse sender chain from senderFrameMarkerOrContext to endContext.
-            // If the homeContext found on the sender chain, return the first unwind-marked Context.
-            // If the homeContext not found on the sender chain, return null.
-
+        private static ContextObject firstUnwindMarkedOrThrowNLR(final ContextObject homeContext, final Object returnValue) {
             // Search the frames first.
             final ContextObject[] marked = new ContextObject[1];
             final ContextObject current = Truffle.getRuntime().iterateFrames(new FrameInstanceVisitor<>() {
@@ -161,10 +157,9 @@ public final class ReturnBytecodes {
                 }
             });
             if (current == null) {
-                LogUtils.ITERATE_FRAMES.warning("ifHomeContextOnSenderChainReturnFirstUnwindMarkedOrRaiseNLR did not find resumingContext!");
+                LogUtils.ITERATE_FRAMES.warning("firstUnwindMarkedOrThrowNLR did not find resumingContext!");
                 return null;
             }
-            // current is a pair of values: homeContext (or resumingContext) and firstMarkedContext (or null)
             ContextObject currentContext = current;
             ContextObject firstMarked = marked[0];
 
