@@ -20,12 +20,10 @@ import de.hpi.swa.trufflesqueak.exceptions.Returns.CannotReturnToTarget;
 import de.hpi.swa.trufflesqueak.exceptions.Returns.NonLocalReturn;
 import de.hpi.swa.trufflesqueak.exceptions.Returns.NonVirtualReturn;
 import de.hpi.swa.trufflesqueak.exceptions.SqueakExceptions.SqueakException;
-import de.hpi.swa.trufflesqueak.image.SqueakImageContext;
 import de.hpi.swa.trufflesqueak.model.AbstractSqueakObject;
 import de.hpi.swa.trufflesqueak.model.BooleanObject;
 import de.hpi.swa.trufflesqueak.model.CompiledCodeObject;
 import de.hpi.swa.trufflesqueak.model.ContextObject;
-import de.hpi.swa.trufflesqueak.model.FrameMarker;
 import de.hpi.swa.trufflesqueak.model.NilObject;
 import de.hpi.swa.trufflesqueak.nodes.AbstractNode;
 import de.hpi.swa.trufflesqueak.nodes.context.frame.FrameStackPopNode;
@@ -34,8 +32,6 @@ import de.hpi.swa.trufflesqueak.nodes.dispatch.DispatchSelector2Node.Dispatch2No
 import de.hpi.swa.trufflesqueak.nodes.dispatch.DispatchSelector2NodeFactory.Dispatch2NodeGen;
 import de.hpi.swa.trufflesqueak.util.FrameAccess;
 import de.hpi.swa.trufflesqueak.util.LogUtils;
-
-import java.util.List;
 
 public final class ReturnBytecodes {
 
@@ -130,11 +126,12 @@ public final class ReturnBytecodes {
             // If the homeContext not found on the sender chain, return null.
 
             // Search the frames first.
-            final ContextObject[] current_marked = Truffle.getRuntime().iterateFrames(new FrameInstanceVisitor<>() {
-                ContextObject firstMarkedContext = null;
+            final ContextObject[] marked = new ContextObject[1];
+            final ContextObject current = Truffle.getRuntime().iterateFrames(new FrameInstanceVisitor<>() {
+                ContextObject firstMarked = null;
 
                 @Override
-                public ContextObject[] visitFrame(final FrameInstance frameInstance) {
+                public ContextObject visitFrame(final FrameInstance frameInstance) {
                     final Frame currentFrame = frameInstance.getFrame(FrameInstance.FrameAccess.READ_ONLY);
                     // Exit on ResumingContextObject
                     if (!FrameAccess.isTruffleSqueakFrame(currentFrame)) {
@@ -142,34 +139,34 @@ public final class ReturnBytecodes {
                         if (resumingContext == null) {
                             return null;
                         } else {
-                            if (firstMarkedContext == null && resumingContext.isUnwindMarked()) {
-                                firstMarkedContext = resumingContext;
+                            if (firstMarked == null && resumingContext.isUnwindMarked()) {
+                                marked[0] = resumingContext;
                             }
-                            return new ContextObject[] {resumingContext, firstMarkedContext};
+                            return resumingContext;
                         }
                     }
                     // Exit if we find the homeContext.
                     final ContextObject context = FrameAccess.getContext(currentFrame);
                     if (context == homeContext) {
-                        if (firstMarkedContext == null) {
+                        if (firstMarked == null) {
                             throw new NonLocalReturn(returnValue, homeContext);
                         }
-                        return new ContextObject[] {homeContext, firstMarkedContext};
+                        return homeContext;
                     }
                     // Watch for marked ContextObjects.
-                    if (firstMarkedContext == null && context != null && context.isUnwindMarked()) {
-                        firstMarkedContext = context;
+                    if (firstMarked == null && context != null && context.isUnwindMarked()) {
+                        marked[0] = firstMarked = context;
                     }
                     return null;
                 }
             });
-            if (current_marked == null) {
+            if (current == null) {
                 LogUtils.ITERATE_FRAMES.warning("ifHomeContextOnSenderChainReturnFirstUnwindMarkedOrRaiseNLR did not find resumingContext!");
                 return null;
             }
-            // current_marked is a pair of values: homeContext (or resumingContext) and firstMarkedContext (or null)
-            ContextObject currentContext = current_marked[0];
-            ContextObject firstMarked = current_marked[1];
+            // current is a pair of values: homeContext (or resumingContext) and firstMarkedContext (or null)
+            ContextObject currentContext = current;
+            ContextObject firstMarked = marked[0];
 
             // Continue searching through Contexts until we find either the homeContext or nil.
             while (currentContext != homeContext) {

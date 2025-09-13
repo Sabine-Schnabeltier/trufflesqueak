@@ -38,7 +38,6 @@ public final class ExecuteBytecodeNode extends AbstractExecuteContextNode implem
     private SourceSection section;
 
     @Children private AbstractBytecodeNode[] bytecodeNodes;
-    @Child private HandleNonLocalReturnNode handleNonLocalReturnNode;
     @CompilationFinal private Object osrMetadata;
 
     public ExecuteBytecodeNode(final CompiledCodeObject code) {
@@ -53,8 +52,6 @@ public final class ExecuteBytecodeNode extends AbstractExecuteContextNode implem
         try {
             return interpretBytecode(frame, startPC);
         } catch (final NonLocalReturn nlr) {
-            /* {@link getHandleNonLocalReturnNode()} acts as {@link BranchProfile} */
-            assert !FrameAccess.isDead(frame) : "ExecuteBytecodeNode: encountered dead frame during NLR";
             FrameAccess.terminateContextOrFrame(frame);
             throw nlr;
         } catch (final StackOverflowError e) {
@@ -162,15 +159,6 @@ public final class ExecuteBytecodeNode extends AbstractExecuteContextNode implem
             notifyInserted(bytecodeNodes[pcZeroBased]);
         }
         return bytecodeNodes[pcZeroBased];
-    }
-
-    @SuppressWarnings("unused")
-    private HandleNonLocalReturnNode getHandleNonLocalReturnNode() {
-        if (handleNonLocalReturnNode == null) {
-            CompilerDirectives.transferToInterpreterAndInvalidate();
-            handleNonLocalReturnNode = insert(HandleNonLocalReturnNode.create(code));
-        }
-        return handleNonLocalReturnNode;
     }
 
     /*

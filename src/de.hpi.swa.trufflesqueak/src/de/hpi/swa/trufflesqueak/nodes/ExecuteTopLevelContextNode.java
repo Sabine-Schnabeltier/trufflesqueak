@@ -232,10 +232,6 @@ public final class ExecuteTopLevelContextNode extends RootNode {
         throw CompilerDirectives.shouldNotReachHere("cannotReturn should trigger a ProcessSwitch or a NonVirtualReturn");
     }
 
-    /**
-     * See {@link de.hpi.swa.trufflesqueak.nodes.AboutToReturnNode} for details.
-     *
-     */
     private ContextObject sendAboutToReturn(final ContextObject homeContext, final Object returnValue, final ContextObject unwindMarkedContextOrNil, final ContextObject activeContext) {
         try {
             sendAboutToReturnNode.execute(activeContext.getTruffleFrame(), homeContext, returnValue, unwindMarkedContextOrNil);
