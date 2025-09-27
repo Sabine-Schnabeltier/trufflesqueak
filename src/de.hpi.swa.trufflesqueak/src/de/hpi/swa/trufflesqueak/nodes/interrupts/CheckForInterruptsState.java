@@ -151,7 +151,7 @@ public final class CheckForInterruptsState {
         if (lastSetWakeupTick != 0) {
             final long time = MiscUtils.currentTimeMillis();
             if (time >= lastSetWakeupTick + 100) {
-                LogUtils.INTERRUPTS.info(() -> "\u001B[31m" + "Delayed wakeup ticks: " + (time - lastSetWakeupTick) + "\u001B[0m");
+                System.out.println("\u001B[31m" + "Delayed wakeup ticks: " + (time - lastSetWakeupTick) + "\u001B[0m");
                 lastSetWakeupTick = time;
             }
         }
