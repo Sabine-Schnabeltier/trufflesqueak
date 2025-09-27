@@ -38,6 +38,7 @@ import de.hpi.swa.trufflesqueak.nodes.primitives.Primitive.Primitive2WithFallbac
 import de.hpi.swa.trufflesqueak.nodes.primitives.SqueakPrimitive;
 import de.hpi.swa.trufflesqueak.shared.SqueakLanguageConfig;
 import de.hpi.swa.trufflesqueak.util.FrameAccess;
+import de.hpi.swa.trufflesqueak.util.LogUtils;
 
 public class ContextPrimitives extends AbstractPrimitiveFactoryHolder {
 
@@ -69,10 +70,12 @@ public class ContextPrimitives extends AbstractPrimitiveFactoryHolder {
                 } else {
                     current = (ContextObject) sender;
                     if (!current.hasClosure() && current.getCodeObject().isUnwindMarked()) {
+                        LogUtils.SCHEDULING.info("Next unwind: " + current);
                         return current;
                     }
                 }
             }
+            LogUtils.SCHEDULING.info("Next unwind: nil");
             return NilObject.SINGLETON;
         }
 
@@ -103,6 +106,7 @@ public class ContextPrimitives extends AbstractPrimitiveFactoryHolder {
                 return null;
             });
             assert foundMyself[0] : "Did not find receiver with virtual sender on Truffle stack";
+            LogUtils.SCHEDULING.info("Next unwind: " + result);
             return NilObject.nullToNil(result);
         }
 
