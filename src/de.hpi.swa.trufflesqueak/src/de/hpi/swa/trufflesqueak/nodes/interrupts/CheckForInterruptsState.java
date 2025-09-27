@@ -31,7 +31,7 @@ public final class CheckForInterruptsState {
     private long interruptCheckNanos = DEFAULT_INTERRUPT_CHECK_NANOS;
 
     private boolean isActive = true;
-    private long nextWakeupTick;
+    private volatile long nextWakeupTick;
     private boolean interruptPending;
     private boolean hasPendingFinalizations;
 
@@ -145,7 +145,16 @@ public final class CheckForInterruptsState {
 
     /* Timer interrupt */
 
+    private volatile long lastSetWakeupTick = 0;
+
     private boolean nextWakeUpTickTrigger() {
+        if (lastSetWakeupTick != 0) {
+            final long time = MiscUtils.currentTimeMillis();
+            if (time >= lastSetWakeupTick + 100) {
+                LogUtils.INTERRUPTS.info(() -> "\u001B[31m" + "Delayed wakeup ticks: " + (time - lastSetWakeupTick) + "\u001B[0m");
+                lastSetWakeupTick = time;
+            }
+        }
         if (nextWakeupTick != 0) {
             final long time = MiscUtils.currentTimeMillis();
             if (time >= nextWakeupTick) {
@@ -174,6 +183,9 @@ public final class CheckForInterruptsState {
                 return msTime != 0 ? "Setting nextWakeupTick to " + msTime : "Resetting nextWakeupTick when it was already 0";
             }
         });
+        if (nextWakeupTick != 0) {
+            lastSetWakeupTick = msTime;
+        }
         nextWakeupTick = msTime;
     }
 
