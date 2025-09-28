@@ -70,8 +70,6 @@ public class ContextPrimitives extends AbstractPrimitiveFactoryHolder {
                 } else {
                     current = (ContextObject) sender;
                     if (!current.hasClosure() && current.getCodeObject().isUnwindMarked()) {
-                        ContextObject finalCurrent = current;
-                        LogUtils.SCHEDULING.info(() -> "Next unwind: " + finalCurrent);
                         return current;
                     }
                 }
@@ -87,7 +85,7 @@ public class ContextPrimitives extends AbstractPrimitiveFactoryHolder {
             final AbstractSqueakObject result = Truffle.getRuntime().iterateFrames((frameInstance) -> {
                 final Frame current = frameInstance.getFrame(FrameInstance.FrameAccess.READ_ONLY);
                 if (!FrameAccess.isTruffleSqueakFrame(current)) {
-                    return null; // Foreign frame cannot be unwind marked.
+                    return FrameAccess.getResumingContextObjectOrSkip(frameInstance);
                 }
                 final ContextObject context = FrameAccess.getContext(current);
                 if (!foundMyself[0]) {
@@ -106,7 +104,13 @@ public class ContextPrimitives extends AbstractPrimitiveFactoryHolder {
                 return null;
             });
             assert foundMyself[0] : "Did not find receiver with virtual sender on Truffle stack";
-            LogUtils.SCHEDULING.info(() -> "Next unwind: " + result);
+            if (result instanceof final ContextObject context) {
+                if (context.hasClosure() && context.getCodeObject().isUnwindMarked()) {
+                    return context;
+                } else {
+                    return doFindNext(context, previousContext);
+                }
+            }
             return NilObject.nullToNil(result);
         }
 
