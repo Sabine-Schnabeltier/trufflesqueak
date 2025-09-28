@@ -70,12 +70,12 @@ public class ContextPrimitives extends AbstractPrimitiveFactoryHolder {
                 } else {
                     current = (ContextObject) sender;
                     if (!current.hasClosure() && current.getCodeObject().isUnwindMarked()) {
-                        LogUtils.SCHEDULING.info("Next unwind: " + current);
+                        ContextObject finalCurrent = current;
+                        LogUtils.SCHEDULING.info(() -> "Next unwind: " + finalCurrent);
                         return current;
                     }
                 }
             }
-            LogUtils.SCHEDULING.info("Next unwind: nil");
             return NilObject.SINGLETON;
         }
 
@@ -106,7 +106,7 @@ public class ContextPrimitives extends AbstractPrimitiveFactoryHolder {
                 return null;
             });
             assert foundMyself[0] : "Did not find receiver with virtual sender on Truffle stack";
-            LogUtils.SCHEDULING.info("Next unwind: " + result);
+            LogUtils.SCHEDULING.info(() -> "Next unwind: " + result);
             return NilObject.nullToNil(result);
         }
 
