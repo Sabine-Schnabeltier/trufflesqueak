@@ -151,7 +151,7 @@ public final class TruffleSqueakLauncher extends AbstractLanguageLauncher {
                     err.setUp(context);
                 }
                 Thread mainThread = Thread.currentThread();
-                long timeoutMinutes = 10;
+                long timeoutMinutes = 18;
 
                 // Start the watchdog
                 WatchdogThread watchdog = new WatchdogThread(mainThread, timeoutMinutes);
@@ -316,18 +316,9 @@ public final class TruffleSqueakLauncher extends AbstractLanguageLauncher {
             // Dump the main thread
             System.err.println("\n--- Stack Trace of Main Thread (" + mainThread.getName() + ") ---");
             dumpStackTrace(mainThread);
-
-            // Dump the Interrupts thread (assuming its name is constant)
-            Thread.getAllStackTraces().keySet().stream()
-                    .filter(t -> t.getName().startsWith("TruffleSqueakCheckForInterrupts"))
-                    .findFirst()
-                    .ifPresent(t -> {
-                        System.err.println("\n--- Stack Trace of Interrupts Thread (" + t.getName() + ") ---");
-                        dumpStackTrace(t);
-                    });
         }
 
-        private void dumpStackTrace(Thread thread) {
+        static private void dumpStackTrace(Thread thread) {
             for (StackTraceElement element : thread.getStackTrace()) {
                 System.err.println("\t" + element);
             }
