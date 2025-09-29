@@ -269,8 +269,8 @@ public final class TruffleSqueakLauncher extends AbstractLanguageLauncher {
     }
 
     /**
-     * A daemon thread that monitors the main thread and halts the VM
-     * while printing a stack trace if the main thread exceeds the timeout.
+     * A daemon thread that monitors the main thread and halts the VM while printing a stack trace
+     * if the main thread exceeds the timeout.
      */
     private static final class WatchdogThread extends Thread {
         private final Thread mainThread;
