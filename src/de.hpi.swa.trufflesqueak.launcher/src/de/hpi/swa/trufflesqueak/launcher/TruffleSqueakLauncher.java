@@ -150,7 +150,19 @@ public final class TruffleSqueakLauncher extends AbstractLanguageLauncher {
                     out.setUp(context);
                     err.setUp(context);
                 }
-                image.execute();
+                Thread mainThread = Thread.currentThread();
+                long timeoutMinutes = 10;
+
+                // Start the watchdog
+                WatchdogThread watchdog = new WatchdogThread(mainThread, timeoutMinutes);
+                watchdog.start();
+
+                try {
+                    image.execute();
+                } finally {
+                    // Ensure the watchdog is stopped on normal exit
+                    watchdog.interrupt();
+                }
                 throw abort("A Squeak/Smalltalk image cannot return a result, it can only exit.");
             }
         } catch (final IllegalArgumentException e) {
@@ -254,5 +266,71 @@ public final class TruffleSqueakLauncher extends AbstractLanguageLauncher {
             throw new UnsupportedOperationException("Expected system property '" + property + "' to be set");
         }
         return value;
+    }
+
+    /**
+     * A daemon thread that monitors the main thread and halts the VM
+     * while printing a stack trace if the main thread exceeds the timeout.
+     */
+    private static final class WatchdogThread extends Thread {
+        private final Thread mainThread;
+        private final long timeoutMillis;
+        private static final String WATCHDOG_NAME = "TruffleSqueak-Watchdog";
+
+        public WatchdogThread(Thread mainThread, long timeoutMinutes) {
+            super(WATCHDOG_NAME);
+            this.mainThread = mainThread;
+            this.timeoutMillis = timeoutMinutes * 60 * 1000;
+            // Set as daemon so it doesn't prevent normal VM exit if the main thread finishes.
+            setDaemon(true);
+        }
+
+        @Override
+        public void run() {
+            try {
+                // Wait for the full timeout period
+                Thread.sleep(timeoutMillis);
+
+                // If we wake up and the main thread is still alive, something has hung
+                if (mainThread.isAlive()) {
+                    System.err.println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+                    System.err.printf("!!! WATCHDOG TIMEOUT: Interpreter still running after %d minutes.!!!\n", timeoutMillis / 60000);
+                    System.err.println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+
+                    // Dump stack traces for debugging
+                    dumpAllRelevantStackTraces();
+
+                    // Force the VM to exit with an error status
+                    Runtime.getRuntime().halt(1);
+                }
+            } catch (InterruptedException e) {
+                // Normal exit: the main thread successfully interrupted the watchdog
+                Thread.currentThread().interrupt();
+            }
+        }
+
+        // ... (Include the dumpStackTrace and getAllThreads helper methods here) ...
+
+        // Helper to find and dump the main and interrupt thread
+        private void dumpAllRelevantStackTraces() {
+            // Dump the main thread
+            System.err.println("\n--- Stack Trace of Main Thread (" + mainThread.getName() + ") ---");
+            dumpStackTrace(mainThread);
+
+            // Dump the Interrupts thread (assuming its name is constant)
+            Thread.getAllStackTraces().keySet().stream()
+                    .filter(t -> t.getName().startsWith("TruffleSqueakCheckForInterrupts"))
+                    .findFirst()
+                    .ifPresent(t -> {
+                        System.err.println("\n--- Stack Trace of Interrupts Thread (" + t.getName() + ") ---");
+                        dumpStackTrace(t);
+                    });
+        }
+
+        private void dumpStackTrace(Thread thread) {
+            for (StackTraceElement element : thread.getStackTrace()) {
+                System.err.println("\t" + element);
+            }
+        }
     }
 }
