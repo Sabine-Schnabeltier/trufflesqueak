@@ -450,8 +450,8 @@ public final class SqueakImageContext {
     }
 
     private int newObjectHashSingleShot() {
-        lastHash = lastHash * 16807; /* "7 raisedTo: 5" */
-        return (lastHash + (lastHash >>> 4)) & SqueakImageConstants.IDENTITY_HASH_HALF_WORD_MASK;
+        lastHash = lastHash * 1103515245 + 1;
+        return (lastHash + (lastHash >>> 10)) & SqueakImageConstants.IDENTITY_HASH_HALF_WORD_MASK;
     }
 
     private int newObjectHashSlowPath() {
