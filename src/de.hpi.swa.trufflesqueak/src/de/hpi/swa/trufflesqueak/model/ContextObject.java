@@ -39,7 +39,7 @@ public final class ContextObject extends AbstractSqueakObjectWithHash {
     private static final Class<?> CONCRETE_MATERIALIZED_FRAME_CLASS = Truffle.getRuntime().createMaterializedFrame(new Object[0]).getClass();
 
     private Object senderOrFrameOrSize;
-    private boolean hasModifiedSender;
+//    private boolean hasModifiedSender;
 
     public ContextObject(final long header) {
         super(header);
@@ -69,7 +69,10 @@ public final class ContextObject extends AbstractSqueakObjectWithHash {
     @TruffleBoundary
     private ContextObject(final ContextObject original) {
         super(original);
-        hasModifiedSender = original.hasModifiedSender();
+        /* Newly created Contexts have cleared modified-sender and has-escaped flags. */
+        if (original.hasModifiedSender()) {
+            setModifiedSender();
+        }
         // Create shallow copy of Truffle frame
         final FrameDescriptor frameDescriptor = FrameAccess.getCodeObject(original.getTruffleFrame()).getFrameDescriptor();
         senderOrFrameOrSize = Truffle.getRuntime().createMaterializedFrame(original.getTruffleFrame().getArguments().clone(), frameDescriptor);
@@ -221,8 +224,8 @@ public final class ContextObject extends AbstractSqueakObjectWithHash {
      * Sets the sender of a ContextObject.
      */
     public void setSender(final AbstractSqueakObject value) {
-        if (!hasModifiedSender && hasTruffleFrame() && FrameAccess.getSender(getTruffleFrame()) != value) {
-            hasModifiedSender = true;
+        if (!hasModifiedSender() && hasTruffleFrame() && FrameAccess.getSender(getTruffleFrame()) != value) {
+            setModifiedSender();
         }
         setSenderUnsafe(value);
     }
@@ -232,9 +235,9 @@ public final class ContextObject extends AbstractSqueakObjectWithHash {
     }
 
     public void removeSender() {
-        if (hasModifiedSender) {
+//        if (hasModifiedSender()) {
             clearModifiedSender();
-        }
+//        }
         setSenderUnsafe(NilObject.SINGLETON);
     }
 
@@ -405,12 +408,17 @@ public final class ContextObject extends AbstractSqueakObjectWithHash {
         return new ContextObject(this);
     }
 
-    public void clearModifiedSender() {
-        hasModifiedSender = false;
+    /* Context has modified sender flag */
+    public boolean hasModifiedSender() {
+        return isBooleanASet();
     }
 
-    public boolean hasModifiedSender() {
-        return hasModifiedSender;
+    public void clearModifiedSender() {
+        clearBooleanABit();
+    }
+
+    public void setModifiedSender() {
+        setBooleanABit();
     }
 
     public void push(final Object value) {
@@ -466,15 +474,20 @@ public final class ContextObject extends AbstractSqueakObjectWithHash {
 
     public void become(final ContextObject other) {
         final Object otherSenderOrFrame = other.senderOrFrameOrSize;
-        final boolean otherHasModifiedSender = other.hasModifiedSender;
-        other.setFields(senderOrFrameOrSize, hasModifiedSender);
+        final boolean otherHasModifiedSender = other.hasModifiedSender();
+        other.setFields(senderOrFrameOrSize, hasModifiedSender());
         setFields(otherSenderOrFrame, otherHasModifiedSender);
     }
 
     private void setFields(final Object otherSenderOrFrame, final boolean otherHasModifiedSender) {
         CompilerDirectives.transferToInterpreterAndInvalidate();
         senderOrFrameOrSize = otherSenderOrFrame;
-        hasModifiedSender = otherHasModifiedSender;
+//        hasModifiedSender = otherHasModifiedSender;
+        if (otherHasModifiedSender) {
+            setModifiedSender();
+        } else {
+            clearModifiedSender();
+        }
     }
 
     public Object[] getReceiverAndNArguments() {
