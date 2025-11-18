@@ -31,8 +31,27 @@ import de.hpi.swa.trufflesqueak.util.MiscUtils;
 import de.hpi.swa.trufflesqueak.util.ObjectGraphUtils.ObjectTracer;
 
 public abstract class AbstractSqueakObjectWithHash extends AbstractSqueakObject {
-    private static final int MARK_BIT = 1 << 24;
-    private static final int FORWARDED_BIT = 1 << 25;
+    /**
+     * The format of squeakHashAndBits is:
+     * hash (up to 24 bits, bottom 22 bits used) | flags (8 bits, see above)
+     */
+    private static final int SQUEAKHASH_SHIFT = 8;
+    private static final int SQUEAKHASHFLAGS_MASK = (1 << SQUEAKHASH_SHIFT) - 1;
+
+    /**
+     * The marking state of an instance is:
+     * unmarked if VALID_MARK_BIT == 0
+     * unmarked if VALID_MARK_BIT == 1 and MARK_BIT == currentMarkingFlag
+     *   marked if VALID_MARK_BIT == 1 and MARK_BIT != currentMarkingFlag
+     */
+    private static final int MARK_BIT = 1 << 0;
+    private static final int VALID_MARK_BIT = 1 << 1;
+    private static final int MARKING_MASK = VALID_MARK_BIT | MARK_BIT;
+
+    private static final int FORWARDED_BIT = 1 << 2;
+    private static final int BOOLEAN_A_BIT = 1 << 3;
+    private static final int BOOLEAN_B_BIT = 1 << 4;
+
     /* Generate new hash if hash is 0 (see SpurMemoryManager>>#hashBitsOf:). */
     protected static final int HASH_UNINITIALIZED = 0;
 
@@ -53,18 +72,16 @@ public abstract class AbstractSqueakObjectWithHash extends AbstractSqueakObject 
 
     protected AbstractSqueakObjectWithHash(final long header) {
         // mark bit zero when loading image
-        squeakHashAndBits = ObjectHeader.getHash(header);
+        squeakHashAndBits = ObjectHeader.getHash(header) << SQUEAKHASH_SHIFT;
     }
 
-    protected AbstractSqueakObjectWithHash(final SqueakImageContext image) {
-        this(image.getCurrentMarkingFlag());
+    protected AbstractSqueakObjectWithHash(@SuppressWarnings("unused") final SqueakImageContext image) {
+        this(false);
     }
 
-    protected AbstractSqueakObjectWithHash(final boolean markingFlag) {
-        squeakHashAndBits = AbstractSqueakObjectWithHash.HASH_UNINITIALIZED;
-        if (markingFlag) {
-            squeakHashAndBits |= MARK_BIT; // set MARK_BIT
-        }
+    protected AbstractSqueakObjectWithHash(@SuppressWarnings("unused") final boolean markingFlag) {
+        /* Assignment unnecessary, since field is zero by default. */
+        /* squeakHashAndBits = AbstractSqueakObjectWithHash.HASH_UNINITIALIZED; */
     }
 
     @SuppressWarnings("this-escape")
@@ -99,7 +116,7 @@ public abstract class AbstractSqueakObjectWithHash extends AbstractSqueakObject 
         if (needsSqueakHash()) {
             /* Lazily initialize squeakHash and derive value from hashCode. */
             needsHashProfile.enter(node);
-            setSqueakHash(System.identityHashCode(this) % SqueakImageConstants.IDENTITY_HASH_HALF_WORD_MASK);
+            setSqueakHash(System.identityHashCode(this) & SqueakImageConstants.IDENTITY_HASH_HALF_WORD_MASK);
         }
         return getSqueakHash();
     }
@@ -110,7 +127,7 @@ public abstract class AbstractSqueakObjectWithHash extends AbstractSqueakObject 
 
     public final int getSqueakHashInt() {
         assert assertNotForwarded();
-        return squeakHashAndBits & SqueakImageConstants.IDENTITY_HASH_HALF_WORD_MASK;
+        return squeakHashAndBits >>> SQUEAKHASH_SHIFT;
     }
 
     public final boolean needsSqueakHash() {
@@ -121,7 +138,7 @@ public abstract class AbstractSqueakObjectWithHash extends AbstractSqueakObject 
     public final void setSqueakHash(final int newHash) {
         assert assertNotForwarded();
         assert (newHash & SqueakImageConstants.IDENTITY_HASH_HALF_WORD_MASK) == newHash : "Invalid hash: " + newHash;
-        squeakHashAndBits = (squeakHashAndBits & ~SqueakImageConstants.IDENTITY_HASH_HALF_WORD_MASK) + newHash;
+        squeakHashAndBits = (newHash << SQUEAKHASH_SHIFT) | (squeakHashAndBits & SQUEAKHASHFLAGS_MASK);
     }
 
     /**
@@ -129,7 +146,9 @@ public abstract class AbstractSqueakObjectWithHash extends AbstractSqueakObject 
      *         thread safe
      */
     public final boolean isMarkedWith(final boolean currentMarkingFlag) {
-        return (((int) HASH_AND_BITS_HANDLE.getAcquire(this) & MARK_BIT) != 0) == currentMarkingFlag;
+        final int currentBits = ((int) HASH_AND_BITS_HANDLE.getAcquire(this)) & MARKING_MASK;
+        final int desiredBits = VALID_MARK_BIT | (currentMarkingFlag ? MARK_BIT : 0);
+        return currentBits == desiredBits;
     }
 
     /**
@@ -145,10 +164,12 @@ public abstract class AbstractSqueakObjectWithHash extends AbstractSqueakObject 
          */
         do {
             oldValue = (int) HASH_AND_BITS_HANDLE.getAcquire(this);
-            if (((oldValue & MARK_BIT) != 0) == currentMarkingFlag) {
+            final int desiredBits = VALID_MARK_BIT | (currentMarkingFlag ? MARK_BIT : 0);
+            if ((oldValue & MARKING_MASK) == desiredBits) {
                 return false; // Already marked
+            } else {
+                newValue = (oldValue & ~MARKING_MASK) | desiredBits;
             }
-            newValue = oldValue ^ MARK_BIT; // Flip MARK_BIT
         } while (!HASH_AND_BITS_HANDLE.compareAndSet(this, oldValue, newValue));
         return true; // Successfully marked
     }
@@ -181,6 +202,30 @@ public abstract class AbstractSqueakObjectWithHash extends AbstractSqueakObject 
     protected abstract AbstractSqueakObjectWithHash getForwardingPointer();
 
     public abstract AbstractSqueakObjectWithHash resolveForwardingPointer();
+
+    public final void setBooleanABit() {
+        squeakHashAndBits |= BOOLEAN_A_BIT;
+    }
+
+    public final void setBooleanBBit() {
+        squeakHashAndBits |= BOOLEAN_B_BIT;
+    }
+
+    public final void clearBooleanABit() {
+        squeakHashAndBits &= ~BOOLEAN_A_BIT;
+    }
+
+    public final void clearBooleanBBit() {
+        squeakHashAndBits &= ~BOOLEAN_B_BIT;
+    }
+
+    public final boolean isBooleanASet() {
+        return (squeakHashAndBits & BOOLEAN_A_BIT) != 0;
+    }
+
+    public final boolean isBooleanBSet() {
+        return (squeakHashAndBits & BOOLEAN_B_BIT) != 0;
+    }
 
     @Override
     public String toString() {
