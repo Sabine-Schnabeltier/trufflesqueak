@@ -377,7 +377,7 @@ public final class SqueakImageContext {
         }
         final CompiledCodeObject doItMethod = (CompiledCodeObject) methodNode.send(this, "generate");
 
-        final ContextObject doItContext = new ContextObject(this, doItMethod.getSqueakContextSize());
+        final ContextObject doItContext = new ContextObject(doItMethod.getSqueakContextSize());
         doItContext.setReceiver(NilObject.SINGLETON);
         doItContext.setCodeObject(doItMethod);
         doItContext.setInstructionPointer(0);
@@ -418,6 +418,7 @@ public final class SqueakImageContext {
         return language;
     }
 
+    @SuppressWarnings("unused")
     public boolean getCurrentMarkingFlag() {
         return currentMarkingFlag;
     }

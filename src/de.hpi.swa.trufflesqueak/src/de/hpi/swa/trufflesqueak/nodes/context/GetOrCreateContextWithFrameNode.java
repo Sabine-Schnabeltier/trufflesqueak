@@ -48,7 +48,7 @@ public abstract class GetOrCreateContextWithFrameNode extends AbstractNode {
             }
             return context;
         } else {
-            return new ContextObject(getContext(node), frame.materialize());
+            return new ContextObject(frame.materialize());
         }
     }
 }

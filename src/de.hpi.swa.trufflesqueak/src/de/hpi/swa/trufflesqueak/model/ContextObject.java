@@ -39,28 +39,24 @@ public final class ContextObject extends AbstractSqueakObjectWithHash {
     private static final Class<?> CONCRETE_MATERIALIZED_FRAME_CLASS = Truffle.getRuntime().createMaterializedFrame(new Object[0]).getClass();
 
     private Object senderOrFrameOrSize;
-//    private boolean hasModifiedSender;
 
     public ContextObject(final long header) {
         super(header);
         senderOrFrameOrSize = null;
     }
 
-    public ContextObject(final SqueakImageContext image, final int size) {
-        super(image);
+    public ContextObject(final int size) {
         senderOrFrameOrSize = size;
         assert size == CONTEXT.SMALL_FRAMESIZE || size == CONTEXT.LARGE_FRAMESIZE;
     }
 
-    public ContextObject(final SqueakImageContext image, final VirtualFrame frame) {
-        super(image);
+    public ContextObject(final VirtualFrame frame) {
         FrameAccess.assertSenderNotNull(frame);
         this.senderOrFrameOrSize = FrameAccess.getSender(frame);
         FrameAccess.setContext(frame, this);
     }
 
-    public ContextObject(final SqueakImageContext image, final MaterializedFrame frame) {
-        super(image);
+    public ContextObject(final MaterializedFrame frame) {
         FrameAccess.assertSenderNotNull(frame);
         this.senderOrFrameOrSize = frame;
         FrameAccess.setContext(frame, this);
@@ -235,9 +231,9 @@ public final class ContextObject extends AbstractSqueakObjectWithHash {
     }
 
     public void removeSender() {
-//        if (hasModifiedSender()) {
+        if (hasModifiedSender()) {
             clearModifiedSender();
-//        }
+        }
         setSenderUnsafe(NilObject.SINGLETON);
     }
 

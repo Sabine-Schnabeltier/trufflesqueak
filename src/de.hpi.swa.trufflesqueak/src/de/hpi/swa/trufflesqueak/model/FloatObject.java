@@ -20,8 +20,7 @@ public final class FloatObject extends AbstractSqueakObjectWithHash {
     public static final int WORD_LENGTH = 2;
     private double doubleValue;
 
-    public FloatObject(final SqueakImageContext image) {
-        super(image);
+    public FloatObject(@SuppressWarnings("unused") final SqueakImageContext image) {
     }
 
     private FloatObject(final FloatObject original) {
@@ -29,8 +28,7 @@ public final class FloatObject extends AbstractSqueakObjectWithHash {
         doubleValue = original.doubleValue;
     }
 
-    public FloatObject(final SqueakImageContext image, final double doubleValue) {
-        super(image);
+    public FloatObject(@SuppressWarnings("unused") final SqueakImageContext image, final double doubleValue) {
         this.doubleValue = doubleValue;
     }
 

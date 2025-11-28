@@ -36,13 +36,8 @@ public abstract class AbstractSqueakObjectWithClassAndHash extends AbstractSquea
         squeakClass = klass;
     }
 
-    protected AbstractSqueakObjectWithClassAndHash(final SqueakImageContext image, final ClassObject klass) {
-        this(image.getCurrentMarkingFlag(), klass);
-    }
-
-    private AbstractSqueakObjectWithClassAndHash(final boolean markingFlag, final ClassObject klass) {
-        super(markingFlag);
-        squeakClass = klass;
+    protected AbstractSqueakObjectWithClassAndHash(@SuppressWarnings("unused") final SqueakImageContext image, final ClassObject klass) {
+        this(HASH_UNINITIALIZED, klass);
     }
 
     @SuppressWarnings("this-escape")

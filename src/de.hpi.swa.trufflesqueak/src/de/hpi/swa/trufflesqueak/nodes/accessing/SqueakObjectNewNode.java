@@ -155,9 +155,9 @@ public abstract class SqueakObjectNewNode extends AbstractNode {
     }
 
     @Specialization(guards = {"classObject.isIndexableWithInstVars()", "image.isMethodContextClass(classObject)"})
-    protected static final ContextObject doContext(final SqueakImageContext image, final ClassObject classObject, final int extraSize) {
+    protected static final ContextObject doContext(@SuppressWarnings("unused") final SqueakImageContext image, final ClassObject classObject, final int extraSize) {
         assert classObject.getBasicInstanceSize() == CONTEXT.INST_SIZE;
-        return new ContextObject(image, extraSize);
+        return new ContextObject(extraSize);
     }
 
     @Specialization(guards = {"classObject.isNonIndexableWithInstVars()", "image.isMetaClass(classObject)"})

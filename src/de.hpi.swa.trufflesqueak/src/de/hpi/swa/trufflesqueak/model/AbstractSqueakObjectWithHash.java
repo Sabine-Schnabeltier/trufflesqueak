@@ -32,17 +32,21 @@ import de.hpi.swa.trufflesqueak.util.ObjectGraphUtils.ObjectTracer;
 
 public abstract class AbstractSqueakObjectWithHash extends AbstractSqueakObject {
     /**
+     * <pre>
      * The format of squeakHashAndBits is:
      * hash (up to 24 bits, bottom 22 bits used) | flags (8 bits, see above)
+     * </pre>
      */
     private static final int SQUEAKHASH_SHIFT = 8;
     private static final int SQUEAKHASHFLAGS_MASK = (1 << SQUEAKHASH_SHIFT) - 1;
 
     /**
+     * <pre>
      * The marking state of an instance is:
      * unmarked if VALID_MARK_BIT == 0
      * unmarked if VALID_MARK_BIT == 1 and MARK_BIT == currentMarkingFlag
      *   marked if VALID_MARK_BIT == 1 and MARK_BIT != currentMarkingFlag
+     * </pre>
      */
     private static final int MARK_BIT = 1 << 0;
     private static final int VALID_MARK_BIT = 1 << 1;
@@ -71,23 +75,18 @@ public abstract class AbstractSqueakObjectWithHash extends AbstractSqueakObject 
     }
 
     protected AbstractSqueakObjectWithHash(final long header) {
-        // mark bit zero when loading image
+        /* The mark bit and the rest of the flags are set to zero when loading the image. */
         squeakHashAndBits = ObjectHeader.getHash(header) << SQUEAKHASH_SHIFT;
     }
 
-    protected AbstractSqueakObjectWithHash(@SuppressWarnings("unused") final SqueakImageContext image) {
-        this(false);
-    }
-
-    protected AbstractSqueakObjectWithHash(@SuppressWarnings("unused") final boolean markingFlag) {
-        /* Assignment unnecessary, since field is zero by default. */
-        /* squeakHashAndBits = AbstractSqueakObjectWithHash.HASH_UNINITIALIZED; */
+    protected AbstractSqueakObjectWithHash() {
+        /* Flags are zero and hash is uninitialized. */
     }
 
     @SuppressWarnings("this-escape")
     protected AbstractSqueakObjectWithHash(final AbstractSqueakObjectWithHash original) {
-        squeakHashAndBits = original.squeakHashAndBits;
-        setSqueakHash(HASH_UNINITIALIZED);
+        /* Preserves flags and resets hash. */
+        squeakHashAndBits = original.squeakHashAndBits & SQUEAKHASHFLAGS_MASK;
     }
 
     @Override
@@ -207,6 +206,7 @@ public abstract class AbstractSqueakObjectWithHash extends AbstractSqueakObject 
         squeakHashAndBits |= BOOLEAN_A_BIT;
     }
 
+    @SuppressWarnings("unused")
     public final void setBooleanBBit() {
         squeakHashAndBits |= BOOLEAN_B_BIT;
     }
@@ -215,6 +215,7 @@ public abstract class AbstractSqueakObjectWithHash extends AbstractSqueakObject 
         squeakHashAndBits &= ~BOOLEAN_A_BIT;
     }
 
+    @SuppressWarnings("unused")
     public final void clearBooleanBBit() {
         squeakHashAndBits &= ~BOOLEAN_B_BIT;
     }
@@ -223,6 +224,7 @@ public abstract class AbstractSqueakObjectWithHash extends AbstractSqueakObject 
         return (squeakHashAndBits & BOOLEAN_A_BIT) != 0;
     }
 
+    @SuppressWarnings("unused")
     public final boolean isBooleanBSet() {
         return (squeakHashAndBits & BOOLEAN_B_BIT) != 0;
     }
