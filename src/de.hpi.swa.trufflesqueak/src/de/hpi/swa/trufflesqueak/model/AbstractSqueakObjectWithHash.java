@@ -34,7 +34,7 @@ public abstract class AbstractSqueakObjectWithHash extends AbstractSqueakObject 
     /**
      * <pre>
      * The format of squeakHashAndBits is:
-     * hash (up to 24 bits, bottom 22 bits used) | flags (8 bits, see above)
+     *   hash (up to 24 bits, bottom 22 bits used) | flags (8 bits, see above).
      * </pre>
      */
     private static final int SQUEAKHASH_SHIFT = 8;
@@ -43,9 +43,9 @@ public abstract class AbstractSqueakObjectWithHash extends AbstractSqueakObject 
     /**
      * <pre>
      * The marking state of an instance is:
-     * unmarked if VALID_MARK_BIT == 0
-     * unmarked if VALID_MARK_BIT == 1 and MARK_BIT == currentMarkingFlag
-     *   marked if VALID_MARK_BIT == 1 and MARK_BIT != currentMarkingFlag
+     *   unmarked if VALID_MARK_BIT == 0
+     *   unmarked if VALID_MARK_BIT == 1 and MARK_BIT == currentMarkingFlag
+     *     marked if VALID_MARK_BIT == 1 and MARK_BIT != currentMarkingFlag.
      * </pre>
      */
     private static final int MARK_BIT = 1 << 0;
@@ -53,13 +53,16 @@ public abstract class AbstractSqueakObjectWithHash extends AbstractSqueakObject 
     private static final int MARKING_MASK = VALID_MARK_BIT | MARK_BIT;
 
     private static final int FORWARDED_BIT = 1 << 2;
-    private static final int BOOLEAN_A_BIT = 1 << 3;
-    private static final int BOOLEAN_B_BIT = 1 << 4;
+
+    protected static final int BOOLEAN_A_BIT = 1 << 3;
+    protected static final int BOOLEAN_B_BIT = 1 << 4;
+    protected static final int BOOLEAN_C_BIT = 1 << 5;
+    protected static final int BOOLEAN_D_BIT = 1 << 6;
 
     /* Generate new hash if hash is 0 (see SpurMemoryManager>>#hashBitsOf:). */
     protected static final int HASH_UNINITIALIZED = 0;
 
-    private int squeakHashAndBits;
+    protected int squeakHashAndBits;
 
     /**
      * Support for atomically accessing the flags contained within squeakHashAndBits.
@@ -202,32 +205,6 @@ public abstract class AbstractSqueakObjectWithHash extends AbstractSqueakObject 
 
     public abstract AbstractSqueakObjectWithHash resolveForwardingPointer();
 
-    public final void setBooleanABit() {
-        squeakHashAndBits |= BOOLEAN_A_BIT;
-    }
-
-    @SuppressWarnings("unused")
-    public final void setBooleanBBit() {
-        squeakHashAndBits |= BOOLEAN_B_BIT;
-    }
-
-    public final void clearBooleanABit() {
-        squeakHashAndBits &= ~BOOLEAN_A_BIT;
-    }
-
-    @SuppressWarnings("unused")
-    public final void clearBooleanBBit() {
-        squeakHashAndBits &= ~BOOLEAN_B_BIT;
-    }
-
-    public final boolean isBooleanASet() {
-        return (squeakHashAndBits & BOOLEAN_A_BIT) != 0;
-    }
-
-    @SuppressWarnings("unused")
-    public final boolean isBooleanBSet() {
-        return (squeakHashAndBits & BOOLEAN_B_BIT) != 0;
-    }
 
     @Override
     public String toString() {
