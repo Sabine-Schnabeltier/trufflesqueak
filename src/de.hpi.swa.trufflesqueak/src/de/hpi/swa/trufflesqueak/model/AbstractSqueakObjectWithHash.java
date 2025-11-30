@@ -205,7 +205,6 @@ public abstract class AbstractSqueakObjectWithHash extends AbstractSqueakObject 
 
     public abstract AbstractSqueakObjectWithHash resolveForwardingPointer();
 
-
     @Override
     public String toString() {
         CompilerAsserts.neverPartOfCompilation();
