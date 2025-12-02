@@ -28,7 +28,7 @@ public abstract class AbstractSqueakObjectWithClassAndHash extends AbstractSquea
 
     // For special/well-known objects only.
     protected AbstractSqueakObjectWithClassAndHash() {
-        this(HASH_UNINITIALIZED, null);
+        /* Flags are zero and hash is uninitialized. squeakClass is null. */
     }
 
     protected AbstractSqueakObjectWithClassAndHash(final long header, final ClassObject klass) {
@@ -37,7 +37,8 @@ public abstract class AbstractSqueakObjectWithClassAndHash extends AbstractSquea
     }
 
     protected AbstractSqueakObjectWithClassAndHash(@SuppressWarnings("unused") final SqueakImageContext image, final ClassObject klass) {
-        this(HASH_UNINITIALIZED, klass);
+        /* Flags are zero and hash is uninitialized. */
+        squeakClass = klass;
     }
 
     @SuppressWarnings("this-escape")

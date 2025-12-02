@@ -34,7 +34,7 @@ public abstract class AbstractSqueakObjectWithHash extends AbstractSqueakObject 
     /**
      * <pre>
      * The format of squeakHashAndBits is:
-     *   hash (up to 24 bits, bottom 22 bits used) | flags (8 bits, see above).
+     *   hash (up to 24 bits, bottom 22 bits used) | flags (8 bits, see below).
      * </pre>
      */
     private static final int SQUEAKHASH_SHIFT = 8;
