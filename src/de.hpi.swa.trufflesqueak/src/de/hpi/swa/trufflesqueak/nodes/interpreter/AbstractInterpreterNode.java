@@ -145,10 +145,10 @@ public abstract class AbstractInterpreterNode extends AbstractInterpreterInstrum
             while (currentLink instanceof final ContextObject context) {
                 // Exit if we've found homeContext.
                 if (context == homeContext) {
-                    if (firstMarkedContext == null) {
-                        throw new NonLocalReturn(returnValue, homeContext);
+                    if (firstMarkedContext != null) {
+                        return firstMarkedContext;
                     }
-                    return firstMarkedContext;
+                    throw new NonLocalReturn(returnValue, homeContext);
                 }
                 // Watch for unwind-marked ContextObjects.
                 if (firstMarkedContext == null && context.isUnwindMarked()) {
