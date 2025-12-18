@@ -266,7 +266,8 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
                     break;
                 }
                 case BC.EXT_PUSH_CLOSURE: {
-                    final byte byteA = getByte(bc, pc++);
+                    final int byteA = getUnsignedInt(bc, pc++);
+                    final int numCopied = (byteA >> 3 & 0x7) + Math.floorDiv(extA, 16) * 8;
                     final int numArgs = (byteA & 7) + Math.floorMod(extA, 16) * 8;
                     final int blockSize = getByteExtended(bc, pc++, extB);
                     data[currentPC] = insert(new PushClosureNode(code, pc, numArgs));
