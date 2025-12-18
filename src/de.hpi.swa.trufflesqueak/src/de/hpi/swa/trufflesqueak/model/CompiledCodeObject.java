@@ -49,6 +49,8 @@ import de.hpi.swa.trufflesqueak.util.FrameAccess;
 import de.hpi.swa.trufflesqueak.util.ObjectGraphUtils.ObjectTracer;
 import de.hpi.swa.trufflesqueak.util.UnsafeUtils;
 
+import static de.hpi.swa.trufflesqueak.nodes.interpreter.AbstractDecoder.trailerPosition;
+
 @SuppressWarnings("static-method")
 public final class CompiledCodeObject extends AbstractSqueakObjectWithClassAndHash {
     private static final String SOURCE_UNAVAILABLE_NAME = "<unavailable>";
@@ -366,7 +368,14 @@ public final class CompiledCodeObject extends AbstractSqueakObjectWithClassAndHa
     }
 
     public int getMaxNumStackSlots() {
-        return getDecoder().determineMaxNumStackSlots(this);
+        if (bytes == null) {
+            return getSqueakContextSize();
+        }
+        else if (isShadowBlock()) {
+            return getDecoder().determineMaxNumStackSlots(this, 0, 0);
+        } else {
+            return getDecoder().determineMaxNumStackSlots(this, trailerPosition(this), getNumTemps());
+        }
     }
 
     public boolean getSignFlag() {

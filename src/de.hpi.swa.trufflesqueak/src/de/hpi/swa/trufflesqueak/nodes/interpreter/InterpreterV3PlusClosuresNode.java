@@ -221,6 +221,7 @@ public final class InterpreterV3PlusClosuresNode extends AbstractInterpreterNode
                 }
                 case BC.PUSH_CLOSURE_COPY_COPIED_VALUES: {
                     final int numArgsNumCopied = getUnsignedInt(bc, pc++);
+                    final int numCopied = numArgsNumCopied >> 4 & 0xF;
                     final int numArgs = numArgsNumCopied & 0xF;
                     final int blockSize = getBlockSize(bc, pc++, pc++);
                     data[currentPC] = insert(new PushClosureNode(code, pc, numArgs));

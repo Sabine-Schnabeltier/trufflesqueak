@@ -150,24 +150,52 @@ public final class DecoderSistaV1 extends AbstractDecoder {
         return offset + decodeNumBytes(code, index + offset, extB);
     }
 
+    @Override
+    public ShadowBlockParams decodeShadowBlock(final CompiledCodeObject code, final int index) {
+        final byte[] bc = code.getBytes();
+        int b = Byte.toUnsignedInt(bc[index]);
+        int offset = 0;
+        int extA = 0;
+        int extB = 0;
+        while (b == 0xE0 || b == 0xE1) {
+            final int byteValue = Byte.toUnsignedInt(bc[index + offset + 1]);
+            if (b == 0xE0) {
+                extA = (extA << 8) | byteValue;
+            } else {
+                extB = (extB == 0 && byteValue > 127) ? byteValue - 256 : (extB << 8) | byteValue;
+            }
+            offset += 2;
+            b = Byte.toUnsignedInt(bc[index + offset]);
+        }
+        return decodeShadowBlock(bc, index + offset, extA, extB);
+    }
+
+    private ShadowBlockParams decodeShadowBlock(final byte[] bc, final int index, final int extA, final int extB) {
+        final int byteA = Byte.toUnsignedInt(bc[index + 1]);
+        final int byteB = Byte.toUnsignedInt(bc[index + 2]);
+        final int numArgs = (byteA & 7) + Math.floorMod(extA, 16) * 8;
+        final int numCopied = (byteA >> 3 & 0x7) + Math.floorDiv(extA, 16) * 8;
+        final int blockSize = (extB << 8) | byteB;
+        return new ShadowBlockParams(numArgs, numCopied, blockSize);
+    }
+
     /**
      * The implementation is derived from StackDepthFinder. Note that the Squeak compiler no longer
      * allows dead code (at least the one for SistaV1), which simplifies the implementation.
      */
     @Override
-    public int determineMaxNumStackSlots(final CompiledCodeObject code) {
-        final int trailerPosition = trailerPosition(code);
-        final byte[] joins = new byte[trailerPosition];
+    public int determineMaxNumStackSlots(final CompiledCodeObject code, final int maxIndex, final int initialSP) {
+        final byte[] joins = new byte[maxIndex];
         Arrays.fill(joins, SP_NIL_TAG);
         int index = 0;
-        byte currentStackPointer = (byte) code.getNumTemps(); // initial SP
+        byte currentStackPointer = (byte) initialSP; // initial SP
         int maxStackPointer = currentStackPointer;
         final int contextSize = code.getSqueakContextSize();
         // Uncomment the following and compare with `(Character>>#isSeparator) detailedSymbolic`
         // final int initialPC = code.getInitialPC();
         // final StringBuilder sb = new StringBuilder();
         // sb.append(code).append("[").append(contextSize).append("]\n");
-        while (index < trailerPosition) {
+        while (index < maxIndex) {
             // sb.append(initialPC + index).append(":\t").append(currentStackPointer).append("->");
             joins[index] = currentStackPointer;
             currentStackPointer = decodeStackPointer(code, joins, index, currentStackPointer);
