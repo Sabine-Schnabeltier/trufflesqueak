@@ -15,13 +15,13 @@ public abstract class AbstractDecoder {
 
     public record ShadowBlockParams (int numArgs,  int numCopied, int blockSize) {}
 
-    public abstract ShadowBlockParams decodeShadowBlock(final CompiledCodeObject code, final int index);
+    public abstract ShadowBlockParams decodeShadowBlock(final CompiledCodeObject code, final int shadowBlockIndex);
 
     public abstract boolean hasStoreIntoTemp1AfterCallPrimitive(CompiledCodeObject code);
 
     public abstract int pcPreviousTo(CompiledCodeObject code, int pc);
 
-    public abstract int determineMaxNumStackSlots(final CompiledCodeObject code, final int maxIndex, final int initSP);
+    public abstract int determineMaxNumStackSlots(final CompiledCodeObject code, final int initialPC, final int maxPC, final int initialSP);
 
     protected abstract int decodeNumBytes(CompiledCodeObject code, int index);
 
