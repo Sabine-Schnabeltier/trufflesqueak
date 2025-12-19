@@ -164,7 +164,8 @@ public final class DecoderV3PlusClosures extends AbstractDecoder {
     }
 
     @Override
-    public ShadowBlockParams decodeShadowBlock(final CompiledCodeObject code, final int index) {
+    public ShadowBlockParams decodeShadowBlock(final CompiledCodeObject code, final int shadowBlockIndex) {
+        final int index = shadowBlockIndex - 4;
         final byte[] bc = code.getBytes();
         final int numArgsNumCopied = Byte.toUnsignedInt(bc[index + 1]);
         final int numArgs = numArgsNumCopied & 0xF;
@@ -174,7 +175,7 @@ public final class DecoderV3PlusClosures extends AbstractDecoder {
     }
 
     @Override
-    public int determineMaxNumStackSlots(final CompiledCodeObject code, final int maxIndex, final int initialSP) {
+    public int determineMaxNumStackSlots(final CompiledCodeObject code, final int initialPC, final int maxPC, final int initialSP) {
         return code.getSqueakContextSize(); // FIXME: Implement for v3
     }
 }

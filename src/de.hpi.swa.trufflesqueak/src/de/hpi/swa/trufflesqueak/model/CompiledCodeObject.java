@@ -38,6 +38,7 @@ import de.hpi.swa.trufflesqueak.nodes.accessing.AbstractPointersObjectNodes.Abst
 import de.hpi.swa.trufflesqueak.nodes.accessing.AbstractPointersObjectNodes.AbstractPointersObjectWriteNode;
 import de.hpi.swa.trufflesqueak.nodes.dispatch.DispatchSelectorNaryNode.DispatchPrimitiveNode;
 import de.hpi.swa.trufflesqueak.nodes.interpreter.AbstractDecoder;
+import de.hpi.swa.trufflesqueak.nodes.interpreter.AbstractDecoder.ShadowBlockParams;
 import de.hpi.swa.trufflesqueak.nodes.interpreter.DecoderSistaV1;
 import de.hpi.swa.trufflesqueak.nodes.interpreter.DecoderV3PlusClosures;
 import de.hpi.swa.trufflesqueak.nodes.primitives.AbstractPrimitiveNode;
@@ -327,17 +328,13 @@ public final class CompiledCodeObject extends AbstractSqueakObjectWithClassAndHa
         CompilerAsserts.neverPartOfCompilation();
         if (getExecutionData().frameDescriptor == null) {
             final CompiledCodeObject exposedMethod;
-            final int maxNumStackSlots;
             if (isShadowBlock()) {
                 /* Never let shadow blocks escape, use their outer method instead. */
                 exposedMethod = executionData.outerMethod;
-                /* TODO: determine max number of stack slots instead of context size. */
-                maxNumStackSlots = getSqueakContextSize();
             } else {
                 exposedMethod = this;
-                maxNumStackSlots = getMaxNumStackSlots();
             }
-            executionData.frameDescriptor = FrameAccess.newFrameDescriptor(exposedMethod, maxNumStackSlots);
+            executionData.frameDescriptor = FrameAccess.newFrameDescriptor(exposedMethod, getMaxNumStackSlots());
         }
         return executionData.frameDescriptor;
     }
@@ -369,12 +366,16 @@ public final class CompiledCodeObject extends AbstractSqueakObjectWithClassAndHa
 
     public int getMaxNumStackSlots() {
         if (bytes == null) {
+            // When creating a new Context for a new Process, Smalltalk will initialize the Context out of order
+            // (sender will be set before method) causing a frame to be created before bytes is set in this object.
             return getSqueakContextSize();
         }
         else if (isShadowBlock()) {
-            return getDecoder().determineMaxNumStackSlots(this, 0, 0);
+            final int initialPC = getOuterMethodStartPCZeroBased();
+            final ShadowBlockParams params = getDecoder().decodeShadowBlock(this, initialPC);
+            return getDecoder().determineMaxNumStackSlots(this, initialPC, initialPC + params.blockSize(), params.numArgs() + params.numCopied());
         } else {
-            return getDecoder().determineMaxNumStackSlots(this, trailerPosition(this), getNumTemps());
+            return getDecoder().determineMaxNumStackSlots(this, 0, trailerPosition(this), getNumTemps());
         }
     }
 
@@ -509,20 +510,24 @@ public final class CompiledCodeObject extends AbstractSqueakObjectWithClassAndHa
     @Override
     public String toString() {
         CompilerAsserts.neverPartOfCompilation();
-        if (isCompiledBlock()) {
-            return "[] in " + getMethod().toString();
-        } else {
-            String className = "UnknownClass";
-            String selector = "unknownSelector";
-            final ClassObject methodClass = getMethodClassSlow();
-            if (methodClass != null) {
-                className = methodClass.getClassName();
+        try {
+            if (isCompiledBlock()) {
+                return "[] in " + getMethod().toString();
+            } else {
+                String className = "UnknownClass";
+                String selector = "unknownSelector";
+                final ClassObject methodClass = getMethodClassSlow();
+                if (methodClass != null) {
+                    className = methodClass.getClassName();
+                }
+                final NativeObject selectorObj = getCompiledInSelector();
+                if (selectorObj != null) {
+                    selector = selectorObj.asStringUnsafe();
+                }
+                return className + "#" + selector;
             }
-            final NativeObject selectorObj = getCompiledInSelector();
-            if (selectorObj != null) {
-                selector = selectorObj.asStringUnsafe();
-            }
-            return className + "#" + selector;
+        } catch (NullPointerException e) {
+            return "UnknownClass#unknownSelector";
         }
     }
 
