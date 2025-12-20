@@ -135,7 +135,8 @@ public final class DecoderSistaV1 extends AbstractDecoder {
         }
     }
 
-    private record DecodedExtension(int offset,  int extA, int extB) {}
+    private record DecodedExtension(int offset, int extA, int extB) {
+    }
 
     private static DecodedExtension decodeExtension(final CompiledCodeObject code, final int index) {
         return decodeExtension(code.getBytes(), index);
@@ -170,11 +171,18 @@ public final class DecoderSistaV1 extends AbstractDecoder {
 
     @Override
     public ShadowBlockParams decodeShadowBlock(final CompiledCodeObject code, final int shadowBlockIndex) {
-        /** From EncoderForSistaV1 >> pcOfBlockCreationBytecodeForBlockStartingAt: startpc in: method
-         *  224		11100000 aaaaaaaa	        Extend A (Ext A = Ext A prev * 256 + Ext A)
-         *	225		11100001 bbbbbbbb	        Extend B (Ext B = Ext B prev * 256 + Ext B)
-         *	250		11111010 eeiiikkk jjjjjjjj	Push Closure Num Copied iii (+ExtA//16*8) Num Args kkk (+ ExtA\\16*8) BlockSize jjjjjjjj (+ExtB*256).
-         *                                          ee = num extensions
+        /**
+         * From EncoderForSistaV1 >> pcOfBlockCreationBytecodeForBlockStartingAt: startpc in: method
+         *
+         * <pre>
+         *
+         *  224   11100000 aaaaaaaa           Extend A (Ext A = Ext A prev * 256 + Ext A)
+         *  225   11100001 bbbbbbbb           Extend B (Ext B = Ext B prev * 256 + Ext B)
+         *  250   11111010 eeiiikkk jjjjjjjj  Push Closure Num Copied iii (+ExtA//16*8)
+         *                                                 Num Args kkk (+ ExtA\\16*8)
+         *                                                 BlockSize jjjjjjjj (+ExtB*256).
+         *                                                 ee = num extensions
+         * </pre>
          */
         final byte[] bc = code.getBytes();
 
@@ -197,24 +205,24 @@ public final class DecoderSistaV1 extends AbstractDecoder {
      * allows dead code (at least the one for SistaV1), which simplifies the implementation.
      */
     @Override
-    public int determineMaxNumStackSlots(final CompiledCodeObject code, final int initialPC, final int maxPC, final int initialSP) {
+    public int determineMaxNumStackSlots(final CompiledCodeObject code, final int initialPC, final int maxPC) {
         final byte[] bc = code.getBytes();
         final int[] joins = new int[maxPC];
         Arrays.fill(joins, SP_NIL_TAG);
         int index = initialPC;
-        int currentStackPointer = initialSP; // initial SP
+        int currentStackPointer = 0; // initial SP
         int maxStackPointer = currentStackPointer;
         final int contextSize = code.getSqueakContextSize();
         while (index < maxPC) {
             final DecodedExtension extension = decodeExtension(bc, index);
             joins[index] = currentStackPointer;
             currentStackPointer = decodeStackPointer(code, bc, index, extension, currentStackPointer, joins);
-            assert 0 <= currentStackPointer && currentStackPointer <= contextSize :
-                    "Stack pointer out of range: " + currentStackPointer + " (Context size: " + contextSize + ")";            maxStackPointer = Math.max(maxStackPointer, currentStackPointer);
+            assert 0 <= currentStackPointer && currentStackPointer <= contextSize : "Stack pointer out of range: " + currentStackPointer + " (Context size: " + contextSize + ")";
+            maxStackPointer = Math.max(maxStackPointer, currentStackPointer);
             index += decodeNextPCDelta(code, index, extension, true);
         }
-        assert 0 <= currentStackPointer && currentStackPointer <= contextSize :
-                "Stack pointer out of range: " + currentStackPointer + " (Context size: " + contextSize + ")";        return maxStackPointer;
+        assert 0 <= maxStackPointer && maxStackPointer <= contextSize : "Stack pointer out of range: " + maxStackPointer + " (Context size: " + contextSize + ")";
+        return maxStackPointer;
     }
 
     private static int decodeStackPointer(final CompiledCodeObject code, final byte[] bc, final int index, final DecodedExtension extension, final int sp, final int[] joins) {

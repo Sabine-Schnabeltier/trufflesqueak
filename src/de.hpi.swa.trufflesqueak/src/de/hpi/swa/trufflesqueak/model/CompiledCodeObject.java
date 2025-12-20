@@ -363,16 +363,16 @@ public final class CompiledCodeObject extends AbstractSqueakObjectWithClassAndHa
 
     public int getMaxNumStackSlots() {
         if (bytes == null) {
-            // When creating a new Context for a new Process, Smalltalk will initialize the Context out of order
-            // (sender will be set before method) causing a frame to be created before bytes is set in this object.
+            // When creating a new Context for a new Process, Smalltalk will initialize the Context
+            // out of order (sender will be set before method) causing a frame to be created before
+            // bytes is set in this object.
             return getSqueakContextSize();
-        }
-        else if (isShadowBlock()) {
+        } else if (isShadowBlock()) {
             final int initialPC = getOuterMethodStartPCZeroBased();
             final ShadowBlockParams params = getDecoder().decodeShadowBlock(this, initialPC);
-            return getDecoder().determineMaxNumStackSlots(this, initialPC, initialPC + params.blockSize(), params.numArgs() + params.numCopied());
+            return params.numArgs() + params.numCopied() + getDecoder().determineMaxNumStackSlots(this, initialPC, initialPC + params.blockSize());
         } else {
-            return getDecoder().determineMaxNumStackSlots(this, 0, trailerPosition(this), getNumTemps());
+            return getNumTemps() + getDecoder().determineMaxNumStackSlots(this, 0, trailerPosition(this));
         }
     }
 
@@ -521,10 +521,10 @@ public final class CompiledCodeObject extends AbstractSqueakObjectWithClassAndHa
                 if (selectorObj != null) {
                     selector = selectorObj.asStringUnsafe();
                 }
-                return className + "#" + selector;
+                return (isShadowBlock() ? "[] embedded in " : "") + className + "#" + selector;
             }
         } catch (NullPointerException e) {
-            return "UnknownClass#unknownSelector";
+            return (isShadowBlock() ? "[] embedded in " : "") + "UnknownClass#unknownSelector";
         }
     }
 
