@@ -135,19 +135,37 @@ public final class DecoderSistaV1 extends AbstractDecoder {
         }
     }
 
-    private static int decodeNextPCDelta(final CompiledCodeObject code, final int index, final boolean skipOverBlocks) {
-        int b = Byte.toUnsignedInt(code.getBytes()[index]);
+    private record DecodedExtension(int offset,  int extA, int extB) {}
+
+    private static DecodedExtension decodeExtension(final CompiledCodeObject code, final int index) {
+        return decodeExtension(code.getBytes(), index);
+    }
+
+    private static DecodedExtension decodeExtension(final byte[] bc, final int index) {
+        int b = Byte.toUnsignedInt(bc[index]);
         int offset = 0;
+        int extA = 0;
         int extB = 0;
         while (b == 0xE0 || b == 0xE1) {
-            if (b == 0xE1) {
-                final int byteValue = Byte.toUnsignedInt(code.getBytes()[index + offset + 1]);
-                extB = extB == 0 && byteValue > 127 ? byteValue - 256 : (extB << 8) + byteValue;
+            final int byteValue = Byte.toUnsignedInt(bc[index + offset + 1]);
+            if (b == 0xE0) {
+                extA = (extA << 8) | byteValue;
+            } else {
+                extB = (extB == 0 && byteValue > 127) ? byteValue - 256 : (extB << 8) | byteValue;
             }
             offset += 2;
-            b = Byte.toUnsignedInt(code.getBytes()[index + offset]);
+            b = Byte.toUnsignedInt(bc[index + offset]);
         }
-        return offset + decodeNumBytes(code, index + offset, extB, skipOverBlocks);
+        return new DecodedExtension(offset, extA, extB);
+    }
+
+    private static int decodeNextPCDelta(final CompiledCodeObject code, final int index, final boolean skipOverBlocks) {
+        final DecodedExtension extension = decodeExtension(code, index);
+        return decodeNextPCDelta(code, index, extension, skipOverBlocks);
+    }
+
+    private static int decodeNextPCDelta(final CompiledCodeObject code, final int index, final DecodedExtension extension, final boolean skipOverBlocks) {
+        return extension.offset + decodeNumBytes(code, index + extension.offset, extension.extB, skipOverBlocks);
     }
 
     @Override
@@ -159,31 +177,18 @@ public final class DecoderSistaV1 extends AbstractDecoder {
          *                                          ee = num extensions
          */
         final byte[] bc = code.getBytes();
+
         final int numExtensions = Byte.toUnsignedInt(bc[shadowBlockIndex - 2]) >> 6;
         final int index = shadowBlockIndex - 3 - (numExtensions * 2);
-        int b = Byte.toUnsignedInt(bc[index]);
-        int offset = 0;
-        int extA = 0;
-        int extB = 0;
-        while (b == 0xE0 || b == 0xE1) {
-            final int byteValue = Byte.toUnsignedInt(bc[index + offset + 1]);
-            if (b == 0xE0) {
-                extA = (extA << 8) | byteValue;
-            } else {
-                extB = (extB == 0 && byteValue > 127) ? byteValue - 256 : (extB << 8) | byteValue;
-            }
-            offset += 2;
-            b = Byte.toUnsignedInt(bc[index + offset]);
-        }
-        return decodeShadowBlock(bc, index + offset, extA, extB);
-    }
+        final DecodedExtension extension = decodeExtension(bc, index);
 
-    private ShadowBlockParams decodeShadowBlock(final byte[] bc, final int index, final int extA, final int extB) {
-        final int byteA = Byte.toUnsignedInt(bc[index + 1]);
-        final int byteB = Byte.toUnsignedInt(bc[index + 2]);
-        final int numArgs = (byteA & 7) + Math.floorMod(extA, 16) * 8;
-        final int numCopied = (byteA >> 3 & 0x7) + Math.floorDiv(extA, 16) * 8;
-        final int blockSize = (extB << 8) | byteB;
+        final int byteA = Byte.toUnsignedInt(bc[index + extension.offset + 1]);
+        final int byteB = Byte.toUnsignedInt(bc[index + extension.offset + 2]);
+
+        final int numArgs = (byteA & 7) + Math.floorMod(extension.extA, 16) * 8;
+        final int numCopied = (byteA >> 3 & 0x7) + Math.floorDiv(extension.extA, 16) * 8;
+        final int blockSize = (extension.extB << 8) | byteB;
+
         return new ShadowBlockParams(numArgs, numCopied, blockSize);
     }
 
@@ -193,54 +198,31 @@ public final class DecoderSistaV1 extends AbstractDecoder {
      */
     @Override
     public int determineMaxNumStackSlots(final CompiledCodeObject code, final int initialPC, final int maxPC, final int initialSP) {
-        final byte[] joins = new byte[maxPC];
+        final byte[] bc = code.getBytes();
+        final int[] joins = new int[maxPC];
         Arrays.fill(joins, SP_NIL_TAG);
         int index = initialPC;
-        byte currentStackPointer = (byte) initialSP; // initial SP
+        int currentStackPointer = initialSP; // initial SP
         int maxStackPointer = currentStackPointer;
         final int contextSize = code.getSqueakContextSize();
-        // Uncomment the following and compare with `(Character>>#isSeparator) detailedSymbolic`
-        // final StringBuilder sb = new StringBuilder();
-        // sb.append(code).append("[").append(contextSize).append("]\n");
         while (index < maxPC) {
-            // sb.append(initialPC + index).append(":\t").append(currentStackPointer).append("->");
+            final DecodedExtension extension = decodeExtension(bc, index);
             joins[index] = currentStackPointer;
-            currentStackPointer = decodeStackPointer(code, joins, index, currentStackPointer);
-            // sb.append(currentStackPointer).append("\n");
-            assert 0 <= currentStackPointer && currentStackPointer <= contextSize;
-            maxStackPointer = Math.max(maxStackPointer, currentStackPointer);
-            index += decodeNextPCDelta(code, index, true);
+            currentStackPointer = decodeStackPointer(code, bc, index, extension, currentStackPointer, joins);
+            assert 0 <= currentStackPointer && currentStackPointer <= contextSize :
+                    "Stack pointer out of range: " + currentStackPointer + " (Context size: " + contextSize + ")";            maxStackPointer = Math.max(maxStackPointer, currentStackPointer);
+            index += decodeNextPCDelta(code, index, extension, true);
         }
-        // sb.append("max SP = ").append(maxStackPointer).append("\n");
-        // System.out.append(sb.toString());
-        assert 0 <= maxStackPointer && maxStackPointer <= contextSize;
-        return maxStackPointer;
+        assert 0 <= currentStackPointer && currentStackPointer <= contextSize :
+                "Stack pointer out of range: " + currentStackPointer + " (Context size: " + contextSize + ")";        return maxStackPointer;
     }
 
-    private static byte decodeStackPointer(final CompiledCodeObject code, final byte[] joins, final int index, final int sp) {
-        final byte[] bc = code.getBytes();
-        int b = Byte.toUnsignedInt(bc[index]);
-        int offset = 0;
-        int extA = 0;
-        int extB = 0;
-        while (b == 0xE0 || b == 0xE1) {
-            final int byteValue = Byte.toUnsignedInt(bc[index + offset + 1]);
-            if (b == 0xE0) {
-                extA = (extA << 8) | byteValue;
-            } else {
-                extB = (extB == 0 && byteValue > 127) ? byteValue - 256 : (extB << 8) | byteValue;
-            }
-            offset += 2;
-            b = Byte.toUnsignedInt(bc[index + offset]);
-        }
-        return (byte) decodeStackPointer(code, bc, joins, index, sp, offset, extA, extB);
-    }
-
-    private static int decodeStackPointer(final CompiledCodeObject code, final byte[] bc, final byte[] joins, final int index, final int sp, final int extBytes, final int extA,
-                    final int extB) {
+    private static int decodeStackPointer(final CompiledCodeObject code, final byte[] bc, final int index, final DecodedExtension extension, final int sp, final int[] joins) {
         CompilerAsserts.neverPartOfCompilation();
-        final int indexWithExt = index + extBytes;
+
+        final int indexWithExt = index + extension.offset;
         final int b = Byte.toUnsignedInt(bc[indexWithExt]);
+
         return switch (b) {
             case 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, //
                 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F, //
@@ -250,7 +232,7 @@ public final class DecoderSistaV1 extends AbstractDecoder {
                 0x50, 0x51 //
                 -> sp + 1;
             case 0x52 -> {
-                if (extB == 0) {
+                if (extension.extB == 0) {
                     yield sp + 1;
                 } else {
                     throw SqueakException.create("Not a bytecode:", b);
@@ -262,7 +244,7 @@ public final class DecoderSistaV1 extends AbstractDecoder {
             case 0x5C -> resetStackAfterBranchOrReturn(joins, index + 1, sp - 1);
             case 0x5D -> resetStackAfterBranchOrReturn(joins, index + 1, sp + 0);
             case 0x5E -> {
-                if (extA == 0) {
+                if (extension.extA == 0) {
                     yield resetStackAfterBranchOrReturn(joins, index + 1, sp - 1);
                 } else {
                     throw SqueakException.create("Not a bytecode:", b);
@@ -301,11 +283,11 @@ public final class DecoderSistaV1 extends AbstractDecoder {
             case 0xE8, 0xE9 -> sp + 1;
             case 0xEA -> {
                 final int byte1 = Byte.toUnsignedInt(bc[indexWithExt + 1]);
-                final int numArgs = (byte1 & 7) + (extB << 3);
+                final int numArgs = (byte1 & 7) + (extension.extB << 3);
                 yield sp - numArgs;
             }
             case 0xEB -> {
-                int extBValue = extB;
+                int extBValue = extension.extB;
                 if (extBValue >= 64) {
                     extBValue = extBValue & 63;
                 }
@@ -315,12 +297,12 @@ public final class DecoderSistaV1 extends AbstractDecoder {
             }
             case 0xEC -> throw SqueakException.create("Not a bytecode:", b);
             case 0xED -> {
-                final int delta = InterpreterSistaV1Node.calculateLongExtendedOffset(bc[indexWithExt + 1], extB);
-                yield jumpAndResetStackAfterBranchOrReturn(joins, index + 2 + extBytes, sp + 0, delta);
+                final int delta = InterpreterSistaV1Node.calculateLongExtendedOffset(bc[indexWithExt + 1], extension.extB);
+                yield jumpAndResetStackAfterBranchOrReturn(joins, indexWithExt + 2, sp + 0, delta);
             }
             case 0xEE, 0xEF -> {
-                final int delta = InterpreterSistaV1Node.calculateLongExtendedOffset(bc[indexWithExt + 1], extB);
-                yield jumpAndResetStackAfterBranchOrReturn(joins, index + 2 + extBytes, sp - 1, delta);
+                final int delta = InterpreterSistaV1Node.calculateLongExtendedOffset(bc[indexWithExt + 1], extension.extB);
+                yield jumpAndResetStackAfterBranchOrReturn(joins, indexWithExt + 2, sp - 1, delta);
             }
             case 0xF0, 0xF1, 0xF2 -> sp - 1;
             case 0xF3, 0xF4, 0xF5 -> sp + 0;
@@ -343,7 +325,7 @@ public final class DecoderSistaV1 extends AbstractDecoder {
             }
             case 0xFA -> {
                 final byte byteA = bc[indexWithExt + 1];
-                final int numCopied = (Byte.toUnsignedInt(byteA) >> 3 & 0x7) + Math.floorDiv(extA, 16) * 8;
+                final int numCopied = (Byte.toUnsignedInt(byteA) >> 3 & 0x7) + Math.floorDiv(extension.extA, 16) * 8;
                 yield sp + 1 - numCopied;
             }
             case 0xFB -> sp + 1;
@@ -354,16 +336,16 @@ public final class DecoderSistaV1 extends AbstractDecoder {
         };
     }
 
-    private static int jumpAndResetStackAfterBranchOrReturn(final byte[] joins, final int pc, final int sp, final int delta) {
+    private static int jumpAndResetStackAfterBranchOrReturn(final int[] joins, final int pc, final int sp, final int delta) {
         if (delta < 0) {
             assert joins[pc + delta] == sp : "bad join";
         } else {
-            joins[pc + delta] = (byte) sp;
+            joins[pc + delta] = sp;
         }
         return resetStackAfterBranchOrReturn(joins, pc, sp);
     }
 
-    private static int resetStackAfterBranchOrReturn(final byte[] joins, final int pc, final int sp) {
+    private static int resetStackAfterBranchOrReturn(final int[] joins, final int pc, final int sp) {
         if (pc < joins.length) {
             final int spAtPC = joins[pc];
             if (spAtPC == SP_NIL_TAG) {

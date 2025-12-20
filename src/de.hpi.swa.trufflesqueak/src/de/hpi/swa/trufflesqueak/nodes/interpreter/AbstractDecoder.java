@@ -13,7 +13,7 @@ import de.hpi.swa.trufflesqueak.model.CompiledCodeObject;
 
 public abstract class AbstractDecoder {
 
-    public record ShadowBlockParams (int numArgs,  int numCopied, int blockSize) {}
+    public record ShadowBlockParams(int numArgs,  int numCopied, int blockSize) {}
 
     public abstract ShadowBlockParams decodeShadowBlock(final CompiledCodeObject code, final int shadowBlockIndex);
 
