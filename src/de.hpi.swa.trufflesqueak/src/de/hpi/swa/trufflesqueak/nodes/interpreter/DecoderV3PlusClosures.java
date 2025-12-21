@@ -310,7 +310,7 @@ public final class DecoderV3PlusClosures extends AbstractDecoder {
             case 224, 225, 226, 227, 228, 229, 230, 231, 232, 233, 234, 235, 236, 237, 238, 239 -> sp - 1;
             case 240, 241, 242, 243, 244, 245, 246, 247, 248, 249, 250, 251, 252, 253, 254, 255 -> sp - 2;
 
-            default -> throw SqueakException.create("Not a bytecode:", b);
+            default -> throw new AssertionError("Unknown bytecode");
         };
     }
 

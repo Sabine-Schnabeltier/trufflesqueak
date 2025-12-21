@@ -340,7 +340,8 @@ public final class DecoderSistaV1 extends AbstractDecoder {
             case 0xFC -> sp + 0;
             case 0xFD -> sp - 1;
             case 0xFE, 0xFF -> throw SqueakException.create("Not a bytecode:", b);
-            default -> throw SqueakException.create("Not a bytecode:", b);
+
+            default -> throw new AssertionError("Unknown bytecode");
         };
     }
 
