@@ -333,12 +333,15 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
                 CompilerAsserts.partialEvaluationConstant(b);
                 switch (b) {
                     /* 1 byte bytecodes */
-                    case BC.PUSH_RCVR_VAR_0, BC.PUSH_RCVR_VAR_1, BC.PUSH_RCVR_VAR_2, BC.PUSH_RCVR_VAR_3, BC.PUSH_RCVR_VAR_4, BC.PUSH_RCVR_VAR_5, BC.PUSH_RCVR_VAR_6, BC.PUSH_RCVR_VAR_7, //
+                    case BC.PUSH_RCVR_VAR_0, BC.PUSH_RCVR_VAR_1, BC.PUSH_RCVR_VAR_2, BC.PUSH_RCVR_VAR_3, BC.PUSH_RCVR_VAR_4, BC.PUSH_RCVR_VAR_5: {
+                        final Object receiver = FrameAccess.getReceiver(frame);
+                        externalizePCAndSP(frame, pc, sp); // for ContextObject access
+                        pushFollowed(frame, currentPC, sp++, uncheckedCast(data[currentPC], SqueakObjectAt0NodeGen.class).execute(this, receiver, b & 0xF));
+                        break;
+                    }
+                    case BC.PUSH_RCVR_VAR_6, BC.PUSH_RCVR_VAR_7, //
                         BC.PUSH_RCVR_VAR_8, BC.PUSH_RCVR_VAR_9, BC.PUSH_RCVR_VAR_A, BC.PUSH_RCVR_VAR_B, BC.PUSH_RCVR_VAR_C, BC.PUSH_RCVR_VAR_D, BC.PUSH_RCVR_VAR_E, BC.PUSH_RCVR_VAR_F: {
                         final Object receiver = FrameAccess.getReceiver(frame);
-                        if (receiver instanceof ContextObject) {
-                            externalizePCAndSP(frame, pc, sp); // for ContextObject access
-                        }
                         pushFollowed(frame, currentPC, sp++, uncheckedCast(data[currentPC], SqueakObjectAt0NodeGen.class).execute(this, receiver, b & 0xF));
                         break;
                     }

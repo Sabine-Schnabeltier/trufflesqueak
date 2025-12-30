@@ -962,11 +962,20 @@ public final class SqueakImageContext {
     @ExplodeLoop
     public MethodCacheEntry findMethodCacheEntry(final ClassObject classObject, final NativeObject selector) {
         methodCacheRandomish = methodCacheRandomish + 1 & 3;
-        final int selectorHash = System.identityHashCode(selector);
-        int firstProbe = (System.identityHashCode(classObject) ^ selectorHash) & METHOD_CACHE_MASK;
-        // final int stride = ((selectorHash * 0x9e3779b9) >> 1) | 1;
-        final int stride = (selectorHash * 37) | 1;
-        // final int stride = (selectorHash << 1) | 1;
+        // 0x9e3779b9 is the 32-bit Golden Ratio constant (Knuth's multiplicative hash)
+        final int sHash = System.identityHashCode(selector);
+        final int cHash = System.identityHashCode(classObject);
+
+        // Mix both hashes into one 32-bit value
+        final int mixed = (cHash ^ sHash) * 0x9e3779b9;
+
+        // Use the lower bits for the initial probe
+        int firstProbe = mixed & METHOD_CACHE_MASK;
+
+        // Use the middle/higher bits for the stride to ensure it's
+        // uncorrelated with the firstProbe index.
+        final int stride = (mixed >>> 13) | 1;
+
         int probe = firstProbe;
         for (int i = 0; i < METHOD_CACHE_REPROBES; i++) {
             final MethodCacheEntry entry = methodCache[probe];
