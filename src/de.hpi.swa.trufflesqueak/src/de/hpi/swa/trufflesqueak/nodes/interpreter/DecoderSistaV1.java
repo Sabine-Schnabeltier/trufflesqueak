@@ -297,8 +297,13 @@ public final class DecoderSistaV1 extends AbstractDecoder {
             }
         }
 
-        assert 0 <= maxStackPointer - SP_BIAS && maxStackPointer - SP_BIAS <= contextSize : "Stack pointer out of range: " + (maxStackPointer - SP_BIAS) + " (Context size: " + contextSize + ")";
-        return maxStackPointer - SP_BIAS;
+        final int finalMaxStackPointer = maxStackPointer - SP_BIAS;
+        assert 0 <= finalMaxStackPointer && finalMaxStackPointer <= contextSize : "Stack pointer out of range: " + finalMaxStackPointer + " (Context size: " + contextSize + ")";
+
+        // Leave space for a push that could during unwind handling or process/context manipulation. For example,
+        // Context class >> contextEnsure:
+        // ContextPart unwindAndStop:
+        return contextSize > maxStackPointer ? maxStackPointer + 1 : contextSize;
     }
 
     private static int decodeStackPointer(final byte[] bc, final int index, final DecodedExtension extension, final int sp, final byte[] joins) {

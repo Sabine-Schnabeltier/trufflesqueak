@@ -380,17 +380,17 @@ public abstract class AbstractInterpreterNode extends AbstractInterpreterInstrum
     protected final Object pop(final VirtualFrame frame, final int sp) {
         assert sp >= numArguments;
         final int slotIndex = FrameAccess.toStackSlotIndex(sp);
-        try {
+//        try {
             final Object result = frame.getObjectStatic(slotIndex);
             frame.setObjectStatic(slotIndex, NilObject.SINGLETON);
             return result;
-        } catch (final ArrayIndexOutOfBoundsException aioobe) {
-            CompilerDirectives.transferToInterpreter();
-            final int auxSlotIndex = frame.getFrameDescriptor().findOrAddAuxiliarySlot(slotIndex);
-            final Object result = frame.getAuxiliarySlot(auxSlotIndex);
-            frame.setAuxiliarySlot(auxSlotIndex, NilObject.SINGLETON);
-            return result;
-        }
+//        } catch (final ArrayIndexOutOfBoundsException aioobe) {
+//            CompilerDirectives.transferToInterpreter();
+//            final int auxSlotIndex = frame.getFrameDescriptor().findOrAddAuxiliarySlot(slotIndex);
+//            final Object result = frame.getAuxiliarySlot(auxSlotIndex);
+//            frame.setAuxiliarySlot(auxSlotIndex, NilObject.SINGLETON);
+//            return result;
+//        }
     }
 
     protected final Object popReceiver(final VirtualFrame frame, final int sp) {
