@@ -60,7 +60,7 @@ public final class CompiledCodeObject extends AbstractSqueakObjectWithClassAndHa
     private static final DispatchPrimitiveNode UNINITIALIZED_PRIMITIVE_NODE = DispatchPrimitiveNode.create(new PrimNoopNode(), 0);
 
     // header info and data
-    @CompilationFinal private int header;
+    @CompilationFinal private long header;
     /*
      * TODO: literals and bytes can change (and probably more?) and should not be @CompilationFinal.
      * Literals are cached in the AST and bytes are represented by nodes, so this should not affect
@@ -103,15 +103,14 @@ public final class CompiledCodeObject extends AbstractSqueakObjectWithClassAndHa
     public CompiledCodeObject(final SqueakImageChunk chunk) {
         super(chunk);
         // header is a tagged small integer
-        final long headerWord = (chunk.getWord(0) >> SqueakImageConstants.NUM_TAG_BITS);
-        header = CompiledCodeHeaderUtils.toInt(headerWord);
+        header = chunk.getWord(0) >> SqueakImageConstants.NUM_TAG_BITS;
         literals = chunk.getPointers(1, getNumHeaderAndLiterals());
         bytes = Arrays.copyOfRange(chunk.getBytes(), getBytecodeOffset(), chunk.getBytes().length);
     }
 
     public CompiledCodeObject(final byte[] bytes, final long header, final Object[] literals, final ClassObject classObject) {
         super(classObject);
-        this.header = CompiledCodeHeaderUtils.toInt(header);
+        this.header = header;
         this.literals = literals;
         this.bytes = bytes;
     }
@@ -190,7 +189,7 @@ public final class CompiledCodeObject extends AbstractSqueakObjectWithClassAndHa
         return getOuterMethodStartPC() - executionData.outerMethod.getInitialPC();
     }
 
-    private void setLiteralsAndBytes(final int header, final Object[] literals, final byte[] bytes) {
+    private void setLiteralsAndBytes(final long header, final Object[] literals, final byte[] bytes) {
         this.header = header;
         this.literals = literals;
         this.bytes = bytes;
@@ -353,7 +352,7 @@ public final class CompiledCodeObject extends AbstractSqueakObjectWithClassAndHa
     }
 
     public int getSqueakContextSize() {
-        return CompiledCodeHeaderUtils.getNeedsLargeFrame(header) ? CONTEXT.LARGE_FRAMESIZE : CONTEXT.SMALL_FRAMESIZE;
+        return CompiledCodeHeaderUtils.getSqueakContextSize(header);
     }
 
     public int getMaxNumStackSlots() {
@@ -381,7 +380,7 @@ public final class CompiledCodeObject extends AbstractSqueakObjectWithClassAndHa
     }
 
     public void become(final CompiledCodeObject other) {
-        final int header2 = other.header;
+        final long header2 = other.header;
         final Object[] literals2 = other.literals;
         final byte[] bytes2 = other.bytes;
         final CompiledCodeObject outerMethod2 = other.hasExecutionData() ? other.executionData.outerMethod : null;
@@ -665,13 +664,13 @@ public final class CompiledCodeObject extends AbstractSqueakObjectWithClassAndHa
     }
 
     public void initializeHeader(final long value) {
-        this.header = CompiledCodeHeaderUtils.toInt(value);
+        this.header = value;
         literals = ArrayUtils.withAll(getNumLiterals(), NilObject.SINGLETON);
     }
 
     public void setHeader(final long value) {
         final int oldNumLiterals = getNumLiterals();
-        header = CompiledCodeHeaderUtils.toInt(value);
+        header = value;
         assert getNumLiterals() == oldNumLiterals;
         invalidateCallTarget();
     }
@@ -722,37 +721,32 @@ public final class CompiledCodeObject extends AbstractSqueakObjectWithClassAndHa
      * </pre>
      */
     public static final class CompiledCodeHeaderUtils {
-        public static int makeHeader(final boolean signFlag, final int numArgs, final int numTemps, final int numLiterals, final boolean hasPrimitive, final boolean needsLargeFrame) {
-            return numLiterals & 0x7FFF | (hasPrimitive ? 0x10000 : 0) | (needsLargeFrame ? 0x20000 : 0) | (numTemps & 0x3F) << 18 | (numArgs & 0x0F) << 24 | (signFlag ? 0 : Integer.MIN_VALUE);
+        public static long makeHeader(final boolean signFlag, final int numArgs, final int numTemps, final int numLiterals, final boolean hasPrimitive, final boolean needsLargeFrame) {
+            return numLiterals & 0x7FFF | (hasPrimitive ? 0x10000 : 0) | (needsLargeFrame ? 0x20000 : 0) | (numTemps & 0x3F) << 18 | (numArgs & 0x0F) << 24 | (signFlag ? 0 : Long.MIN_VALUE);
         }
 
-        private static int getNumLiterals(final int header) {
-            return header & 0x7FFF;
+        public static int getNumLiterals(final long header) {
+            return (int) (header & 0x7FFF);
         }
 
-        private static boolean getHasPrimitive(final int header) {
+        private static boolean getHasPrimitive(final long header) {
             return (header & 0x10000) != 0;
         }
 
-        private static boolean getNeedsLargeFrame(final int header) {
-            return (header & 0x20000) != 0;
+        private static int getSqueakContextSize(final long header) {
+            return (header & 0x20000) != 0 ? CONTEXT.LARGE_FRAMESIZE : CONTEXT.SMALL_FRAMESIZE;
         }
 
-        private static int getNumTemps(final int header) {
-            return (header >> 18) & 0x3F;
+        private static int getNumTemps(final long header) {
+            return (int) ((header >> 18) & 0x3F);
         }
 
-        private static int getNumArguments(final int header) {
-            return (header >> 24) & 0x0F;
+        private static int getNumArguments(final long header) {
+            return (int) ((header >> 24) & 0x0F);
         }
 
-        private static boolean getSignFlag(final int header) {
+        private static boolean getSignFlag(final long header) {
             return header >= 0;
-        }
-
-        // Convert 61bit to more compact 32bit representation
-        private static int toInt(final long headerWord) {
-            return (int) (headerWord | (headerWord < 0 ? Integer.MIN_VALUE : 0));
         }
     }
 }
