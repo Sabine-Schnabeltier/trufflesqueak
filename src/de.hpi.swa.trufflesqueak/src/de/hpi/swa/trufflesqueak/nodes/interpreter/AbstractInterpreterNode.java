@@ -72,10 +72,13 @@ public abstract class AbstractInterpreterNode extends AbstractInterpreterInstrum
     @CompilationFinal(dimensions = 1) protected final byte[] profiles;
     @CompilationFinal private Object osrMetadata;
 
+    @CompilationFinal(dimensions = 1) protected final byte[] stackMap;
+
     @SuppressWarnings("this-escape")
     public AbstractInterpreterNode(final CompiledCodeObject code) {
         this.code = code;
         isBlock = code.isCompiledBlock() || code.isShadowBlock();
+        stackMap = code.getStackMap();
         numArguments = -1;
         final int startPC = code.getStartPCZeroBased();
         final int endPC = code.getMaxPCZeroBased();
@@ -89,6 +92,7 @@ public abstract class AbstractInterpreterNode extends AbstractInterpreterInstrum
         // reusable fields
         code = original.code;
         isBlock = original.isBlock;
+        stackMap = original.stackMap;
         numArguments = original.numArguments;
         // fresh fields
         final int startPC = code.getStartPCZeroBased();

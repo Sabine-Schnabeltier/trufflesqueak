@@ -249,19 +249,19 @@ public final class DecoderV3PlusClosures extends AbstractDecoder {
      * allows dead code (at least the one for SistaV1), which simplifies the implementation.
      */
     @Override
-    public int determineMaxNumStackSlots(final CompiledCodeObject code, final int initialPC, final int maxPC, final int initialSP) {
+    public byte[] computeStackMap(final CompiledCodeObject code, final int initialPC, final int maxPC, final int initialSP) {
         final SqueakImageContext image = code.getSqueakClass().getImage();
         final int contextSize = code.getSqueakContextSize();
-        final byte[] joins = new byte[maxPC];
+        final byte[] stackMap = new byte[maxPC];
         final byte[] bc = code.getBytes();
 
-        // Use a biased stack pointer to avoid filling the joins array.
+        // Use a biased stack pointer to avoid filling the stackMap array.
         int currentStackPointer = SP_BIAS;
         int maxStackPointer = currentStackPointer;
 
         int index = initialPC;
         while (index < maxPC) {
-            joins[index] = (byte) currentStackPointer;
+            stackMap[index] = (byte) currentStackPointer;
 
             final int b = Byte.toUnsignedInt(bc[index]);
             final int delta = BYTECODE_DELTAS[b];
@@ -276,7 +276,7 @@ public final class DecoderV3PlusClosures extends AbstractDecoder {
                 index += decodeNumBytes(b);
             } else {
                 // Slow path: stack offset determined by multiple bytes.
-                currentStackPointer = decodeStackPointer(bc, index, currentStackPointer, joins);
+                currentStackPointer = decodeStackPointer(bc, index, currentStackPointer, stackMap);
                 index += decodeNumBytesSkipOverBlocks(bc, index);
             }
 
@@ -285,22 +285,31 @@ public final class DecoderV3PlusClosures extends AbstractDecoder {
             }
         }
 
-        final int finalMaxStackPointer = maxStackPointer - SP_BIAS + initialSP;
+        final int spOffset = initialSP - SP_BIAS;
+        final int finalMaxStackPointer = maxStackPointer + spOffset;
         assert initialSP <= finalMaxStackPointer && finalMaxStackPointer <= contextSize : "Stack pointer out of range: " + finalMaxStackPointer + " (Context size: " + contextSize + ")";
 
+        // Adjust stackMap entries to have the correct values.
+        for (int i = initialPC; i < maxPC; i++) {
+            stackMap[i] = (byte) (Byte.toUnsignedInt(stackMap[i]) + spOffset);
+        }
+
+        // Save the maximum stack pointer value in the first entry of the map.
         // Leave space for a push that could occur during unwind handling or process/context
         // manipulation. For example, Context class>>contextEnsure: and ContextPart>>unwindAndStop:
-        return finalMaxStackPointer < contextSize ? finalMaxStackPointer + 1 : finalMaxStackPointer;
+        stackMap[0] = (byte) (finalMaxStackPointer < contextSize ? finalMaxStackPointer + 1 : finalMaxStackPointer);
+
+        return stackMap;
     }
 
-    private static int decodeStackPointer(final byte[] bc, final int index, final int sp, final byte[] joins) {
+    private static int decodeStackPointer(final byte[] bc, final int index, final int sp, final byte[] stackMap) {
         CompilerAsserts.neverPartOfCompilation();
 
         final int b = Byte.toUnsignedInt(bc[index]);
 
         return switch (b) {
-            case 120, 121, 122, 123 -> resetStackAfterBranchOrReturn(joins, index + 1, sp);
-            case 124, 125 -> resetStackAfterBranchOrReturn(joins, index + 1, sp - 1);
+            case 120, 121, 122, 123 -> resetStackAfterBranchOrReturn(stackMap, index + 1, sp);
+            case 124, 125 -> resetStackAfterBranchOrReturn(stackMap, index + 1, sp - 1);
 
             case 131 -> {
                 final int numArguments = Byte.toUnsignedInt(bc[index + 1]) >> 5;
@@ -341,19 +350,19 @@ public final class DecoderV3PlusClosures extends AbstractDecoder {
             }
             case 144, 145, 146, 147, 148, 149, 150, 151 -> {
                 final int delta = AbstractInterpreterNode.calculateShortOffset(b);
-                yield jumpAndResetStackAfterBranchOrReturn(joins, index + 1, sp, delta);
+                yield jumpAndResetStackAfterBranchOrReturn(stackMap, index + 1, sp, delta);
             }
             case 152, 153, 154, 155, 156, 157, 158, 159 -> {
                 final int delta = AbstractInterpreterNode.calculateShortOffset(b);
-                yield jumpAndResetStackAfterBranchOrReturn(joins, index + 1, sp - 1, delta);
+                yield jumpAndResetStackAfterBranchOrReturn(stackMap, index + 1, sp - 1, delta);
             }
             case 160, 161, 162, 163, 164, 165, 166, 167 -> {
                 final int delta = ((b & 7) - 4 << 8) + Byte.toUnsignedInt(bc[index + 1]);
-                yield jumpAndResetStackAfterBranchOrReturn(joins, index + 2, sp, delta);
+                yield jumpAndResetStackAfterBranchOrReturn(stackMap, index + 2, sp, delta);
             }
             case 168, 169, 170, 171, 172, 173, 174, 175 -> {
                 final int delta = ((b & 3) << 8) + Byte.toUnsignedInt(bc[index + 1]);
-                yield jumpAndResetStackAfterBranchOrReturn(joins, index + 2, sp - 1, delta);
+                yield jumpAndResetStackAfterBranchOrReturn(stackMap, index + 2, sp - 1, delta);
             }
 
             default -> {
@@ -366,18 +375,18 @@ public final class DecoderV3PlusClosures extends AbstractDecoder {
         };
     }
 
-    private static int jumpAndResetStackAfterBranchOrReturn(final byte[] joins, final int pc, final int sp, final int delta) {
+    private static int jumpAndResetStackAfterBranchOrReturn(final byte[] stackMap, final int pc, final int sp, final int delta) {
         if (delta < 0) {
-            assert Byte.toUnsignedInt(joins[pc + delta]) == sp : "bad join";
+            assert Byte.toUnsignedInt(stackMap[pc + delta]) == sp : "bad join";
         } else {
-            joins[pc + delta] = (byte) sp;
+            stackMap[pc + delta] = (byte) sp;
         }
-        return resetStackAfterBranchOrReturn(joins, pc, sp);
+        return resetStackAfterBranchOrReturn(stackMap, pc, sp);
     }
 
-    private static int resetStackAfterBranchOrReturn(final byte[] joins, final int pc, final int sp) {
-        if (pc < joins.length) {
-            final int spAtPC = Byte.toUnsignedInt(joins[pc]);
+    private static int resetStackAfterBranchOrReturn(final byte[] stackMap, final int pc, final int sp) {
+        if (pc < stackMap.length) {
+            final int spAtPC = Byte.toUnsignedInt(stackMap[pc]);
             if (spAtPC == SP_NIL_TAG) {
                 return sp;
             } else {

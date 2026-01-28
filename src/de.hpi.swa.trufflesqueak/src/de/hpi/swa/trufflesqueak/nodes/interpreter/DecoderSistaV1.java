@@ -256,19 +256,19 @@ public final class DecoderSistaV1 extends AbstractDecoder {
      * allows dead code (at least the one for SistaV1), which simplifies the implementation.
      */
     @Override
-    public int determineMaxNumStackSlots(final CompiledCodeObject code, final int initialPC, final int maxPC, final int initialSP) {
+    public byte[] computeStackMap(final CompiledCodeObject code, final int initialPC, final int maxPC, final int initialSP) {
         final SqueakImageContext image = code.getSqueakClass().getImage();
         final int contextSize = code.getSqueakContextSize();
-        final byte[] joins = new byte[maxPC];
+        final byte[] stackMap = new byte[maxPC];
         final byte[] bc = code.getBytes();
 
-        // Use a biased stack pointer to avoid filling the joins array.
+        // Use a biased stack pointer to avoid filling the stackMap array.
         int currentStackPointer = SP_BIAS;
         int maxStackPointer = currentStackPointer;
 
         int index = initialPC;
         while (index < maxPC) {
-            joins[index] = (byte) currentStackPointer;
+            stackMap[index] = (byte) currentStackPointer;
 
             final int b = Byte.toUnsignedInt(bc[index]);
             final int delta = BYTECODE_DELTAS[b];
@@ -286,7 +286,8 @@ public final class DecoderSistaV1 extends AbstractDecoder {
                 final DecodedExtension extension = (delta == NEEDS_EXTENSION)
                                 ? decodeExtension(bc, index)
                                 : DecodedExtension.DEFAULT;
-                currentStackPointer = decodeStackPointer(bc, index, extension, currentStackPointer, joins);
+                stackMap[index + extension.offset] = (byte) currentStackPointer;
+                currentStackPointer = decodeStackPointer(bc, index, extension, currentStackPointer, stackMap);
                 index += decodeNextPCDelta(code, index, extension, true);
             }
 
@@ -295,15 +296,24 @@ public final class DecoderSistaV1 extends AbstractDecoder {
             }
         }
 
-        final int finalMaxStackPointer = maxStackPointer - SP_BIAS + initialSP;
+        final int spOffset = initialSP - SP_BIAS;
+        final int finalMaxStackPointer = maxStackPointer + spOffset;
         assert initialSP <= finalMaxStackPointer && finalMaxStackPointer <= contextSize : "Stack pointer out of range: " + finalMaxStackPointer + " (Context size: " + contextSize + ")";
 
+        // Adjust stackMap entries to have the correct values.
+        for (int i = initialPC; i < maxPC; i++) {
+            stackMap[i] = (byte) (Byte.toUnsignedInt(stackMap[i]) + spOffset);
+        }
+
+        // Save the maximum stack pointer value in the first entry of the map.
         // Leave space for a push that could occur during unwind handling or process/context
         // manipulation. For example, Context class>>contextEnsure: and ContextPart>>unwindAndStop:
-        return finalMaxStackPointer < contextSize ? finalMaxStackPointer + 1 : finalMaxStackPointer;
+        stackMap[0] = (byte) (finalMaxStackPointer < contextSize ? finalMaxStackPointer + 1 : finalMaxStackPointer);
+
+        return stackMap;
     }
 
-    private static int decodeStackPointer(final byte[] bc, final int index, final DecodedExtension extension, final int sp, final byte[] joins) {
+    private static int decodeStackPointer(final byte[] bc, final int index, final DecodedExtension extension, final int sp, final byte[] stackMap) {
         CompilerAsserts.neverPartOfCompilation();
 
         final int indexWithExt = index + extension.offset;
@@ -319,12 +329,12 @@ public final class DecoderSistaV1 extends AbstractDecoder {
             }
 
             case 0x54, 0x55, 0x56, 0x57 -> throw SqueakException.create("Not a bytecode:", b);
-            case 0x58, 0x59, 0x5A, 0x5B -> resetStackAfterBranchOrReturn(joins, index + 1, sp);
-            case 0x5C -> resetStackAfterBranchOrReturn(joins, index + 1, sp - 1);
-            case 0x5D -> resetStackAfterBranchOrReturn(joins, index + 1, sp);
+            case 0x58, 0x59, 0x5A, 0x5B -> resetStackAfterBranchOrReturn(stackMap, index + 1, sp);
+            case 0x5C -> resetStackAfterBranchOrReturn(stackMap, index + 1, sp - 1);
+            case 0x5D -> resetStackAfterBranchOrReturn(stackMap, index + 1, sp);
             case 0x5E -> {
                 if (extension.extA == 0) {
-                    yield resetStackAfterBranchOrReturn(joins, index + 1, sp - 1);
+                    yield resetStackAfterBranchOrReturn(stackMap, index + 1, sp - 1);
                 } else {
                     throw SqueakException.create("Not a bytecode:", b);
                 }
@@ -332,15 +342,15 @@ public final class DecoderSistaV1 extends AbstractDecoder {
 
             case 0xB0, 0xB1, 0xB2, 0xB3, 0xB4, 0xB5, 0xB6, 0xB7 -> {
                 final int delta = AbstractInterpreterNode.calculateShortOffset(b);
-                yield jumpAndResetStackAfterBranchOrReturn(joins, index + 1, sp, delta);
+                yield jumpAndResetStackAfterBranchOrReturn(stackMap, index + 1, sp, delta);
             }
             case 0xB8, 0xB9, 0xBA, 0xBB, 0xBC, 0xBD, 0xBE, 0xBF, 0xC0, 0xC1, 0xC2, 0xC3, 0xC4, 0xC5, 0xC6, 0xC7 -> {
                 final int delta = AbstractInterpreterNode.calculateShortOffset(b);
-                yield jumpAndResetStackAfterBranchOrReturn(joins, index + 1, sp - 1, delta);
+                yield jumpAndResetStackAfterBranchOrReturn(stackMap, index + 1, sp - 1, delta);
             }
 
             /* Check joins first for '(SqueakSSL class >> #ensureSampleCert) detailedSymbolic'. */
-            case 0xD8 -> Byte.toUnsignedInt(joins[index]) == SP_NIL_TAG ? sp - 1 : Math.max(SP_BIAS, sp - 1);
+            case 0xD8 -> Byte.toUnsignedInt(stackMap[index]) == SP_NIL_TAG ? sp - 1 : Math.max(SP_BIAS, sp - 1);
 
             case 0xDA, 0xDB, 0xDC, 0xDD, 0xDE, 0xDF -> throw SqueakException.create("Not a bytecode:", b);
 
@@ -369,11 +379,11 @@ public final class DecoderSistaV1 extends AbstractDecoder {
             case 0xEC -> throw SqueakException.create("Not a bytecode:", b);
             case 0xED -> {
                 final int delta = InterpreterSistaV1Node.calculateLongExtendedOffset(bc[indexWithExt + 1], extension.extB);
-                yield jumpAndResetStackAfterBranchOrReturn(joins, indexWithExt + 2, sp, delta);
+                yield jumpAndResetStackAfterBranchOrReturn(stackMap, indexWithExt + 2, sp, delta);
             }
             case 0xEE, 0xEF -> {
                 final int delta = InterpreterSistaV1Node.calculateLongExtendedOffset(bc[indexWithExt + 1], extension.extB);
-                yield jumpAndResetStackAfterBranchOrReturn(joins, indexWithExt + 2, sp - 1, delta);
+                yield jumpAndResetStackAfterBranchOrReturn(stackMap, indexWithExt + 2, sp - 1, delta);
             }
 
             case 0xF0, 0xF1, 0xF2 -> sp - 1;
@@ -414,18 +424,18 @@ public final class DecoderSistaV1 extends AbstractDecoder {
         };
     }
 
-    private static int jumpAndResetStackAfterBranchOrReturn(final byte[] joins, final int pc, final int sp, final int delta) {
+    private static int jumpAndResetStackAfterBranchOrReturn(final byte[] stackMap, final int pc, final int sp, final int delta) {
         if (delta < 0) {
-            assert Byte.toUnsignedInt(joins[pc + delta]) == sp : "bad join";
+            assert Byte.toUnsignedInt(stackMap[pc + delta]) == sp : "bad join";
         } else {
-            joins[pc + delta] = (byte) sp;
+            stackMap[pc + delta] = (byte) sp;
         }
-        return resetStackAfterBranchOrReturn(joins, pc, sp);
+        return resetStackAfterBranchOrReturn(stackMap, pc, sp);
     }
 
-    private static int resetStackAfterBranchOrReturn(final byte[] joins, final int pc, final int sp) {
-        if (pc < joins.length) {
-            final int spAtPC = Byte.toUnsignedInt(joins[pc]);
+    private static int resetStackAfterBranchOrReturn(final byte[] stackMap, final int pc, final int sp) {
+        if (pc < stackMap.length) {
+            final int spAtPC = Byte.toUnsignedInt(stackMap[pc]);
             if (spAtPC == SP_NIL_TAG) {
                 return sp;
             } else {

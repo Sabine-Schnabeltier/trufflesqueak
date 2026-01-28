@@ -237,7 +237,8 @@ public final class BlockClosureObject extends AbstractSqueakObjectWithHash {
 
     public int getInitialSP() {
         // See Context>>#privRefresh:
-        if (block.isCompiledMethod()) {
+//        if (block.isCompiledMethod()) {
+        if (isABlockClosure()) {
             // see BlockClosure>>#simulateValueWithArguments:caller:
             // Temporaries are nilled by push bytecodes at start of block.
             return getNumCopied() + getNumArgs();

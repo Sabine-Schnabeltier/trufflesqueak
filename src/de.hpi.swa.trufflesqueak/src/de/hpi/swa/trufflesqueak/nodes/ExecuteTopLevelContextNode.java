@@ -210,7 +210,7 @@ public final class ExecuteTopLevelContextNode extends RootNode {
             final CompiledCodeObject method = activeContext.getCodeObject();
             final MaterializedFrame truffleFrame = activeContext.getTruffleFrame();
             FrameAccess.setInstructionPointer(truffleFrame, 0);
-            FrameAccess.setStackPointer(truffleFrame, method.getNumTemps());
+            FrameAccess.setStackPointer(truffleFrame, method.getInitialSP());
         }
     }
 

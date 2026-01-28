@@ -93,7 +93,7 @@ public final class StartContextRootNode extends AbstractRootNode {
             final CompiledCodeObject code = getCode();
             doesNotNeedThisContext = code.getDoesNotNeedThisContextAssumption();
             if (!FrameAccess.hasClosure(frame)) {
-                initialSP = code.getNumTemps();
+                initialSP = code.getInitialSP();
                 assert numArgs == code.getNumArgs();
             } else {
                 final BlockClosureObject closure = FrameAccess.getClosure(frame);

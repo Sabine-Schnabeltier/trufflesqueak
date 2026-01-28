@@ -219,7 +219,7 @@ public final class PrimExternalCallNode extends AbstractPrimitiveNode
         assert numReceiverAndArguments == receiverAndArguments.length;
         final int initialSP;
         if (!FrameAccess.hasClosure(frame)) {
-            initialSP = FrameAccess.getCodeObject(frame).getNumTemps();
+            initialSP = FrameAccess.getCodeObject(frame).getInitialSP();
         } else {
             initialSP = FrameAccess.getClosure(frame).getInitialSP();
         }

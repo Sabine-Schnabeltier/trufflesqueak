@@ -386,7 +386,7 @@ public final class SqueakImageContext {
         doItContext.setReceiver(NilObject.SINGLETON);
         doItContext.setCodeObject(doItMethod);
         doItContext.setInstructionPointer(0);
-        doItContext.setStackPointer(doItMethod.getNumTemps());
+        doItContext.setStackPointer(doItMethod.getInitialSP());
         doItContext.setSenderUnsafe(NilObject.SINGLETON);
         return ExecuteTopLevelContextNode.create(this, getLanguage(), doItContext, false);
     }

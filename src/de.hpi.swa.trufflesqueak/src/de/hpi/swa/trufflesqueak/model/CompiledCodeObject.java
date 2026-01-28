@@ -79,6 +79,7 @@ public final class CompiledCodeObject extends AbstractSqueakObjectWithClassAndHa
      */
     static final class ExecutionData {
         private FrameDescriptor frameDescriptor;
+        private byte[] stackMap;
 
         private ShadowBlockMetadata shadowBlockMetadata;
 
@@ -159,6 +160,7 @@ public final class CompiledCodeObject extends AbstractSqueakObjectWithClassAndHa
         super(original);
         if (original.hasExecutionData()) {
             getExecutionData().frameDescriptor = original.executionData.frameDescriptor;
+            executionData.stackMap = original.executionData.stackMap;
         }
         setLiteralsAndBytes(original.internalHeader, original.literals.clone(), original.bytes.clone());
         primitiveNodeOrNull = original.primitiveNodeOrNull;
@@ -195,6 +197,10 @@ public final class CompiledCodeObject extends AbstractSqueakObjectWithClassAndHa
             executionData = new ExecutionData();
         }
         return executionData;
+    }
+
+    public byte[] getStackMap() {
+        return executionData.stackMap;
     }
 
     @TruffleBoundary
@@ -372,7 +378,8 @@ public final class CompiledCodeObject extends AbstractSqueakObjectWithClassAndHa
         if (getExecutionData().frameDescriptor == null) {
             /* Never let shadow blocks escape, use their outer method instead. */
             final CompiledCodeObject exposedMethod = isShadowBlock() ? executionData.shadowBlockMetadata.outerMethod : this;
-            executionData.frameDescriptor = FrameAccess.newFrameDescriptor(exposedMethod, getMaxNumStackSlots());
+            final int maxNumStackSlots = computeStackMapAndReturnMaxStackSlots();
+            executionData.frameDescriptor = FrameAccess.newFrameDescriptor(exposedMethod, maxNumStackSlots);
         }
         return executionData.frameDescriptor;
     }
@@ -418,8 +425,12 @@ public final class CompiledCodeObject extends AbstractSqueakObjectWithClassAndHa
         return isShadowBlock() ? getShadowBlockMetadata().getInitialSP() : getNumTemps();
     }
 
-    public int getMaxNumStackSlots() {
-        return getDecoder().determineMaxNumStackSlots(this, getStartPCZeroBased(), getMaxPCZeroBased(), getInitialSP());
+    private int computeStackMapAndReturnMaxStackSlots() {
+        final int initialSP = getInitialSP();
+        executionData.stackMap = getDecoder().computeStackMap(this, getStartPCZeroBased(), getMaxPCZeroBased(), initialSP);
+        final int maxNumStackSlots = Byte.toUnsignedInt(executionData.stackMap[0]);
+        executionData.stackMap[0] = (byte) initialSP;
+        return maxNumStackSlots;
     }
 
     public boolean getHasV3PlusClosuresBytecodes() {

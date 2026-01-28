@@ -61,6 +61,7 @@ import de.hpi.swa.trufflesqueak.nodes.primitives.impl.ArithmeticPrimitives.PrimS
 import de.hpi.swa.trufflesqueak.nodes.primitives.impl.ArithmeticPrimitives.PrimSmallFloatSubtractNode;
 import de.hpi.swa.trufflesqueak.util.ArrayUtils;
 import de.hpi.swa.trufflesqueak.util.FrameAccess;
+import de.hpi.swa.trufflesqueak.util.LogUtils;
 
 public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
     public InterpreterSistaV1Node(final CompiledCodeObject code) {
@@ -296,6 +297,12 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
     @ExplodeLoop(kind = ExplodeLoop.LoopExplosionKind.MERGE_EXPLODE)
     public Object execute(final VirtualFrame frame, final int startPC, final int startSP) {
         assert isBlock == FrameAccess.hasClosure(frame);
+        assert startSP == Byte.toUnsignedInt(stackMap[startPC]);
+
+        if (startSP != Byte.toUnsignedInt(stackMap[startPC])) {
+            LogUtils.DEBUG.warning("SP does not agree: " + startSP + " != " + Byte.toUnsignedInt(stackMap[startPC]));
+            LogUtils.DEBUG.warning("Code: " + this.code);
+        }
 
         if (numArguments == -1) {
             CompilerDirectives.transferToInterpreterAndInvalidate();
@@ -306,7 +313,6 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
         final byte[] bc = uncheckedCast(code.getBytes(), byte[].class);
 
         int pc = startPC;
-        int sp = startSP;
         int extA = 0;
         int extB = 0;
 
@@ -317,9 +323,10 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
         try {
             while (pc != LOCAL_RETURN_PC) {
                 CompilerAsserts.partialEvaluationConstant(pc);
-                CompilerAsserts.partialEvaluationConstant(sp);
                 CompilerAsserts.partialEvaluationConstant(extA);
                 CompilerAsserts.partialEvaluationConstant(extB);
+                final int currentSP = Byte.toUnsignedInt(stackMap[pc]);
+                CompilerAsserts.partialEvaluationConstant(currentSP);
                 final int currentPC = pc++;
                 final byte b = getByte(bc, currentPC);
                 CompilerAsserts.partialEvaluationConstant(b);
@@ -327,90 +334,89 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
                     /* 1 byte bytecodes */
                     case BC.PUSH_RCVR_VAR_0, BC.PUSH_RCVR_VAR_1, BC.PUSH_RCVR_VAR_2, BC.PUSH_RCVR_VAR_3, BC.PUSH_RCVR_VAR_4, BC.PUSH_RCVR_VAR_5, BC.PUSH_RCVR_VAR_6, BC.PUSH_RCVR_VAR_7, //
                         BC.PUSH_RCVR_VAR_8, BC.PUSH_RCVR_VAR_9, BC.PUSH_RCVR_VAR_A, BC.PUSH_RCVR_VAR_B, BC.PUSH_RCVR_VAR_C, BC.PUSH_RCVR_VAR_D, BC.PUSH_RCVR_VAR_E, BC.PUSH_RCVR_VAR_F: {
-                        externalizePCAndSP(frame, pc, sp); // for ContextObject access
-                        pushFollowed(frame, currentPC, sp++, uncheckedCast(data[currentPC], SqueakObjectAt0NodeGen.class).execute(this, FrameAccess.getReceiver(frame), b & 0xF));
+                        externalizePCAndSP(frame, pc, currentSP); // for ContextObject access
+                        pushFollowed(frame, currentPC, currentSP, uncheckedCast(data[currentPC], SqueakObjectAt0NodeGen.class).execute(this, FrameAccess.getReceiver(frame), b & 0xF));
                         break;
                     }
                     case BC.PUSH_LIT_VAR_0, BC.PUSH_LIT_VAR_1, BC.PUSH_LIT_VAR_2, BC.PUSH_LIT_VAR_3, BC.PUSH_LIT_VAR_4, BC.PUSH_LIT_VAR_5, BC.PUSH_LIT_VAR_6, BC.PUSH_LIT_VAR_7, //
                         BC.PUSH_LIT_VAR_8, BC.PUSH_LIT_VAR_9, BC.PUSH_LIT_VAR_A, BC.PUSH_LIT_VAR_B, BC.PUSH_LIT_VAR_C, BC.PUSH_LIT_VAR_D, BC.PUSH_LIT_VAR_E, BC.PUSH_LIT_VAR_F: {
-                        push(frame, sp++, readLiteralVariable(currentPC, b & 0xF));
+                        push(frame, currentSP, readLiteralVariable(currentPC, b & 0xF));
                         break;
                     }
                     case BC.PUSH_LIT_CONST_00, BC.PUSH_LIT_CONST_01, BC.PUSH_LIT_CONST_02, BC.PUSH_LIT_CONST_03, BC.PUSH_LIT_CONST_04, BC.PUSH_LIT_CONST_05, BC.PUSH_LIT_CONST_06, BC.PUSH_LIT_CONST_07, //
                         BC.PUSH_LIT_CONST_08, BC.PUSH_LIT_CONST_09, BC.PUSH_LIT_CONST_0A, BC.PUSH_LIT_CONST_0B, BC.PUSH_LIT_CONST_0C, BC.PUSH_LIT_CONST_0D, BC.PUSH_LIT_CONST_0E, BC.PUSH_LIT_CONST_0F, //
                         BC.PUSH_LIT_CONST_10, BC.PUSH_LIT_CONST_11, BC.PUSH_LIT_CONST_12, BC.PUSH_LIT_CONST_13, BC.PUSH_LIT_CONST_14, BC.PUSH_LIT_CONST_15, BC.PUSH_LIT_CONST_16, BC.PUSH_LIT_CONST_17, //
                         BC.PUSH_LIT_CONST_18, BC.PUSH_LIT_CONST_19, BC.PUSH_LIT_CONST_1A, BC.PUSH_LIT_CONST_1B, BC.PUSH_LIT_CONST_1C, BC.PUSH_LIT_CONST_1D, BC.PUSH_LIT_CONST_1E, BC.PUSH_LIT_CONST_1F: {
-                        push(frame, sp++, getAndResolveLiteral(currentPC, b & 0x1F));
+                        push(frame, currentSP, getAndResolveLiteral(currentPC, b & 0x1F));
                         break;
                     }
                     case BC.PUSH_TEMP_VAR_0, BC.PUSH_TEMP_VAR_1, BC.PUSH_TEMP_VAR_2, BC.PUSH_TEMP_VAR_3, BC.PUSH_TEMP_VAR_4, BC.PUSH_TEMP_VAR_5, BC.PUSH_TEMP_VAR_6, BC.PUSH_TEMP_VAR_7, //
                         BC.PUSH_TEMP_VAR_8, BC.PUSH_TEMP_VAR_9, BC.PUSH_TEMP_VAR_A, BC.PUSH_TEMP_VAR_B: {
-                        pushFollowed(frame, currentPC, sp++, getTemp(frame, b & 0xF));
+                        pushFollowed(frame, currentPC, currentSP, getTemp(frame, b & 0xF));
                         break;
                     }
                     case BC.PUSH_RECEIVER: {
-                        pushFollowed(frame, currentPC, sp++, FrameAccess.getReceiver(frame));
+                        pushFollowed(frame, currentPC, currentSP, FrameAccess.getReceiver(frame));
                         break;
                     }
                     case BC.PUSH_CONSTANT_TRUE: {
-                        push(frame, sp++, BooleanObject.TRUE);
+                        push(frame, currentSP, BooleanObject.TRUE);
                         break;
                     }
                     case BC.PUSH_CONSTANT_FALSE: {
-                        push(frame, sp++, BooleanObject.FALSE);
+                        push(frame, currentSP, BooleanObject.FALSE);
                         break;
                     }
                     case BC.PUSH_CONSTANT_NIL: {
-                        push(frame, sp++, NilObject.SINGLETON);
+                        push(frame, currentSP, NilObject.SINGLETON);
                         break;
                     }
                     case BC.PUSH_CONSTANT_ZERO: {
-                        push(frame, sp++, 0L);
+                        push(frame, currentSP, 0L);
                         break;
                     }
                     case BC.PUSH_CONSTANT_ONE: {
-                        push(frame, sp++, 1L);
+                        push(frame, currentSP, 1L);
                         break;
                     }
                     case BC.EXT_PUSH_PSEUDO_VARIABLE: {
                         if (extB == 0) {
-                            push(frame, sp++, getOrCreateContext(frame, currentPC));
+                            push(frame, currentSP, getOrCreateContext(frame, currentPC));
                         } else {
                             throw unknownBytecode();
                         }
                         break;
                     }
                     case BC.DUPLICATE_TOP: {
-                        pushFollowed(frame, currentPC, sp, top(frame, sp));
-                        sp++;
+                        pushFollowed(frame, currentPC, currentSP, top(frame, currentSP));
                         break;
                     }
                     case BC.RETURN_RECEIVER: {
-                        returnValue = handleReturn(frame, currentPC, pc, sp, FrameAccess.getReceiver(frame),
+                        returnValue = handleReturn(frame, currentPC, pc, currentSP, FrameAccess.getReceiver(frame),
                                         CompilerDirectives.inCompiledCode() && CompilerDirectives.hasNextTier() ? loopCounter.value : counter);
                         pc = LOCAL_RETURN_PC;
                         break;
                     }
                     case BC.RETURN_TRUE: {
-                        returnValue = handleReturn(frame, currentPC, pc, sp, BooleanObject.TRUE,
+                        returnValue = handleReturn(frame, currentPC, pc, currentSP, BooleanObject.TRUE,
                                         CompilerDirectives.inCompiledCode() && CompilerDirectives.hasNextTier() ? loopCounter.value : counter);
                         pc = LOCAL_RETURN_PC;
                         break;
                     }
                     case BC.RETURN_FALSE: {
-                        returnValue = handleReturn(frame, currentPC, pc, sp, BooleanObject.FALSE,
+                        returnValue = handleReturn(frame, currentPC, pc, currentSP, BooleanObject.FALSE,
                                         CompilerDirectives.inCompiledCode() && CompilerDirectives.hasNextTier() ? loopCounter.value : counter);
                         pc = LOCAL_RETURN_PC;
                         break;
                     }
                     case BC.RETURN_NIL: {
-                        returnValue = handleReturn(frame, currentPC, pc, sp, NilObject.SINGLETON,
+                        returnValue = handleReturn(frame, currentPC, pc, currentSP, NilObject.SINGLETON,
                                         CompilerDirectives.inCompiledCode() && CompilerDirectives.hasNextTier() ? loopCounter.value : counter);
                         pc = LOCAL_RETURN_PC;
                         break;
                     }
                     case BC.RETURN_TOP_FROM_METHOD: {
-                        returnValue = handleReturn(frame, currentPC, pc, sp, top(frame, sp),
+                        returnValue = handleReturn(frame, currentPC, pc, currentSP, top(frame, currentSP),
                                         CompilerDirectives.inCompiledCode() && CompilerDirectives.hasNextTier() ? loopCounter.value : counter);
                         pc = LOCAL_RETURN_PC;
                         break;
@@ -422,7 +428,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
                         break;
                     }
                     case BC.RETURN_TOP_FROM_BLOCK: {
-                        returnValue = handleReturnFromBlock(frame, currentPC, top(frame, sp),
+                        returnValue = handleReturnFromBlock(frame, currentPC, top(frame, currentSP),
                                         CompilerDirectives.inCompiledCode() && CompilerDirectives.hasNextTier() ? loopCounter.value : counter);
                         pc = LOCAL_RETURN_PC;
                         break;
@@ -432,8 +438,8 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
                         break;
                     }
                     case BC.BYTECODE_PRIM_ADD: {
-                        final Object arg = pop(frame, --sp);
-                        final Object receiver = popReceiver(frame, --sp);
+                        final Object arg = pop(frame, currentSP - 1);
+                        final Object receiver = popReceiver(frame, currentSP - 2);
                         final byte state = profiles[currentPC];
                         final Object result;
                         if (receiver instanceof final Long lhs && arg instanceof final Long rhs) {
@@ -452,16 +458,16 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
                             result = PrimSmallFloatAddNode.doDouble(lhs, rhs);
                         } else {
                             enter(currentPC, state, BRANCH1);
-                            externalizePCAndSP(frame, pc, sp);
+                            externalizePCAndSP(frame, pc, currentSP - 2);
                             result = send(frame, currentPC, receiver, arg);
                             pc = internalizePC(frame, pc);
                         }
-                        push(frame, sp++, result);
+                        push(frame, currentSP - 2, result);
                         break;
                     }
                     case BC.BYTECODE_PRIM_SUBTRACT: {
-                        final Object arg = pop(frame, --sp);
-                        final Object receiver = popReceiver(frame, --sp);
+                        final Object arg = pop(frame, currentSP - 1);
+                        final Object receiver = popReceiver(frame, currentSP - 2);
                         final byte state = profiles[currentPC];
                         final Object result;
                         if (receiver instanceof final Long lhs && arg instanceof final Long rhs) {
@@ -480,16 +486,16 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
                             result = PrimSmallFloatSubtractNode.doDouble(lhs, rhs);
                         } else {
                             enter(currentPC, state, BRANCH1);
-                            externalizePCAndSP(frame, pc, sp);
+                            externalizePCAndSP(frame, pc, currentSP - 2);
                             result = send(frame, currentPC, receiver, arg);
                             pc = internalizePC(frame, pc);
                         }
-                        push(frame, sp++, result);
+                        push(frame, currentSP - 2, result);
                         break;
                     }
                     case BC.BYTECODE_PRIM_LESS_THAN: {
-                        final Object arg = pop(frame, --sp);
-                        final Object receiver = popReceiver(frame, --sp);
+                        final Object arg = pop(frame, currentSP - 1);
+                        final Object receiver = popReceiver(frame, currentSP - 2);
                         final byte state = profiles[currentPC];
                         final Object result;
                         if (receiver instanceof final Long lhs && arg instanceof final Long rhs) {
@@ -500,16 +506,16 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
                             result = PrimSmallFloatLessThanNode.doDouble(lhs, rhs);
                         } else {
                             enter(currentPC, state, BRANCH1);
-                            externalizePCAndSP(frame, pc, sp);
+                            externalizePCAndSP(frame, pc, currentSP - 2);
                             result = send(frame, currentPC, receiver, arg);
                             pc = internalizePC(frame, pc);
                         }
-                        push(frame, sp++, result);
+                        push(frame, currentSP - 2, result);
                         break;
                     }
                     case BC.BYTECODE_PRIM_GREATER_THAN: {
-                        final Object arg = pop(frame, --sp);
-                        final Object receiver = popReceiver(frame, --sp);
+                        final Object arg = pop(frame, currentSP - 1);
+                        final Object receiver = popReceiver(frame, currentSP - 2);
                         final byte state = profiles[currentPC];
                         final Object result;
                         if (receiver instanceof final Long lhs && arg instanceof final Long rhs) {
@@ -520,16 +526,16 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
                             result = PrimSmallFloatGreaterThanNode.doDouble(lhs, rhs);
                         } else {
                             enter(currentPC, state, BRANCH1);
-                            externalizePCAndSP(frame, pc, sp);
+                            externalizePCAndSP(frame, pc, currentSP - 2);
                             result = send(frame, currentPC, receiver, arg);
                             pc = internalizePC(frame, pc);
                         }
-                        push(frame, sp++, result);
+                        push(frame, currentSP - 2, result);
                         break;
                     }
                     case BC.BYTECODE_PRIM_LESS_OR_EQUAL: {
-                        final Object arg = pop(frame, --sp);
-                        final Object receiver = popReceiver(frame, --sp);
+                        final Object arg = pop(frame, currentSP - 1);
+                        final Object receiver = popReceiver(frame, currentSP - 2);
                         final byte state = profiles[currentPC];
                         final Object result;
                         if (receiver instanceof final Long lhs && arg instanceof final Long rhs) {
@@ -540,16 +546,16 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
                             result = PrimSmallFloatLessOrEqualNode.doDouble(lhs, rhs);
                         } else {
                             enter(currentPC, state, BRANCH1);
-                            externalizePCAndSP(frame, pc, sp);
+                            externalizePCAndSP(frame, pc, currentSP - 2);
                             result = send(frame, currentPC, receiver, arg);
                             pc = internalizePC(frame, pc);
                         }
-                        push(frame, sp++, result);
+                        push(frame, currentSP - 2, result);
                         break;
                     }
                     case BC.BYTECODE_PRIM_GREATER_OR_EQUAL: {
-                        final Object arg = pop(frame, --sp);
-                        final Object receiver = popReceiver(frame, --sp);
+                        final Object arg = pop(frame, currentSP - 1);
+                        final Object receiver = popReceiver(frame, currentSP - 2);
                         final byte state = profiles[currentPC];
                         final Object result;
                         if (receiver instanceof final Long lhs && arg instanceof final Long rhs) {
@@ -560,16 +566,16 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
                             result = PrimSmallFloatGreaterOrEqualNode.doDouble(lhs, rhs);
                         } else {
                             enter(currentPC, state, BRANCH1);
-                            externalizePCAndSP(frame, pc, sp);
+                            externalizePCAndSP(frame, pc, currentSP - 2);
                             result = send(frame, currentPC, receiver, arg);
                             pc = internalizePC(frame, pc);
                         }
-                        push(frame, sp++, result);
+                        push(frame, currentSP - 2, result);
                         break;
                     }
                     case BC.BYTECODE_PRIM_EQUAL: {
-                        final Object arg = pop(frame, --sp);
-                        final Object receiver = popReceiver(frame, --sp);
+                        final Object arg = pop(frame, currentSP - 1);
+                        final Object receiver = popReceiver(frame, currentSP - 2);
                         final byte state = profiles[currentPC];
                         final Object result;
                         if (receiver instanceof final Long lhs && arg instanceof final Long rhs) {
@@ -580,16 +586,16 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
                             result = PrimSmallFloatEqualNode.doDouble(lhs, rhs);
                         } else {
                             enter(currentPC, state, BRANCH1);
-                            externalizePCAndSP(frame, pc, sp);
+                            externalizePCAndSP(frame, pc, currentSP - 2);
                             result = send(frame, currentPC, receiver, arg);
                             pc = internalizePC(frame, pc);
                         }
-                        push(frame, sp++, result);
+                        push(frame, currentSP - 2, result);
                         break;
                     }
                     case BC.BYTECODE_PRIM_NOT_EQUAL: {
-                        final Object arg = pop(frame, --sp);
-                        final Object receiver = popReceiver(frame, --sp);
+                        final Object arg = pop(frame, currentSP - 1);
+                        final Object receiver = popReceiver(frame, currentSP - 2);
                         final byte state = profiles[currentPC];
                         final Object result;
                         if (receiver instanceof final Long lhs && arg instanceof final Long rhs) {
@@ -600,16 +606,16 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
                             result = PrimSmallFloatNotEqualNode.doDouble(lhs, rhs);
                         } else {
                             enter(currentPC, state, BRANCH1);
-                            externalizePCAndSP(frame, pc, sp);
+                            externalizePCAndSP(frame, pc, currentSP - 2);
                             result = send(frame, currentPC, receiver, arg);
                             pc = internalizePC(frame, pc);
                         }
-                        push(frame, sp++, result);
+                        push(frame, currentSP - 2, result);
                         break;
                     }
                     case BC.BYTECODE_PRIM_BIT_AND: {
-                        final Object arg = pop(frame, --sp);
-                        final Object receiver = popReceiver(frame, --sp);
+                        final Object arg = pop(frame, currentSP - 1);
+                        final Object receiver = popReceiver(frame, currentSP - 2);
                         final byte state = profiles[currentPC];
                         final Object result;
                         if (receiver instanceof final Long lhs && arg instanceof final Long rhs) {
@@ -617,16 +623,16 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
                             result = PrimBitAndNode.doLong(lhs, rhs);
                         } else {
                             enter(currentPC, state, BRANCH1);
-                            externalizePCAndSP(frame, pc, sp);
+                            externalizePCAndSP(frame, pc, currentSP - 2);
                             result = send(frame, currentPC, receiver, arg);
                             pc = internalizePC(frame, pc);
                         }
-                        push(frame, sp++, result);
+                        push(frame, currentSP - 2, result);
                         break;
                     }
                     case BC.BYTECODE_PRIM_BIT_OR: {
-                        final Object arg = pop(frame, --sp);
-                        final Object receiver = popReceiver(frame, --sp);
+                        final Object arg = pop(frame, currentSP - 1);
+                        final Object receiver = popReceiver(frame, currentSP - 2);
                         final byte state = profiles[currentPC];
                         final Object result;
                         if (receiver instanceof final Long lhs && arg instanceof final Long rhs) {
@@ -634,36 +640,36 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
                             result = PrimBitOrNode.doLong(lhs, rhs);
                         } else {
                             enter(currentPC, state, BRANCH1);
-                            externalizePCAndSP(frame, pc, sp);
+                            externalizePCAndSP(frame, pc, currentSP - 2);
                             result = send(frame, currentPC, receiver, arg);
                             pc = internalizePC(frame, pc);
                         }
-                        push(frame, sp++, result);
+                        push(frame, currentSP - 2, result);
                         break;
                     }
                     case BC.BYTECODE_PRIM_IDENTICAL: {
-                        final Object arg = pop(frame, --sp);
-                        final Object receiver = popReceiver(frame, --sp);
-                        push(frame, sp++, uncheckedCast(data[currentPC], SqueakObjectIdentityNodeGen.class).execute(this, receiver, arg));
+                        final Object arg = pop(frame, currentSP - 1);
+                        final Object receiver = popReceiver(frame, currentSP - 2);
+                        push(frame, currentSP - 2, uncheckedCast(data[currentPC], SqueakObjectIdentityNodeGen.class).execute(this, receiver, arg));
                         break;
                     }
                     case BC.BYTECODE_PRIM_CLASS: {
-                        final Object receiver = popReceiver(frame, --sp);
-                        push(frame, sp++, uncheckedCast(data[currentPC], SqueakObjectClassNodeGen.class).executeLookup(this, receiver));
+                        final Object receiver = popReceiver(frame, currentSP - 1);
+                        push(frame, currentSP - 1, uncheckedCast(data[currentPC], SqueakObjectClassNodeGen.class).executeLookup(this, receiver));
                         break;
                     }
                     case BC.BYTECODE_PRIM_NOT_IDENTICAL: {
-                        final Object arg = pop(frame, --sp);
-                        final Object receiver = popReceiver(frame, --sp);
-                        push(frame, sp++, !uncheckedCast(data[currentPC], SqueakObjectIdentityNodeGen.class).execute(this, receiver, arg));
+                        final Object arg = pop(frame, currentSP - 1);
+                        final Object receiver = popReceiver(frame, currentSP - 2);
+                        push(frame, currentSP - 2, !uncheckedCast(data[currentPC], SqueakObjectIdentityNodeGen.class).execute(this, receiver, arg));
                         break;
                     }
                     case BC.BYTECODE_PRIM_SIZE, BC.BYTECODE_PRIM_NEXT, BC.BYTECODE_PRIM_AT_END, BC.BYTECODE_PRIM_VALUE, BC.BYTECODE_PRIM_NEW, BC.BYTECODE_PRIM_POINT_X, BC.BYTECODE_PRIM_POINT_Y, //
                         BC.SEND_LIT_SEL0_0, BC.SEND_LIT_SEL0_1, BC.SEND_LIT_SEL0_2, BC.SEND_LIT_SEL0_3, BC.SEND_LIT_SEL0_4, BC.SEND_LIT_SEL0_5, BC.SEND_LIT_SEL0_6, BC.SEND_LIT_SEL0_7, //
                         BC.SEND_LIT_SEL0_8, BC.SEND_LIT_SEL0_9, BC.SEND_LIT_SEL0_A, BC.SEND_LIT_SEL0_B, BC.SEND_LIT_SEL0_C, BC.SEND_LIT_SEL0_D, BC.SEND_LIT_SEL0_E, BC.SEND_LIT_SEL0_F: {
-                        final Object receiver = popReceiver(frame, --sp);
-                        externalizePCAndSP(frame, pc, sp);
-                        push(frame, sp++, send(frame, currentPC, receiver));
+                        final Object receiver = popReceiver(frame, currentSP - 1);
+                        externalizePCAndSP(frame, pc, currentSP - 1);
+                        push(frame, currentSP - 1, send(frame, currentPC, receiver));
                         pc = internalizePC(frame, pc);
                         break;
                     }
@@ -671,21 +677,21 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
                         BC.BYTECODE_PRIM_DIV, BC.BYTECODE_PRIM_AT, BC.BYTECODE_PRIM_NEXT_PUT, BC.BYTECODE_PRIM_VALUE_WITH_ARG, BC.BYTECODE_PRIM_DO, BC.BYTECODE_PRIM_NEW_WITH_ARG, //
                         BC.SEND_LIT_SEL1_0, BC.SEND_LIT_SEL1_1, BC.SEND_LIT_SEL1_2, BC.SEND_LIT_SEL1_3, BC.SEND_LIT_SEL1_4, BC.SEND_LIT_SEL1_5, BC.SEND_LIT_SEL1_6, BC.SEND_LIT_SEL1_7, //
                         BC.SEND_LIT_SEL1_8, BC.SEND_LIT_SEL1_9, BC.SEND_LIT_SEL1_A, BC.SEND_LIT_SEL1_B, BC.SEND_LIT_SEL1_C, BC.SEND_LIT_SEL1_D, BC.SEND_LIT_SEL1_E, BC.SEND_LIT_SEL1_F: {
-                        final Object arg = pop(frame, --sp);
-                        final Object receiver = popReceiver(frame, --sp);
-                        externalizePCAndSP(frame, pc, sp);
-                        push(frame, sp++, send(frame, currentPC, receiver, arg));
+                        final Object arg = pop(frame, currentSP - 1);
+                        final Object receiver = popReceiver(frame, currentSP - 2);
+                        externalizePCAndSP(frame, pc, currentSP - 2);
+                        push(frame, currentSP - 2, send(frame, currentPC, receiver, arg));
                         pc = internalizePC(frame, pc);
                         break;
                     }
                     case BC.BYTECODE_PRIM_AT_PUT, //
                         BC.SEND_LIT_SEL2_0, BC.SEND_LIT_SEL2_1, BC.SEND_LIT_SEL2_2, BC.SEND_LIT_SEL2_3, BC.SEND_LIT_SEL2_4, BC.SEND_LIT_SEL2_5, BC.SEND_LIT_SEL2_6, BC.SEND_LIT_SEL2_7, //
                         BC.SEND_LIT_SEL2_8, BC.SEND_LIT_SEL2_9, BC.SEND_LIT_SEL2_A, BC.SEND_LIT_SEL2_B, BC.SEND_LIT_SEL2_C, BC.SEND_LIT_SEL2_D, BC.SEND_LIT_SEL2_E, BC.SEND_LIT_SEL2_F: {
-                        final Object arg2 = pop(frame, --sp);
-                        final Object arg1 = pop(frame, --sp);
-                        final Object receiver = popReceiver(frame, --sp);
-                        externalizePCAndSP(frame, pc, sp);
-                        push(frame, sp++, send(frame, currentPC, receiver, arg1, arg2));
+                        final Object arg2 = pop(frame, currentSP - 1);
+                        final Object arg1 = pop(frame, currentSP - 2);
+                        final Object receiver = popReceiver(frame, currentSP - 3);
+                        externalizePCAndSP(frame, pc, currentSP - 3);
+                        push(frame, currentSP - 3, send(frame, currentPC, receiver, arg1, arg2));
                         pc = internalizePC(frame, pc);
                         break;
                     }
@@ -702,7 +708,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
                                 if (CompilerDirectives.injectBranchProbability(LoopCounter.CHECK_LOOP_PROBABILITY, counter >= LoopCounter.CHECK_LOOP_STRIDE)) {
                                     LoopNode.reportLoopCount(this, counter);
                                     if (CompilerDirectives.inInterpreter() && !isBlock && BytecodeOSRNode.pollOSRBackEdge(this, counter)) {
-                                        final Object osrReturnValue = BytecodeOSRNode.tryOSR(this, ((sp & 0xFF) << 16) | pc, null, null, frame);
+                                        final Object osrReturnValue = BytecodeOSRNode.tryOSR(this, ((currentSP & 0xFF) << 16) | pc, null, null, frame);
                                         if (osrReturnValue != null) {
                                             assert !FrameAccess.hasModifiedSender(frame);
                                             FrameAccess.terminateFrame(frame);
@@ -726,7 +732,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
                         break;
                     }
                     case BC.SHORT_CJUMP_TRUE_0, BC.SHORT_CJUMP_TRUE_1, BC.SHORT_CJUMP_TRUE_2, BC.SHORT_CJUMP_TRUE_3, BC.SHORT_CJUMP_TRUE_4, BC.SHORT_CJUMP_TRUE_5, BC.SHORT_CJUMP_TRUE_6, BC.SHORT_CJUMP_TRUE_7: {
-                        final Object stackValue = pop(frame, --sp);
+                        final Object stackValue = pop(frame, currentSP - 1);
                         if (stackValue instanceof final Boolean condition) {
                             if (uncheckedCast(data[currentPC], CountingConditionProfile.class).profile(condition)) {
                                 pc += calculateShortOffset(b);
@@ -737,7 +743,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
                         break;
                     }
                     case BC.SHORT_CJUMP_FALSE_0, BC.SHORT_CJUMP_FALSE_1, BC.SHORT_CJUMP_FALSE_2, BC.SHORT_CJUMP_FALSE_3, BC.SHORT_CJUMP_FALSE_4, BC.SHORT_CJUMP_FALSE_5, BC.SHORT_CJUMP_FALSE_6, BC.SHORT_CJUMP_FALSE_7: {
-                        final Object stackValue = pop(frame, --sp);
+                        final Object stackValue = pop(frame, currentSP - 1);
                         if (stackValue instanceof final Boolean condition) {
                             if (uncheckedCast(data[currentPC], CountingConditionProfile.class).profile(!condition)) {
                                 pc += calculateShortOffset(b);
@@ -748,15 +754,15 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
                         break;
                     }
                     case BC.POP_INTO_RCVR_VAR_0, BC.POP_INTO_RCVR_VAR_1, BC.POP_INTO_RCVR_VAR_2, BC.POP_INTO_RCVR_VAR_3, BC.POP_INTO_RCVR_VAR_4, BC.POP_INTO_RCVR_VAR_5, BC.POP_INTO_RCVR_VAR_6, BC.POP_INTO_RCVR_VAR_7: {
-                        uncheckedCast(data[currentPC], SqueakObjectAtPut0Node.class).execute(this, FrameAccess.getReceiver(frame), b & 7, pop(frame, --sp));
+                        uncheckedCast(data[currentPC], SqueakObjectAtPut0Node.class).execute(this, FrameAccess.getReceiver(frame), b & 7, pop(frame, currentSP - 1));
                         break;
                     }
                     case BC.POP_INTO_TEMP_VAR_0, BC.POP_INTO_TEMP_VAR_1, BC.POP_INTO_TEMP_VAR_2, BC.POP_INTO_TEMP_VAR_3, BC.POP_INTO_TEMP_VAR_4, BC.POP_INTO_TEMP_VAR_5, BC.POP_INTO_TEMP_VAR_6, BC.POP_INTO_TEMP_VAR_7: {
-                        setStackValue(frame, b & 7, pop(frame, --sp));
+                        setStackValue(frame, b & 7, pop(frame, currentSP - 1));
                         break;
                     }
                     case BC.POP_STACK: {
-                        pop(frame, --sp);
+                        pop(frame, currentSP - 1);
                         break;
                     }
                     /* 2 byte bytecodes */
@@ -771,23 +777,23 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
                         break;
                     }
                     case BC.EXT_PUSH_RECEIVER_VARIABLE: {
-                        pushFollowed(frame, currentPC, sp++,
+                        pushFollowed(frame, currentPC, currentSP,
                                         uncheckedCast(data[currentPC], SqueakObjectAt0NodeGen.class).execute(this, FrameAccess.getReceiver(frame), getByteExtended(bc, pc++, extA)));
                         extA = 0;
                         break;
                     }
                     case BC.EXT_PUSH_LITERAL_VARIABLE: {
-                        push(frame, sp++, readLiteralVariable(currentPC, getByteExtended(bc, pc++, extA)));
+                        push(frame, currentSP, readLiteralVariable(currentPC, getByteExtended(bc, pc++, extA)));
                         extA = 0;
                         break;
                     }
                     case BC.EXT_PUSH_LITERAL: {
-                        push(frame, sp++, getAndResolveLiteral(currentPC, getByteExtended(bc, pc++, extA)));
+                        push(frame, currentSP, getAndResolveLiteral(currentPC, getByteExtended(bc, pc++, extA)));
                         extA = 0;
                         break;
                     }
                     case BC.LONG_PUSH_TEMPORARY_VARIABLE: {
-                        pushFollowed(frame, currentPC, sp++, getTemp(frame, getUnsignedInt(bc, pc++)));
+                        pushFollowed(frame, currentPC, currentSP, getTemp(frame, getUnsignedInt(bc, pc++)));
                         break;
                     }
                     case BC.PUSH_NEW_ARRAY: {
@@ -795,32 +801,32 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
                         final int arraySize = param & 127;
                         final Object[] values;
                         if (param < 0) {
-                            values = popN(frame, sp, arraySize);
-                            sp -= arraySize;
+                            values = popN(frame, currentSP, arraySize);
+                            push(frame, currentSP - arraySize, ArrayObject.createWithStorage(image.arrayClass, values));
                         } else {
                             values = ArrayUtils.withAll(arraySize, NilObject.SINGLETON);
+                            push(frame, currentSP, ArrayObject.createWithStorage(image.arrayClass, values));
                         }
-                        push(frame, sp++, ArrayObject.createWithStorage(image.arrayClass, values));
                         break;
                     }
                     case BC.EXT_PUSH_INTEGER: {
-                        push(frame, sp++, (long) getByteExtended(bc, pc++, extB));
+                        push(frame, currentSP, (long) getByteExtended(bc, pc++, extB));
                         extB = 0;
                         break;
                     }
                     case BC.EXT_PUSH_CHARACTER: {
-                        push(frame, sp++, CharacterObject.valueOf(getByteExtended(bc, pc++, extA)));
+                        push(frame, currentSP, CharacterObject.valueOf(getByteExtended(bc, pc++, extA)));
                         extA = 0;
                         break;
                     }
                     case BC.EXT_SEND: {
                         final int byte1 = getUnsignedInt(bc, pc++);
                         final int numArgs = (byte1 & 7) + (extB << 3);
-                        final Object[] arguments = popN(frame, sp, numArgs);
-                        sp -= numArgs;
-                        final Object receiver = popReceiver(frame, --sp);
-                        externalizePCAndSP(frame, pc, sp);
-                        push(frame, sp++, sendNary(frame, currentPC, receiver, arguments));
+                        final Object[] arguments = popN(frame, currentSP, numArgs);
+                        final int theSP = currentSP - numArgs - 1;
+                        final Object receiver = popReceiver(frame, theSP);
+                        externalizePCAndSP(frame, pc, theSP);
+                        push(frame, theSP, sendNary(frame, currentPC, receiver, arguments));
                         pc = internalizePC(frame, pc);
                         extA = extB = 0;
                         break;
@@ -828,22 +834,27 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
                     case BC.EXT_SEND_SUPER: {
                         final boolean isDirected;
                         final int extBValue;
+                        final int theCurrentSP;
+                        final ClassObject lookupClass;
                         if (extB >= 64) {
                             isDirected = true;
                             extBValue = extB & 63;
+                            theCurrentSP = currentSP - 1;
+                            lookupClass =  ((ClassObject) pop(frame, theCurrentSP)).getResolvedSuperclass();
                         } else {
                             isDirected = false;
                             extBValue = extB;
+                            theCurrentSP = currentSP;
+                            lookupClass = null;
                         }
                         final int byte1 = getUnsignedInt(bc, pc++);
                         final int numArgs = (byte1 & 7) + (extBValue << 3);
-                        final ClassObject lookupClass = isDirected ? ((ClassObject) pop(frame, --sp)).getResolvedSuperclass() : null;
-                        final Object[] arguments = popN(frame, sp, numArgs);
-                        sp -= numArgs;
-                        final Object receiver = popReceiver(frame, --sp);
-                        externalizePCAndSP(frame, pc, sp);
+                        final Object[] arguments = popN(frame, theCurrentSP, numArgs);
+                        final int theSP = theCurrentSP - numArgs - 1;
+                        final Object receiver = popReceiver(frame, theSP);
+                        externalizePCAndSP(frame, pc, theSP);
                         CompilerAsserts.partialEvaluationConstant(isDirected);
-                        pushFollowed(frame, currentPC, sp++, sendSuper(frame, isDirected, currentPC, lookupClass, receiver, arguments));
+                        pushFollowed(frame, currentPC, theSP, sendSuper(frame, isDirected, currentPC, lookupClass, receiver, arguments));
                         pc = internalizePC(frame, pc);
                         extA = extB = 0;
                         break;
@@ -861,7 +872,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
                                 if (CompilerDirectives.injectBranchProbability(LoopCounter.CHECK_LOOP_PROBABILITY, counter >= LoopCounter.CHECK_LOOP_STRIDE)) {
                                     LoopNode.reportLoopCount(this, counter);
                                     if (CompilerDirectives.inInterpreter() && !isBlock && BytecodeOSRNode.pollOSRBackEdge(this, counter)) {
-                                        final Object osrReturnValue = BytecodeOSRNode.tryOSR(this, ((sp & 0xFF) << 16) | pc, null, null, frame);
+                                        final Object osrReturnValue = BytecodeOSRNode.tryOSR(this, ((currentSP & 0xFF) << 16) | pc, null, null, frame);
                                         if (osrReturnValue != null) {
                                             assert !FrameAccess.hasModifiedSender(frame);
                                             FrameAccess.terminateFrame(frame);
@@ -886,7 +897,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
                         break;
                     }
                     case BC.EXT_JUMP_IF_TRUE: {
-                        final Object stackValue = pop(frame, --sp);
+                        final Object stackValue = pop(frame, currentSP - 1);
                         final int offset = getByteExtended(bc, pc++, extB);
                         if (stackValue instanceof final Boolean condition) {
                             if (uncheckedCast(data[currentPC], CountingConditionProfile.class).profile(condition)) {
@@ -899,7 +910,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
                         break;
                     }
                     case BC.EXT_JUMP_IF_FALSE: {
-                        final Object stackValue = pop(frame, --sp);
+                        final Object stackValue = pop(frame, currentSP - 1);
                         final int offset = getByteExtended(bc, pc++, extB);
                         if (stackValue instanceof final Boolean condition) {
                             if (uncheckedCast(data[currentPC], CountingConditionProfile.class).profile(!condition)) {
@@ -913,42 +924,42 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
                     }
                     case BC.EXT_STORE_AND_POP_RECEIVER_VARIABLE: {
                         final int index = getByteExtended(bc, pc++, extA);
-                        uncheckedCast(data[currentPC], SqueakObjectAtPut0Node.class).execute(this, FrameAccess.getReceiver(frame), index, pop(frame, --sp));
+                        uncheckedCast(data[currentPC], SqueakObjectAtPut0Node.class).execute(this, FrameAccess.getReceiver(frame), index, pop(frame, currentSP - 1));
                         extA = 0;
                         break;
                     }
                     case BC.EXT_STORE_AND_POP_LITERAL_VARIABLE: {
                         final int index = getByteExtended(bc, pc++, extA);
-                        uncheckedCast(data[currentPC], SqueakObjectAtPut0Node.class).execute(this, getAndResolveLiteral(currentPC, index), ASSOCIATION.VALUE, pop(frame, --sp));
+                        uncheckedCast(data[currentPC], SqueakObjectAtPut0Node.class).execute(this, getAndResolveLiteral(currentPC, index), ASSOCIATION.VALUE, pop(frame, currentSP - 1));
                         extA = 0;
                         break;
                     }
                     case BC.LONG_STORE_AND_POP_TEMPORARY_VARIABLE: {
-                        setStackValue(frame, getByte(bc, pc++), pop(frame, --sp));
+                        setStackValue(frame, getByte(bc, pc++), pop(frame, currentSP - 1));
                         break;
                     }
                     case BC.EXT_STORE_RECEIVER_VARIABLE: {
                         final int index = getByteExtended(bc, pc++, extA);
-                        uncheckedCast(data[currentPC], SqueakObjectAtPut0Node.class).execute(this, FrameAccess.getReceiver(frame), index, top(frame, sp));
+                        uncheckedCast(data[currentPC], SqueakObjectAtPut0Node.class).execute(this, FrameAccess.getReceiver(frame), index, top(frame, currentSP));
                         extA = 0;
                         break;
                     }
                     case BC.EXT_STORE_LITERAL_VARIABLE: {
                         final int index = getByteExtended(bc, pc++, extA);
-                        uncheckedCast(data[currentPC], SqueakObjectAtPut0Node.class).execute(this, getAndResolveLiteral(currentPC, index), ASSOCIATION.VALUE, top(frame, sp));
+                        uncheckedCast(data[currentPC], SqueakObjectAtPut0Node.class).execute(this, getAndResolveLiteral(currentPC, index), ASSOCIATION.VALUE, top(frame, currentSP));
                         extA = 0;
                         break;
                     }
                     case BC.LONG_STORE_TEMPORARY_VARIABLE: {
-                        setStackValue(frame, getByte(bc, pc++), top(frame, sp));
+                        setStackValue(frame, getByte(bc, pc++), top(frame, currentSP));
                         break;
                     }
                     /* 3 byte bytecodes */
                     case BC.CALL_PRIMITIVE: {
                         pc += 2;
                         if (getByte(bc, pc) == BC.LONG_STORE_TEMPORARY_VARIABLE) {
-                            assert sp > 0;
-                            setStackValue(frame, sp - 1, getErrorObject());
+                            assert currentSP > 0;
+                            setStackValue(frame, currentSP - 1, getErrorObject());
                         }
                         break;
                     }
@@ -959,22 +970,22 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
                         CompilerAsserts.partialEvaluationConstant(block);
                         final byte byteB = getByte(bc, pc++);
                         final int numCopied = Byte.toUnsignedInt(byteB) & 63;
-                        final Object[] copiedValues = popN(frame, sp, numCopied);
-                        sp -= numCopied;
                         final boolean ignoreContext = (byteB & 0x40) != 0;
                         final boolean receiverOnStack = (byteB & 0x80) != 0;
+                        final Object[] copiedValues = popN(frame, currentSP, numCopied);
+                        final int theSP = receiverOnStack ? currentSP - numCopied - 1 : currentSP - numCopied;
                         final ContextObject outerContext = ignoreContext ? null : getOrCreateContext(frame, currentPC);
-                        final Object receiver = receiverOnStack ? pop(frame, --sp) : FrameAccess.getReceiver(frame);
-                        push(frame, sp++, new BlockClosureObject(false, block, block.getNumArgs(), copiedValues, receiver, outerContext));
+                        final Object receiver = receiverOnStack ? pop(frame, theSP) : FrameAccess.getReceiver(frame);
+                        push(frame, theSP, new BlockClosureObject(false, block, block.getNumArgs(), copiedValues, receiver, outerContext));
                         extA = 0;
                         break;
                     }
                     case BC.EXT_PUSH_CLOSURE: {
                         final int byteA = getUnsignedInt(bc, pc++);
                         final int numCopied = (byteA >> 3 & 0x7) + (extA >> 4) * 8;
-                        final Object[] copiedValues = popN(frame, sp, numCopied);
-                        sp -= numCopied;
-                        push(frame, sp++, createBlockClosure(frame, uncheckedCast(data[currentPC], CompiledCodeObject.class), copiedValues, getOrCreateContext(frame, currentPC)));
+                        final Object[] copiedValues = popN(frame, currentSP, numCopied);
+                        final int theSP = currentSP - numCopied;
+                        push(frame, theSP, createBlockClosure(frame, uncheckedCast(data[currentPC], CompiledCodeObject.class), copiedValues, getOrCreateContext(frame, currentPC)));
                         final int blockSize = getByteExtended(bc, pc++, extB);
                         pc += blockSize;
                         extA = extB = 0;
@@ -983,19 +994,19 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
                     case BC.PUSH_REMOTE_TEMP_LONG: {
                         final int remoteTempIndex = getUnsignedInt(bc, pc++);
                         final int tempVectorIndex = getUnsignedInt(bc, pc++);
-                        pushFollowed(frame, currentPC, sp++, uncheckedCast(data[currentPC], SqueakObjectAt0NodeGen.class).execute(this, getTemp(frame, tempVectorIndex), remoteTempIndex));
+                        pushFollowed(frame, currentPC, currentSP, uncheckedCast(data[currentPC], SqueakObjectAt0NodeGen.class).execute(this, getTemp(frame, tempVectorIndex), remoteTempIndex));
                         break;
                     }
                     case BC.STORE_REMOTE_TEMP_LONG: {
                         final int remoteTempIndex = getUnsignedInt(bc, pc++);
                         final int tempVectorIndex = getUnsignedInt(bc, pc++);
-                        uncheckedCast(data[currentPC], SqueakObjectAtPut0Node.class).execute(this, getTemp(frame, tempVectorIndex), remoteTempIndex, top(frame, sp));
+                        uncheckedCast(data[currentPC], SqueakObjectAtPut0Node.class).execute(this, getTemp(frame, tempVectorIndex), remoteTempIndex, top(frame, currentSP));
                         break;
                     }
                     case BC.STORE_AND_POP_REMOTE_TEMP_LONG: {
                         final int remoteTempIndex = getUnsignedInt(bc, pc++);
                         final int tempVectorIndex = getUnsignedInt(bc, pc++);
-                        uncheckedCast(data[currentPC], SqueakObjectAtPut0Node.class).execute(this, getTemp(frame, tempVectorIndex), remoteTempIndex, pop(frame, --sp));
+                        uncheckedCast(data[currentPC], SqueakObjectAtPut0Node.class).execute(this, getTemp(frame, tempVectorIndex), remoteTempIndex, pop(frame, currentSP - 1));
                         break;
                     }
                     default: {
