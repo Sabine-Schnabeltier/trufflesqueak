@@ -765,11 +765,33 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
                         break;
                     }
                     case BC.EXT_B: {
+                        /*
+                         * OSVM maintains a counter (numExtB) to determine whether an EXT_B byte
+                         * code is the first in a series. Here, we use extB == 0 to indicate that
+                         * the byte code is the first. At the moment, Squeak only emits single EXT_B
+                         * byte codes, so this method will always work. However, when the image
+                         * starts using sequences of EXT_B byte codes and the value being encoded is
+                         * a positive integer with positions 7, 15 or 23 as the highest set bit, the
+                         * decoded value will be interpreted as a negative integer. For example, the
+                         * emitted sequence for the value 0x8765 would be 0x00, 0x87, 0x65. If we
+                         * assume that the encoder will never try to encode the value 0 (since that
+                         * is the default value without any emitted byte codes), we can detect the
+                         * case of the leading zero byte by setting the upper byte of extB and
+                         * relying on the next byte to shift that byte out of the register.
+                         */
                         final int extB = (int) (extBA >> 32);
-                        final int byteValue = getUnsignedInt(bc, pc++);
-                        final int newExtB = extB == 0 && byteValue > 127 ? byteValue - 256 : (extB << 8) | byteValue;
+                        final int newExtB;
+                        if (extB == 0) {
+                            /* leading byte is signed */
+                            final int byteValue = getByte(bc, pc++);
+                            /* make sure newExtB is non-zero for next byte processing */
+                            newExtB = byteValue == 0 ? 0x80000000 : byteValue;
+                        } else {
+                            /* subsequent bytes are unsigned */
+                            final int byteValue = getUnsignedInt(bc, pc++);
+                            newExtB = (extB << 8) | byteValue;
+                        }
                         extBA = ((long) newExtB << 32) | (extBA & 0xFFFFFFFFL);
-                        assert newExtB != 0 : "is numExtB needed?";
                         break;
                     }
                     case BC.EXT_PUSH_RECEIVER_VARIABLE: {
