@@ -760,8 +760,8 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
                     /* 2 byte bytecodes */
                     case BC.EXT_A: {
                         final int extA = (int) extBA;
-                        final int updatedExtA = (extA << 8) | getUnsignedInt(bc, pc++);
-                        extBA = (extBA & 0xFFFFFFFF00000000L) | Integer.toUnsignedLong(updatedExtA);
+                        final int newExtA = (extA << 8) | getUnsignedInt(bc, pc++);
+                        extBA = (extBA & 0xFFFFFFFF00000000L) | Integer.toUnsignedLong(newExtA);
                         break;
                     }
                     case BC.EXT_B: {
