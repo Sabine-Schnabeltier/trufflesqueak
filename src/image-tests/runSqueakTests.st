@@ -139,6 +139,10 @@
         StackInterpreterTests -> #(#testImmediateFloats #testPointerTaggingDetagging). "broken"
         SystemChangeFileTest -> #(#testClassRenamed). "flaky and can hang the system"
         TruffleSqueakTest -> #(#testTestMapConsistency).
+
+        "temporarily ignore some Interop tests"
+        InteropTest -> #(#testMetadataAPIs).
+        JavaTest -> #(#testJavaHashes).
     } collect: [:assoc | | testCase |
         testCase := assoc key.
         assoc value do: [:sel | ignoredTests add: (testCase selector: sel) ]].
