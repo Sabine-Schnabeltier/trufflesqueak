@@ -377,7 +377,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
             numArguments = FrameAccess.getNumArguments(frame);
         }
 
-        final SqueakImageContext image = getContext();
+//        final SqueakImageContext image = getContext();
 
 //        try {
             final byte[] bc = uncheckedCast(code.getBytes(), byte[].class);
@@ -851,7 +851,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
 //        }
     }
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings({"unused", "static-method"})
     @BytecodeInterpreterFetchOpcode
     public int nextOpcode(
             final int pc,
@@ -2046,7 +2046,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
     // SECTION: MISCELLANEOUS BYTECODES
     // =========================================================================
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings({"unused", "static-method"})
     @BytecodeInterpreterHandler(BC.EXT_NOP)
     public int handleNoOperation(
             final int pc,
@@ -2057,7 +2057,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
         return pc + 1;
     }
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings({"unused", "static-method"})
     @BytecodeInterpreterHandler(BC.EXT_A)
     public int handleExtA(
             final int pc,
@@ -2070,7 +2070,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
         return pc + 2;
     }
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings({"unused", "static-method"})
     @BytecodeInterpreterHandler(BC.EXT_B)
     public int handleExtB(
             final int pc,
