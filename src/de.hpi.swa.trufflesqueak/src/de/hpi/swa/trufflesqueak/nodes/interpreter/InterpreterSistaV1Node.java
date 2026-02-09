@@ -86,7 +86,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
         int counter;
 // final LoopCounter loopCounter;
 
-        State(int sp) {
+        State(final int sp) {
             this.sp = sp;
             this.extBA = 0;
             this.returnValue = null;
@@ -1859,7 +1859,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
                     final VirtualFrame frame,
                     final byte[] bc) {
         final int offset = calculateShortOffset(getUnsignedInt(bc, pc));
-        int nextPC = pc + 1 + offset;
+        final int nextPC = pc + 1 + offset;
         if (offset < 0) {
             if (CompilerDirectives.hasNextTier()) {
                 final int counter = state.incrementProfileCount();
@@ -1935,7 +1935,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
                     final VirtualFrame frame,
                     final byte[] bc) {
         final int offset = calculateLongExtendedOffset(getByte(bc, pc + 1), state.getExtB());
-        int nextPC = pc + 2 + offset;
+        final int nextPC = pc + 2 + offset;
         if (offset < 0) {
             if (CompilerDirectives.hasNextTier()) {
                 final int counter = state.incrementProfileCount();

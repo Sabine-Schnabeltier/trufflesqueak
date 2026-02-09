@@ -14,7 +14,6 @@ import java.nio.ByteOrder;
 import java.util.List;
 import java.util.Map;
 
-import com.oracle.truffle.api.interop.HeapIsolationException;
 import org.graalvm.polyglot.Engine;
 
 import com.oracle.truffle.api.CompilerDirectives;
@@ -30,6 +29,7 @@ import com.oracle.truffle.api.dsl.NodeFactory;
 import com.oracle.truffle.api.dsl.Specialization;
 import com.oracle.truffle.api.instrumentation.TruffleInstrument;
 import com.oracle.truffle.api.interop.ExceptionType;
+import com.oracle.truffle.api.interop.HeapIsolationException;
 import com.oracle.truffle.api.interop.InteropLibrary;
 import com.oracle.truffle.api.interop.InvalidArrayIndexException;
 import com.oracle.truffle.api.interop.InvalidBufferOffsetException;
@@ -1585,11 +1585,12 @@ public final class PolyglotPlugin extends AbstractPrimitiveFactoryHolder {
     @GenerateNodeFactory
     @SqueakPrimitive(names = "primitiveGetLanguageInfo")
     protected abstract static class PrimGetLanguageInfoNode extends AbstractPrimitiveNode implements Primitive1WithFallback {
+        @TruffleBoundary
         @Specialization(guards = "lib.hasLanguageId(object)")
         protected final Object getLanguage(@SuppressWarnings("unused") final Object receiver, final Object object,
                         @CachedLibrary(limit = "2") final InteropLibrary lib) {
             try {
-                String id = lib.getLanguageId(object);
+                final String id = lib.getLanguageId(object);
                 // Look up the LanguageInfo using the ID from the Context environment
                 return JavaObjectWrapper.wrap(getContext().env.getInternalLanguages().get(id));
             } catch (final UnsupportedMessageException e) {
