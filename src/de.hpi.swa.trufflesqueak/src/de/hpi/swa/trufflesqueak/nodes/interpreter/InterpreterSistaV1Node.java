@@ -84,44 +84,48 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
         long extBA;
         Object returnValue;
         int counter;
-//        final LoopCounter loopCounter;
+// final LoopCounter loopCounter;
 
         State(int sp) {
             this.sp = sp;
             this.extBA = 0;
             this.returnValue = null;
             this.counter = 0;
-//            this.loopCounter = CompilerDirectives.inCompiledCode() && CompilerDirectives.hasNextTier() ? new LoopCounter() : null;
+// this.loopCounter = CompilerDirectives.inCompiledCode() && CompilerDirectives.hasNextTier() ? new
+// LoopCounter() : null;
 
         }
+
         int getExtB() {
             return (int) (extBA >> 32);
         }
+
         int getExtA() {
             return (int) extBA;
         }
-        
+
         void resetExtensions() {
             this.extBA = 0;
         }
+
         int getProfileCount() {
-//            if (loopCounter != null) {
-//                return loopCounter.value;
-//            }
+// if (loopCounter != null) {
+// return loopCounter.value;
+// }
             return counter;
         }
 
         void resetProfileCount() {
-//            if (loopCounter != null) {
-//                loopCounter.value = 0;
-//            }
+// if (loopCounter != null) {
+// loopCounter.value = 0;
+// }
             counter = 0;
         }
 
         int incrementProfileCount() {
-//            if (loopCounter != null) {
-//                return ++loopCounter.value;
-//            }
+// if (loopCounter != null) {
+// return ++loopCounter.value;
+// }
             return ++counter;
         }
     }
@@ -363,11 +367,11 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
     @BytecodeInterpreterSwitch
     @ExplodeLoop(kind = ExplodeLoop.LoopExplosionKind.MERGE_EXPLODE)
     @BytecodeInterpreterHandlerConfig(maximumOperationCode = BC.STORE_AND_POP_REMOTE_TEMP_LONG, arguments = {
-            @Argument(nonNull = true), // Denotes `this' pointer
-            @Argument(returnValue = true),  // pc
-            @Argument(expand = VIRTUAL),    // state
-            @Argument(nonNull = true),  // frame
-            @Argument(nonNull = true)  // bc
+                    @Argument(nonNull = true), // Denotes `this' pointer
+                    @Argument(returnValue = true),  // pc
+                    @Argument(expand = VIRTUAL),    // state
+                    @Argument(nonNull = true),  // frame
+                    @Argument(nonNull = true)  // bc
     })
     public Object execute(final VirtualFrame frame, final int startPC, final int startSP) {
         assert isBlock == FrameAccess.hasClosure(frame);
@@ -377,487 +381,487 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
             numArguments = FrameAccess.getNumArguments(frame);
         }
 
-//        final SqueakImageContext image = getContext();
+// final SqueakImageContext image = getContext();
 
-//        try {
-            final byte[] bc = uncheckedCast(code.getBytes(), byte[].class);
-            if (bc == null) {
-                CompilerDirectives.transferToInterpreterAndInvalidate();
-                throw new NullPointerException();
-            }
+// try {
+        final byte[] bc = uncheckedCast(code.getBytes(), byte[].class);
+        if (bc == null) {
+            CompilerDirectives.transferToInterpreterAndInvalidate();
+            throw new NullPointerException();
+        }
 
-            int pc = startPC;
-            final State state = new State(startSP);
+        int pc = startPC;
+        final State state = new State(startSP);
 
-            while (pc != LOCAL_RETURN_PC) {
-                switch (HostCompilerDirectives.markThreadedSwitch(nextOpcode(pc, state, frame, bc))) {
-                    /* 1 byte bytecodes */
-                    case BC.PUSH_RCVR_VAR_0:
-                    case BC.PUSH_RCVR_VAR_1:
-                    case BC.PUSH_RCVR_VAR_2:
-                    case BC.PUSH_RCVR_VAR_3:
-                    case BC.PUSH_RCVR_VAR_4:
-                    case BC.PUSH_RCVR_VAR_5:
-                    case BC.PUSH_RCVR_VAR_6:
-                    case BC.PUSH_RCVR_VAR_7:
-                    case BC.PUSH_RCVR_VAR_8:
-                    case BC.PUSH_RCVR_VAR_9:
-                    case BC.PUSH_RCVR_VAR_A:
-                    case BC.PUSH_RCVR_VAR_B:
-                    case BC.PUSH_RCVR_VAR_C:
-                    case BC.PUSH_RCVR_VAR_D:
-                    case BC.PUSH_RCVR_VAR_E:
-                    case BC.PUSH_RCVR_VAR_F:
-                        pc = handlePushReceiverVariable(pc, state, frame, bc);
-                        break;
+        while (pc != LOCAL_RETURN_PC) {
+            switch (HostCompilerDirectives.markThreadedSwitch(nextOpcode(pc, state, frame, bc))) {
+                /* 1 byte bytecodes */
+                case BC.PUSH_RCVR_VAR_0:
+                case BC.PUSH_RCVR_VAR_1:
+                case BC.PUSH_RCVR_VAR_2:
+                case BC.PUSH_RCVR_VAR_3:
+                case BC.PUSH_RCVR_VAR_4:
+                case BC.PUSH_RCVR_VAR_5:
+                case BC.PUSH_RCVR_VAR_6:
+                case BC.PUSH_RCVR_VAR_7:
+                case BC.PUSH_RCVR_VAR_8:
+                case BC.PUSH_RCVR_VAR_9:
+                case BC.PUSH_RCVR_VAR_A:
+                case BC.PUSH_RCVR_VAR_B:
+                case BC.PUSH_RCVR_VAR_C:
+                case BC.PUSH_RCVR_VAR_D:
+                case BC.PUSH_RCVR_VAR_E:
+                case BC.PUSH_RCVR_VAR_F:
+                    pc = handlePushReceiverVariable(pc, state, frame, bc);
+                    break;
 
-                    case BC.PUSH_LIT_VAR_0:
-                    case BC.PUSH_LIT_VAR_1:
-                    case BC.PUSH_LIT_VAR_2:
-                    case BC.PUSH_LIT_VAR_3:
-                    case BC.PUSH_LIT_VAR_4:
-                    case BC.PUSH_LIT_VAR_5:
-                    case BC.PUSH_LIT_VAR_6:
-                    case BC.PUSH_LIT_VAR_7:
-                    case BC.PUSH_LIT_VAR_8:
-                    case BC.PUSH_LIT_VAR_9:
-                    case BC.PUSH_LIT_VAR_A:
-                    case BC.PUSH_LIT_VAR_B:
-                    case BC.PUSH_LIT_VAR_C:
-                    case BC.PUSH_LIT_VAR_D:
-                    case BC.PUSH_LIT_VAR_E:
-                    case BC.PUSH_LIT_VAR_F:
-                        pc = handlePushLiteralVariable(pc, state, frame, bc);
-                        break;
+                case BC.PUSH_LIT_VAR_0:
+                case BC.PUSH_LIT_VAR_1:
+                case BC.PUSH_LIT_VAR_2:
+                case BC.PUSH_LIT_VAR_3:
+                case BC.PUSH_LIT_VAR_4:
+                case BC.PUSH_LIT_VAR_5:
+                case BC.PUSH_LIT_VAR_6:
+                case BC.PUSH_LIT_VAR_7:
+                case BC.PUSH_LIT_VAR_8:
+                case BC.PUSH_LIT_VAR_9:
+                case BC.PUSH_LIT_VAR_A:
+                case BC.PUSH_LIT_VAR_B:
+                case BC.PUSH_LIT_VAR_C:
+                case BC.PUSH_LIT_VAR_D:
+                case BC.PUSH_LIT_VAR_E:
+                case BC.PUSH_LIT_VAR_F:
+                    pc = handlePushLiteralVariable(pc, state, frame, bc);
+                    break;
 
-                    case BC.PUSH_LIT_CONST_00:
-                    case BC.PUSH_LIT_CONST_01:
-                    case BC.PUSH_LIT_CONST_02:
-                    case BC.PUSH_LIT_CONST_03:
-                    case BC.PUSH_LIT_CONST_04:
-                    case BC.PUSH_LIT_CONST_05:
-                    case BC.PUSH_LIT_CONST_06:
-                    case BC.PUSH_LIT_CONST_07:
-                    case BC.PUSH_LIT_CONST_08:
-                    case BC.PUSH_LIT_CONST_09:
-                    case BC.PUSH_LIT_CONST_0A:
-                    case BC.PUSH_LIT_CONST_0B:
-                    case BC.PUSH_LIT_CONST_0C:
-                    case BC.PUSH_LIT_CONST_0D:
-                    case BC.PUSH_LIT_CONST_0E:
-                    case BC.PUSH_LIT_CONST_0F:
-                    case BC.PUSH_LIT_CONST_10:
-                    case BC.PUSH_LIT_CONST_11:
-                    case BC.PUSH_LIT_CONST_12:
-                    case BC.PUSH_LIT_CONST_13:
-                    case BC.PUSH_LIT_CONST_14:
-                    case BC.PUSH_LIT_CONST_15:
-                    case BC.PUSH_LIT_CONST_16:
-                    case BC.PUSH_LIT_CONST_17:
-                    case BC.PUSH_LIT_CONST_18:
-                    case BC.PUSH_LIT_CONST_19:
-                    case BC.PUSH_LIT_CONST_1A:
-                    case BC.PUSH_LIT_CONST_1B:
-                    case BC.PUSH_LIT_CONST_1C:
-                    case BC.PUSH_LIT_CONST_1D:
-                    case BC.PUSH_LIT_CONST_1E:
-                    case BC.PUSH_LIT_CONST_1F:
-                        pc = handlePushLiteralConstant(pc, state, frame, bc);
-                        break;
+                case BC.PUSH_LIT_CONST_00:
+                case BC.PUSH_LIT_CONST_01:
+                case BC.PUSH_LIT_CONST_02:
+                case BC.PUSH_LIT_CONST_03:
+                case BC.PUSH_LIT_CONST_04:
+                case BC.PUSH_LIT_CONST_05:
+                case BC.PUSH_LIT_CONST_06:
+                case BC.PUSH_LIT_CONST_07:
+                case BC.PUSH_LIT_CONST_08:
+                case BC.PUSH_LIT_CONST_09:
+                case BC.PUSH_LIT_CONST_0A:
+                case BC.PUSH_LIT_CONST_0B:
+                case BC.PUSH_LIT_CONST_0C:
+                case BC.PUSH_LIT_CONST_0D:
+                case BC.PUSH_LIT_CONST_0E:
+                case BC.PUSH_LIT_CONST_0F:
+                case BC.PUSH_LIT_CONST_10:
+                case BC.PUSH_LIT_CONST_11:
+                case BC.PUSH_LIT_CONST_12:
+                case BC.PUSH_LIT_CONST_13:
+                case BC.PUSH_LIT_CONST_14:
+                case BC.PUSH_LIT_CONST_15:
+                case BC.PUSH_LIT_CONST_16:
+                case BC.PUSH_LIT_CONST_17:
+                case BC.PUSH_LIT_CONST_18:
+                case BC.PUSH_LIT_CONST_19:
+                case BC.PUSH_LIT_CONST_1A:
+                case BC.PUSH_LIT_CONST_1B:
+                case BC.PUSH_LIT_CONST_1C:
+                case BC.PUSH_LIT_CONST_1D:
+                case BC.PUSH_LIT_CONST_1E:
+                case BC.PUSH_LIT_CONST_1F:
+                    pc = handlePushLiteralConstant(pc, state, frame, bc);
+                    break;
 
-                    case BC.PUSH_TEMP_VAR_0:
-                    case BC.PUSH_TEMP_VAR_1:
-                    case BC.PUSH_TEMP_VAR_2:
-                    case BC.PUSH_TEMP_VAR_3:
-                    case BC.PUSH_TEMP_VAR_4:
-                    case BC.PUSH_TEMP_VAR_5:
-                    case BC.PUSH_TEMP_VAR_6:
-                    case BC.PUSH_TEMP_VAR_7:
-                    case BC.PUSH_TEMP_VAR_8:
-                    case BC.PUSH_TEMP_VAR_9:
-                    case BC.PUSH_TEMP_VAR_A:
-                    case BC.PUSH_TEMP_VAR_B:
-                        pc = handlePushTemporaryVariable(pc, state, frame, bc);
-                        break;
+                case BC.PUSH_TEMP_VAR_0:
+                case BC.PUSH_TEMP_VAR_1:
+                case BC.PUSH_TEMP_VAR_2:
+                case BC.PUSH_TEMP_VAR_3:
+                case BC.PUSH_TEMP_VAR_4:
+                case BC.PUSH_TEMP_VAR_5:
+                case BC.PUSH_TEMP_VAR_6:
+                case BC.PUSH_TEMP_VAR_7:
+                case BC.PUSH_TEMP_VAR_8:
+                case BC.PUSH_TEMP_VAR_9:
+                case BC.PUSH_TEMP_VAR_A:
+                case BC.PUSH_TEMP_VAR_B:
+                    pc = handlePushTemporaryVariable(pc, state, frame, bc);
+                    break;
 
-                    case BC.PUSH_RECEIVER: {
-                        pc = handlePushReceiver(pc, state, frame, bc);
-                        break;
-                    }
-                    case BC.PUSH_CONSTANT_TRUE: {
-                        pc = handlePushConstantTrue(pc, state, frame, bc);
-                        break;
-                    }
-                    case BC.PUSH_CONSTANT_FALSE: {
-                        pc = handlePushConstantFalse(pc, state, frame, bc);
-                        break;
-                    }
-                    case BC.PUSH_CONSTANT_NIL: {
-                        pc = handlePushConstantNil(pc, state, frame, bc);
-                        break;
-                    }
-                    case BC.PUSH_CONSTANT_ZERO: {
-                        pc = handlePushConstantZero(pc, state, frame, bc);
-                        break;
-                    }
-                    case BC.PUSH_CONSTANT_ONE: {
-                        pc = handlePushConstantOne(pc, state, frame, bc);
-                        break;
-                    }
-                    case BC.EXT_PUSH_PSEUDO_VARIABLE: {
-                        pc = handlePushPseudoVariable(pc, state, frame, bc);
-                        break;
-                    }
-                    case BC.DUPLICATE_TOP: {
-                        pc = handleDuplicateTop(pc, state, frame, bc);
-                        break;
-                    }
-                    case BC.RETURN_RECEIVER: {
-                        pc = handleReturnReceiver(pc, state, frame, bc);
-                        break;
-                    }
-                    case BC.RETURN_TRUE: {
-                        pc = handleReturnTrue(pc, state, frame, bc);
-                        break;
-                    }
-                    case BC.RETURN_FALSE: {
-                        pc = handleReturnFalse(pc, state, frame, bc);
-                        break;
-                    }
-                    case BC.RETURN_NIL: {
-                        pc = handleReturnNil(pc, state, frame, bc);
-                        break;
-                    }
-                    case BC.RETURN_TOP_FROM_METHOD: {
-                        pc = handleReturnTopFromMethod(pc, state, frame, bc);
-                        break;
-                    }
-                    case BC.RETURN_NIL_FROM_BLOCK: {
-                        pc = handleReturnNilFromBlock(pc, state, frame, bc);
-                        break;
-                    }
-                    case BC.RETURN_TOP_FROM_BLOCK: {
-                        pc = handleReturnTopFromBlock(pc, state, frame, bc);
-                        break;
-                    }
-                    case BC.EXT_NOP: {
-                        pc = handleNoOperation(pc, state, frame, bc);
-                        break;
-                    }
-                    case BC.BYTECODE_PRIM_ADD: {
-                        pc = handlePrimitiveAdd(pc, state, frame, bc);
-                        break;
-                    }
-                    case BC.BYTECODE_PRIM_SUBTRACT: {
-                        pc = handlePrimitiveSubtract(pc, state, frame, bc);
-                        break;
-                    }
-                    case BC.BYTECODE_PRIM_LESS_THAN: {
-                        pc = handlePrimitiveLessThan(pc, state, frame, bc);
-                        break;
-                    }
-                    case BC.BYTECODE_PRIM_GREATER_THAN: {
-                        pc = handlePrimitiveGreaterThan(pc, state, frame, bc);
-                        break;
-                    }
-                    case BC.BYTECODE_PRIM_LESS_OR_EQUAL: {
-                        pc = handlePrimitiveLessOrEqual(pc, state, frame, bc);
-                        break;
-                    }
-                    case BC.BYTECODE_PRIM_GREATER_OR_EQUAL: {
-                        pc = handlePrimitiveGreaterOrEqual(pc, state, frame, bc);
-                        break;
-                    }
-                    case BC.BYTECODE_PRIM_EQUAL: {
-                        pc = handlePrimitiveEqual(pc, state, frame, bc);
-                        break;
-                    }
-                    case BC.BYTECODE_PRIM_NOT_EQUAL: {
-                        pc = handlePrimitiveNotEqual(pc, state, frame, bc);
-                        break;
-                    }
-                    case BC.BYTECODE_PRIM_BIT_AND: {
-                        pc = handlePrimitiveBitAnd(pc, state, frame, bc);
-                        break;
-                    }
-                    case BC.BYTECODE_PRIM_BIT_OR: {
-                        pc = handlePrimitiveBitOr(pc, state, frame, bc);
-                        break;
-                    }
-                    case BC.BYTECODE_PRIM_IDENTICAL: {
-                        pc = handlePrimitiveIdentical(pc, state, frame, bc);
-                        break;
-                    }
-                    case BC.BYTECODE_PRIM_CLASS: {
-                        pc = handlePrimitiveClass(pc, state, frame, bc);
-                        break;
-                    }
-                    case BC.BYTECODE_PRIM_NOT_IDENTICAL: {
-                        pc = handlePrimitiveNotIdentical(pc, state, frame, bc);
-                        break;
-                    }
-                    case BC.BYTECODE_PRIM_SIZE:
-                    case BC.BYTECODE_PRIM_NEXT:
-                    case BC.BYTECODE_PRIM_AT_END:
-                    case BC.BYTECODE_PRIM_VALUE:
-                    case BC.BYTECODE_PRIM_NEW:
-                    case BC.BYTECODE_PRIM_POINT_X:
-                    case BC.BYTECODE_PRIM_POINT_Y:
-                    case BC.SEND_LIT_SEL0_0:
-                    case BC.SEND_LIT_SEL0_1:
-                    case BC.SEND_LIT_SEL0_2:
-                    case BC.SEND_LIT_SEL0_3:
-                    case BC.SEND_LIT_SEL0_4:
-                    case BC.SEND_LIT_SEL0_5:
-                    case BC.SEND_LIT_SEL0_6:
-                    case BC.SEND_LIT_SEL0_7:
-                    case BC.SEND_LIT_SEL0_8:
-                    case BC.SEND_LIT_SEL0_9:
-                    case BC.SEND_LIT_SEL0_A:
-                    case BC.SEND_LIT_SEL0_B:
-                    case BC.SEND_LIT_SEL0_C:
-                    case BC.SEND_LIT_SEL0_D:
-                    case BC.SEND_LIT_SEL0_E:
-                    case BC.SEND_LIT_SEL0_F:
-                        pc = handleSend0(pc, state, frame, bc);
-                        break;
+                case BC.PUSH_RECEIVER: {
+                    pc = handlePushReceiver(pc, state, frame, bc);
+                    break;
+                }
+                case BC.PUSH_CONSTANT_TRUE: {
+                    pc = handlePushConstantTrue(pc, state, frame, bc);
+                    break;
+                }
+                case BC.PUSH_CONSTANT_FALSE: {
+                    pc = handlePushConstantFalse(pc, state, frame, bc);
+                    break;
+                }
+                case BC.PUSH_CONSTANT_NIL: {
+                    pc = handlePushConstantNil(pc, state, frame, bc);
+                    break;
+                }
+                case BC.PUSH_CONSTANT_ZERO: {
+                    pc = handlePushConstantZero(pc, state, frame, bc);
+                    break;
+                }
+                case BC.PUSH_CONSTANT_ONE: {
+                    pc = handlePushConstantOne(pc, state, frame, bc);
+                    break;
+                }
+                case BC.EXT_PUSH_PSEUDO_VARIABLE: {
+                    pc = handlePushPseudoVariable(pc, state, frame, bc);
+                    break;
+                }
+                case BC.DUPLICATE_TOP: {
+                    pc = handleDuplicateTop(pc, state, frame, bc);
+                    break;
+                }
+                case BC.RETURN_RECEIVER: {
+                    pc = handleReturnReceiver(pc, state, frame, bc);
+                    break;
+                }
+                case BC.RETURN_TRUE: {
+                    pc = handleReturnTrue(pc, state, frame, bc);
+                    break;
+                }
+                case BC.RETURN_FALSE: {
+                    pc = handleReturnFalse(pc, state, frame, bc);
+                    break;
+                }
+                case BC.RETURN_NIL: {
+                    pc = handleReturnNil(pc, state, frame, bc);
+                    break;
+                }
+                case BC.RETURN_TOP_FROM_METHOD: {
+                    pc = handleReturnTopFromMethod(pc, state, frame, bc);
+                    break;
+                }
+                case BC.RETURN_NIL_FROM_BLOCK: {
+                    pc = handleReturnNilFromBlock(pc, state, frame, bc);
+                    break;
+                }
+                case BC.RETURN_TOP_FROM_BLOCK: {
+                    pc = handleReturnTopFromBlock(pc, state, frame, bc);
+                    break;
+                }
+                case BC.EXT_NOP: {
+                    pc = handleNoOperation(pc, state, frame, bc);
+                    break;
+                }
+                case BC.BYTECODE_PRIM_ADD: {
+                    pc = handlePrimitiveAdd(pc, state, frame, bc);
+                    break;
+                }
+                case BC.BYTECODE_PRIM_SUBTRACT: {
+                    pc = handlePrimitiveSubtract(pc, state, frame, bc);
+                    break;
+                }
+                case BC.BYTECODE_PRIM_LESS_THAN: {
+                    pc = handlePrimitiveLessThan(pc, state, frame, bc);
+                    break;
+                }
+                case BC.BYTECODE_PRIM_GREATER_THAN: {
+                    pc = handlePrimitiveGreaterThan(pc, state, frame, bc);
+                    break;
+                }
+                case BC.BYTECODE_PRIM_LESS_OR_EQUAL: {
+                    pc = handlePrimitiveLessOrEqual(pc, state, frame, bc);
+                    break;
+                }
+                case BC.BYTECODE_PRIM_GREATER_OR_EQUAL: {
+                    pc = handlePrimitiveGreaterOrEqual(pc, state, frame, bc);
+                    break;
+                }
+                case BC.BYTECODE_PRIM_EQUAL: {
+                    pc = handlePrimitiveEqual(pc, state, frame, bc);
+                    break;
+                }
+                case BC.BYTECODE_PRIM_NOT_EQUAL: {
+                    pc = handlePrimitiveNotEqual(pc, state, frame, bc);
+                    break;
+                }
+                case BC.BYTECODE_PRIM_BIT_AND: {
+                    pc = handlePrimitiveBitAnd(pc, state, frame, bc);
+                    break;
+                }
+                case BC.BYTECODE_PRIM_BIT_OR: {
+                    pc = handlePrimitiveBitOr(pc, state, frame, bc);
+                    break;
+                }
+                case BC.BYTECODE_PRIM_IDENTICAL: {
+                    pc = handlePrimitiveIdentical(pc, state, frame, bc);
+                    break;
+                }
+                case BC.BYTECODE_PRIM_CLASS: {
+                    pc = handlePrimitiveClass(pc, state, frame, bc);
+                    break;
+                }
+                case BC.BYTECODE_PRIM_NOT_IDENTICAL: {
+                    pc = handlePrimitiveNotIdentical(pc, state, frame, bc);
+                    break;
+                }
+                case BC.BYTECODE_PRIM_SIZE:
+                case BC.BYTECODE_PRIM_NEXT:
+                case BC.BYTECODE_PRIM_AT_END:
+                case BC.BYTECODE_PRIM_VALUE:
+                case BC.BYTECODE_PRIM_NEW:
+                case BC.BYTECODE_PRIM_POINT_X:
+                case BC.BYTECODE_PRIM_POINT_Y:
+                case BC.SEND_LIT_SEL0_0:
+                case BC.SEND_LIT_SEL0_1:
+                case BC.SEND_LIT_SEL0_2:
+                case BC.SEND_LIT_SEL0_3:
+                case BC.SEND_LIT_SEL0_4:
+                case BC.SEND_LIT_SEL0_5:
+                case BC.SEND_LIT_SEL0_6:
+                case BC.SEND_LIT_SEL0_7:
+                case BC.SEND_LIT_SEL0_8:
+                case BC.SEND_LIT_SEL0_9:
+                case BC.SEND_LIT_SEL0_A:
+                case BC.SEND_LIT_SEL0_B:
+                case BC.SEND_LIT_SEL0_C:
+                case BC.SEND_LIT_SEL0_D:
+                case BC.SEND_LIT_SEL0_E:
+                case BC.SEND_LIT_SEL0_F:
+                    pc = handleSend0(pc, state, frame, bc);
+                    break;
 
-                    case BC.BYTECODE_PRIM_MULTIPLY:
-                    case BC.BYTECODE_PRIM_DIVIDE:
-                    case BC.BYTECODE_PRIM_MOD:
-                    case BC.BYTECODE_PRIM_MAKE_POINT:
-                    case BC.BYTECODE_PRIM_BIT_SHIFT:
-                    case BC.BYTECODE_PRIM_DIV:
-                    case BC.BYTECODE_PRIM_AT:
-                    case BC.BYTECODE_PRIM_NEXT_PUT:
-                    case BC.BYTECODE_PRIM_VALUE_WITH_ARG:
-                    case BC.BYTECODE_PRIM_DO:
-                    case BC.BYTECODE_PRIM_NEW_WITH_ARG:
-                    case BC.SEND_LIT_SEL1_0:
-                    case BC.SEND_LIT_SEL1_1:
-                    case BC.SEND_LIT_SEL1_2:
-                    case BC.SEND_LIT_SEL1_3:
-                    case BC.SEND_LIT_SEL1_4:
-                    case BC.SEND_LIT_SEL1_5:
-                    case BC.SEND_LIT_SEL1_6:
-                    case BC.SEND_LIT_SEL1_7:
-                    case BC.SEND_LIT_SEL1_8:
-                    case BC.SEND_LIT_SEL1_9:
-                    case BC.SEND_LIT_SEL1_A:
-                    case BC.SEND_LIT_SEL1_B:
-                    case BC.SEND_LIT_SEL1_C:
-                    case BC.SEND_LIT_SEL1_D:
-                    case BC.SEND_LIT_SEL1_E:
-                    case BC.SEND_LIT_SEL1_F:
-                        pc = handleSend1(pc, state, frame, bc);
-                        break;
+                case BC.BYTECODE_PRIM_MULTIPLY:
+                case BC.BYTECODE_PRIM_DIVIDE:
+                case BC.BYTECODE_PRIM_MOD:
+                case BC.BYTECODE_PRIM_MAKE_POINT:
+                case BC.BYTECODE_PRIM_BIT_SHIFT:
+                case BC.BYTECODE_PRIM_DIV:
+                case BC.BYTECODE_PRIM_AT:
+                case BC.BYTECODE_PRIM_NEXT_PUT:
+                case BC.BYTECODE_PRIM_VALUE_WITH_ARG:
+                case BC.BYTECODE_PRIM_DO:
+                case BC.BYTECODE_PRIM_NEW_WITH_ARG:
+                case BC.SEND_LIT_SEL1_0:
+                case BC.SEND_LIT_SEL1_1:
+                case BC.SEND_LIT_SEL1_2:
+                case BC.SEND_LIT_SEL1_3:
+                case BC.SEND_LIT_SEL1_4:
+                case BC.SEND_LIT_SEL1_5:
+                case BC.SEND_LIT_SEL1_6:
+                case BC.SEND_LIT_SEL1_7:
+                case BC.SEND_LIT_SEL1_8:
+                case BC.SEND_LIT_SEL1_9:
+                case BC.SEND_LIT_SEL1_A:
+                case BC.SEND_LIT_SEL1_B:
+                case BC.SEND_LIT_SEL1_C:
+                case BC.SEND_LIT_SEL1_D:
+                case BC.SEND_LIT_SEL1_E:
+                case BC.SEND_LIT_SEL1_F:
+                    pc = handleSend1(pc, state, frame, bc);
+                    break;
 
-                    case BC.BYTECODE_PRIM_AT_PUT:
-                    case BC.SEND_LIT_SEL2_0:
-                    case BC.SEND_LIT_SEL2_1:
-                    case BC.SEND_LIT_SEL2_2:
-                    case BC.SEND_LIT_SEL2_3:
-                    case BC.SEND_LIT_SEL2_4:
-                    case BC.SEND_LIT_SEL2_5:
-                    case BC.SEND_LIT_SEL2_6:
-                    case BC.SEND_LIT_SEL2_7:
-                    case BC.SEND_LIT_SEL2_8:
-                    case BC.SEND_LIT_SEL2_9:
-                    case BC.SEND_LIT_SEL2_A:
-                    case BC.SEND_LIT_SEL2_B:
-                    case BC.SEND_LIT_SEL2_C:
-                    case BC.SEND_LIT_SEL2_D:
-                    case BC.SEND_LIT_SEL2_E:
-                    case BC.SEND_LIT_SEL2_F:
-                        pc = handleSend2(pc, state, frame, bc);
-                        break;
+                case BC.BYTECODE_PRIM_AT_PUT:
+                case BC.SEND_LIT_SEL2_0:
+                case BC.SEND_LIT_SEL2_1:
+                case BC.SEND_LIT_SEL2_2:
+                case BC.SEND_LIT_SEL2_3:
+                case BC.SEND_LIT_SEL2_4:
+                case BC.SEND_LIT_SEL2_5:
+                case BC.SEND_LIT_SEL2_6:
+                case BC.SEND_LIT_SEL2_7:
+                case BC.SEND_LIT_SEL2_8:
+                case BC.SEND_LIT_SEL2_9:
+                case BC.SEND_LIT_SEL2_A:
+                case BC.SEND_LIT_SEL2_B:
+                case BC.SEND_LIT_SEL2_C:
+                case BC.SEND_LIT_SEL2_D:
+                case BC.SEND_LIT_SEL2_E:
+                case BC.SEND_LIT_SEL2_F:
+                    pc = handleSend2(pc, state, frame, bc);
+                    break;
 
-                    case BC.SHORT_UJUMP_0:
-                    case BC.SHORT_UJUMP_1:
-                    case BC.SHORT_UJUMP_2:
-                    case BC.SHORT_UJUMP_3:
-                    case BC.SHORT_UJUMP_4:
-                    case BC.SHORT_UJUMP_5:
-                    case BC.SHORT_UJUMP_6:
-                    case BC.SHORT_UJUMP_7:
-                        pc = handleShortUnconditionalJump(pc, state, frame, bc);
-                        break;
+                case BC.SHORT_UJUMP_0:
+                case BC.SHORT_UJUMP_1:
+                case BC.SHORT_UJUMP_2:
+                case BC.SHORT_UJUMP_3:
+                case BC.SHORT_UJUMP_4:
+                case BC.SHORT_UJUMP_5:
+                case BC.SHORT_UJUMP_6:
+                case BC.SHORT_UJUMP_7:
+                    pc = handleShortUnconditionalJump(pc, state, frame, bc);
+                    break;
 
-                    case BC.SHORT_CJUMP_TRUE_0:
-                    case BC.SHORT_CJUMP_TRUE_1:
-                    case BC.SHORT_CJUMP_TRUE_2:
-                    case BC.SHORT_CJUMP_TRUE_3:
-                    case BC.SHORT_CJUMP_TRUE_4:
-                    case BC.SHORT_CJUMP_TRUE_5:
-                    case BC.SHORT_CJUMP_TRUE_6:
-                    case BC.SHORT_CJUMP_TRUE_7:
-                        pc = handleShortConditionalJumpTrue(pc, state, frame, bc);
-                        break;
+                case BC.SHORT_CJUMP_TRUE_0:
+                case BC.SHORT_CJUMP_TRUE_1:
+                case BC.SHORT_CJUMP_TRUE_2:
+                case BC.SHORT_CJUMP_TRUE_3:
+                case BC.SHORT_CJUMP_TRUE_4:
+                case BC.SHORT_CJUMP_TRUE_5:
+                case BC.SHORT_CJUMP_TRUE_6:
+                case BC.SHORT_CJUMP_TRUE_7:
+                    pc = handleShortConditionalJumpTrue(pc, state, frame, bc);
+                    break;
 
-                    case BC.SHORT_CJUMP_FALSE_0:
-                    case BC.SHORT_CJUMP_FALSE_1:
-                    case BC.SHORT_CJUMP_FALSE_2:
-                    case BC.SHORT_CJUMP_FALSE_3:
-                    case BC.SHORT_CJUMP_FALSE_4:
-                    case BC.SHORT_CJUMP_FALSE_5:
-                    case BC.SHORT_CJUMP_FALSE_6:
-                    case BC.SHORT_CJUMP_FALSE_7:
-                        pc = handleShortConditionalJumpFalse(pc, state, frame, bc);
-                        break;
+                case BC.SHORT_CJUMP_FALSE_0:
+                case BC.SHORT_CJUMP_FALSE_1:
+                case BC.SHORT_CJUMP_FALSE_2:
+                case BC.SHORT_CJUMP_FALSE_3:
+                case BC.SHORT_CJUMP_FALSE_4:
+                case BC.SHORT_CJUMP_FALSE_5:
+                case BC.SHORT_CJUMP_FALSE_6:
+                case BC.SHORT_CJUMP_FALSE_7:
+                    pc = handleShortConditionalJumpFalse(pc, state, frame, bc);
+                    break;
 
-                    case BC.POP_INTO_RCVR_VAR_0:
-                    case BC.POP_INTO_RCVR_VAR_1:
-                    case BC.POP_INTO_RCVR_VAR_2:
-                    case BC.POP_INTO_RCVR_VAR_3:
-                    case BC.POP_INTO_RCVR_VAR_4:
-                    case BC.POP_INTO_RCVR_VAR_5:
-                    case BC.POP_INTO_RCVR_VAR_6:
-                    case BC.POP_INTO_RCVR_VAR_7:
-                        pc = handlePopIntoReceiverVariable(pc, state, frame, bc);
-                        break;
+                case BC.POP_INTO_RCVR_VAR_0:
+                case BC.POP_INTO_RCVR_VAR_1:
+                case BC.POP_INTO_RCVR_VAR_2:
+                case BC.POP_INTO_RCVR_VAR_3:
+                case BC.POP_INTO_RCVR_VAR_4:
+                case BC.POP_INTO_RCVR_VAR_5:
+                case BC.POP_INTO_RCVR_VAR_6:
+                case BC.POP_INTO_RCVR_VAR_7:
+                    pc = handlePopIntoReceiverVariable(pc, state, frame, bc);
+                    break;
 
-                    case BC.POP_INTO_TEMP_VAR_0:
-                    case BC.POP_INTO_TEMP_VAR_1:
-                    case BC.POP_INTO_TEMP_VAR_2:
-                    case BC.POP_INTO_TEMP_VAR_3:
-                    case BC.POP_INTO_TEMP_VAR_4:
-                    case BC.POP_INTO_TEMP_VAR_5:
-                    case BC.POP_INTO_TEMP_VAR_6:
-                    case BC.POP_INTO_TEMP_VAR_7:
-                        pc = handlePopIntoTemporaryVariable(pc, state, frame, bc);
-                        break;
+                case BC.POP_INTO_TEMP_VAR_0:
+                case BC.POP_INTO_TEMP_VAR_1:
+                case BC.POP_INTO_TEMP_VAR_2:
+                case BC.POP_INTO_TEMP_VAR_3:
+                case BC.POP_INTO_TEMP_VAR_4:
+                case BC.POP_INTO_TEMP_VAR_5:
+                case BC.POP_INTO_TEMP_VAR_6:
+                case BC.POP_INTO_TEMP_VAR_7:
+                    pc = handlePopIntoTemporaryVariable(pc, state, frame, bc);
+                    break;
 
-                    case BC.POP_STACK: {
-                        pc = handlePopStack(pc, state, frame, bc);
-                        break;
-                    }
-                    /* 2 byte bytecodes */
-                    case BC.EXT_A: {
-                        pc = handleExtA(pc, state, frame, bc);
-                        break;
-                    }
-                    case BC.EXT_B: {
-                        pc = handleExtB(pc, state, frame, bc);
-                        break;
-                    }
-                    case BC.EXT_PUSH_RECEIVER_VARIABLE: {
-                        pc = handleExtendedPushReceiverVariable(pc, state, frame, bc);
-                        break;
-                    }
-                    case BC.EXT_PUSH_LITERAL_VARIABLE: {
-                        pc = handleExtendedPushLiteralVariable(pc, state, frame, bc);
-                        break;
-                    }
-                    case BC.EXT_PUSH_LITERAL: {
-                        pc = handleExtendedPushLiteralConstant(pc, state, frame, bc);
-                        break;
-                    }
-                    case BC.LONG_PUSH_TEMPORARY_VARIABLE: {
-                        pc = handleLongPushTemporaryVariable(pc, state, frame, bc);
-                        break;
-                    }
-                    case BC.PUSH_NEW_ARRAY: {
-                        pc = handlePushNewArray(pc, state, frame, bc);
-                        break;
-                    }
-                    case BC.EXT_PUSH_INTEGER: {
-                        pc = handleExtendedPushInteger(pc, state, frame, bc);
-                        break;
-                    }
-                    case BC.EXT_PUSH_CHARACTER: {
-                        pc = handleExtendedPushCharacter(pc, state, frame, bc);
-                        break;
-                    }
-                    case BC.EXT_SEND: {
-                        pc = handleExtendedSend(pc, state, frame, bc);
-                        break;
-                    }
-                    case BC.EXT_SEND_SUPER: {
-                        pc = handleExtendedSuperSend(pc, state, frame, bc);
-                        break;
-                    }
-                    case BC.EXT_UNCONDITIONAL_JUMP: {
-                        pc = handleExtendedUnconditionalJump(pc, state, frame, bc);
-                        break;
-                    }
-                    case BC.EXT_JUMP_IF_TRUE: {
-                        pc = handleExtendedConditionalJumpTrue(pc, state, frame, bc);
-                        break;
-                    }
-                    case BC.EXT_JUMP_IF_FALSE: {
-                        pc = handleExtendedConditionalJumpFalse(pc, state, frame, bc);
-                        break;
-                    }
-                    case BC.EXT_STORE_AND_POP_RECEIVER_VARIABLE: {
-                        pc = handleExtendedStoreAndPopReceiverVariable(pc, state, frame, bc);
-                        break;
-                    }
-                    case BC.EXT_STORE_AND_POP_LITERAL_VARIABLE: {
-                        pc = handleExtendedStoreAndPopLiteralVariable(pc, state, frame, bc);
-                        break;
-                    }
-                    case BC.LONG_STORE_AND_POP_TEMPORARY_VARIABLE: {
-                        pc = handleLongStoreAndPopTemporaryVariable(pc, state, frame, bc);
-                        break;
-                    }
-                    case BC.EXT_STORE_RECEIVER_VARIABLE: {
-                        pc = handleExtendedStoreReceiverVariable(pc, state, frame, bc);
-                        break;
-                    }
-                    case BC.EXT_STORE_LITERAL_VARIABLE: {
-                        pc = handleExtendedStoreLiteralVariable(pc, state, frame, bc);
-                        break;
-                    }
-                    case BC.LONG_STORE_TEMPORARY_VARIABLE: {
-                        pc = handleLongStoreTemporaryVariable(pc, state, frame, bc);
-                        break;
-                    }
-                    /* 3 byte bytecodes */
-                    case BC.CALL_PRIMITIVE: {
-                        pc = handleCallPrimitive(pc, state, frame, bc);
-                        break;
-                    }
-                    case BC.EXT_PUSH_FULL_CLOSURE: {
-                        pc = handleExtendedPushFullClosure(pc, state, frame, bc);
-                        break;
-                    }
-                    case BC.EXT_PUSH_CLOSURE: {
-                        pc = handleExtendedPushClosure(pc, state, frame, bc);
-                        break;
-                    }
-                    case BC.PUSH_REMOTE_TEMP_LONG: {
-                        pc = handleLongPushRemoteTemporaryVariable(pc, state, frame, bc);
-                        break;
-                    }
-                    case BC.STORE_REMOTE_TEMP_LONG: {
-                        pc = handleLongStoreRemoteTemporaryVariable(pc, state, frame, bc);
-                        break;
-                    }
-                    case BC.STORE_AND_POP_REMOTE_TEMP_LONG: {
-                        pc = handleLongStoreAndPopRemoteTemporaryVariable(pc, state, frame, bc);
-                        break;
-                    }
-                    default: {
-                        throw unknownBytecode(pc, getUnsignedInt(bc, pc));
-                    }
+                case BC.POP_STACK: {
+                    pc = handlePopStack(pc, state, frame, bc);
+                    break;
+                }
+                /* 2 byte bytecodes */
+                case BC.EXT_A: {
+                    pc = handleExtA(pc, state, frame, bc);
+                    break;
+                }
+                case BC.EXT_B: {
+                    pc = handleExtB(pc, state, frame, bc);
+                    break;
+                }
+                case BC.EXT_PUSH_RECEIVER_VARIABLE: {
+                    pc = handleExtendedPushReceiverVariable(pc, state, frame, bc);
+                    break;
+                }
+                case BC.EXT_PUSH_LITERAL_VARIABLE: {
+                    pc = handleExtendedPushLiteralVariable(pc, state, frame, bc);
+                    break;
+                }
+                case BC.EXT_PUSH_LITERAL: {
+                    pc = handleExtendedPushLiteralConstant(pc, state, frame, bc);
+                    break;
+                }
+                case BC.LONG_PUSH_TEMPORARY_VARIABLE: {
+                    pc = handleLongPushTemporaryVariable(pc, state, frame, bc);
+                    break;
+                }
+                case BC.PUSH_NEW_ARRAY: {
+                    pc = handlePushNewArray(pc, state, frame, bc);
+                    break;
+                }
+                case BC.EXT_PUSH_INTEGER: {
+                    pc = handleExtendedPushInteger(pc, state, frame, bc);
+                    break;
+                }
+                case BC.EXT_PUSH_CHARACTER: {
+                    pc = handleExtendedPushCharacter(pc, state, frame, bc);
+                    break;
+                }
+                case BC.EXT_SEND: {
+                    pc = handleExtendedSend(pc, state, frame, bc);
+                    break;
+                }
+                case BC.EXT_SEND_SUPER: {
+                    pc = handleExtendedSuperSend(pc, state, frame, bc);
+                    break;
+                }
+                case BC.EXT_UNCONDITIONAL_JUMP: {
+                    pc = handleExtendedUnconditionalJump(pc, state, frame, bc);
+                    break;
+                }
+                case BC.EXT_JUMP_IF_TRUE: {
+                    pc = handleExtendedConditionalJumpTrue(pc, state, frame, bc);
+                    break;
+                }
+                case BC.EXT_JUMP_IF_FALSE: {
+                    pc = handleExtendedConditionalJumpFalse(pc, state, frame, bc);
+                    break;
+                }
+                case BC.EXT_STORE_AND_POP_RECEIVER_VARIABLE: {
+                    pc = handleExtendedStoreAndPopReceiverVariable(pc, state, frame, bc);
+                    break;
+                }
+                case BC.EXT_STORE_AND_POP_LITERAL_VARIABLE: {
+                    pc = handleExtendedStoreAndPopLiteralVariable(pc, state, frame, bc);
+                    break;
+                }
+                case BC.LONG_STORE_AND_POP_TEMPORARY_VARIABLE: {
+                    pc = handleLongStoreAndPopTemporaryVariable(pc, state, frame, bc);
+                    break;
+                }
+                case BC.EXT_STORE_RECEIVER_VARIABLE: {
+                    pc = handleExtendedStoreReceiverVariable(pc, state, frame, bc);
+                    break;
+                }
+                case BC.EXT_STORE_LITERAL_VARIABLE: {
+                    pc = handleExtendedStoreLiteralVariable(pc, state, frame, bc);
+                    break;
+                }
+                case BC.LONG_STORE_TEMPORARY_VARIABLE: {
+                    pc = handleLongStoreTemporaryVariable(pc, state, frame, bc);
+                    break;
+                }
+                /* 3 byte bytecodes */
+                case BC.CALL_PRIMITIVE: {
+                    pc = handleCallPrimitive(pc, state, frame, bc);
+                    break;
+                }
+                case BC.EXT_PUSH_FULL_CLOSURE: {
+                    pc = handleExtendedPushFullClosure(pc, state, frame, bc);
+                    break;
+                }
+                case BC.EXT_PUSH_CLOSURE: {
+                    pc = handleExtendedPushClosure(pc, state, frame, bc);
+                    break;
+                }
+                case BC.PUSH_REMOTE_TEMP_LONG: {
+                    pc = handleLongPushRemoteTemporaryVariable(pc, state, frame, bc);
+                    break;
+                }
+                case BC.STORE_REMOTE_TEMP_LONG: {
+                    pc = handleLongStoreRemoteTemporaryVariable(pc, state, frame, bc);
+                    break;
+                }
+                case BC.STORE_AND_POP_REMOTE_TEMP_LONG: {
+                    pc = handleLongStoreAndPopRemoteTemporaryVariable(pc, state, frame, bc);
+                    break;
+                }
+                default: {
+                    throw unknownBytecode(pc, getUnsignedInt(bc, pc));
                 }
             }
+        }
 
-            assert state.returnValue != null;
-            return state.returnValue;
-//        } catch (final StackOverflowError e) {
-//            CompilerDirectives.transferToInterpreter();
-//            throw image.tryToSignalLowSpace(frame, e);
-//        }
+        assert state.returnValue != null;
+        return state.returnValue;
+// } catch (final StackOverflowError e) {
+// CompilerDirectives.transferToInterpreter();
+// throw image.tryToSignalLowSpace(frame, e);
+// }
     }
 
     @SuppressWarnings({"unused", "static-method"})
     @BytecodeInterpreterFetchOpcode
     public int nextOpcode(
-            final int pc,
-            final State state,
-            final VirtualFrame frame,
-            final byte[] bc) {
+                    final int pc,
+                    final State state,
+                    final VirtualFrame frame,
+                    final byte[] bc) {
         return getUnsignedInt(bc, pc);
     }
 
@@ -866,152 +870,142 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
     // =========================================================================
 
     @SuppressWarnings("unused")
-    @BytecodeInterpreterHandler(value={BC.PUSH_RCVR_VAR_0, BC.PUSH_RCVR_VAR_1, BC.PUSH_RCVR_VAR_2, BC.PUSH_RCVR_VAR_3,
-            BC.PUSH_RCVR_VAR_4, BC.PUSH_RCVR_VAR_5, BC.PUSH_RCVR_VAR_6, BC.PUSH_RCVR_VAR_7,
-            BC.PUSH_RCVR_VAR_8, BC.PUSH_RCVR_VAR_9, BC.PUSH_RCVR_VAR_A, BC.PUSH_RCVR_VAR_B,
-            BC.PUSH_RCVR_VAR_C, BC.PUSH_RCVR_VAR_D, BC.PUSH_RCVR_VAR_E, BC.PUSH_RCVR_VAR_F})
+    @BytecodeInterpreterHandler(value = {BC.PUSH_RCVR_VAR_0, BC.PUSH_RCVR_VAR_1, BC.PUSH_RCVR_VAR_2, BC.PUSH_RCVR_VAR_3,
+                    BC.PUSH_RCVR_VAR_4, BC.PUSH_RCVR_VAR_5, BC.PUSH_RCVR_VAR_6, BC.PUSH_RCVR_VAR_7,
+                    BC.PUSH_RCVR_VAR_8, BC.PUSH_RCVR_VAR_9, BC.PUSH_RCVR_VAR_A, BC.PUSH_RCVR_VAR_B,
+                    BC.PUSH_RCVR_VAR_C, BC.PUSH_RCVR_VAR_D, BC.PUSH_RCVR_VAR_E, BC.PUSH_RCVR_VAR_F})
     public int handlePushReceiverVariable(
-            final int pc,
-            final State state,
-            final VirtualFrame frame,
-            final byte[] bc) {
-//        externalizePCAndSP(frame, state.pc, state.sp); // for ContextObject access
+                    final int pc,
+                    final State state,
+                    final VirtualFrame frame,
+                    final byte[] bc) {
+// externalizePCAndSP(frame, state.pc, state.sp); // for ContextObject access
         final int index = getUnsignedInt(bc, pc) & 0x0F;
         pushFollowed(frame, pc, state.sp++, uncheckedCast(data[pc], SqueakObjectAt0NodeGen.class).execute(this, FrameAccess.getReceiver(frame), index));
-        state.resetExtensions();
         return pc + 1;
     }
 
     @SuppressWarnings("unused")
-    @BytecodeInterpreterHandler(value={BC.PUSH_LIT_VAR_0, BC.PUSH_LIT_VAR_1, BC.PUSH_LIT_VAR_2, BC.PUSH_LIT_VAR_3,
-            BC.PUSH_LIT_VAR_4, BC.PUSH_LIT_VAR_5, BC.PUSH_LIT_VAR_6, BC.PUSH_LIT_VAR_7,
-            BC.PUSH_LIT_VAR_8, BC.PUSH_LIT_VAR_9, BC.PUSH_LIT_VAR_A, BC.PUSH_LIT_VAR_B,
-            BC.PUSH_LIT_VAR_C, BC.PUSH_LIT_VAR_D, BC.PUSH_LIT_VAR_E, BC.PUSH_LIT_VAR_F})
+    @BytecodeInterpreterHandler(value = {BC.PUSH_LIT_VAR_0, BC.PUSH_LIT_VAR_1, BC.PUSH_LIT_VAR_2, BC.PUSH_LIT_VAR_3,
+                    BC.PUSH_LIT_VAR_4, BC.PUSH_LIT_VAR_5, BC.PUSH_LIT_VAR_6, BC.PUSH_LIT_VAR_7,
+                    BC.PUSH_LIT_VAR_8, BC.PUSH_LIT_VAR_9, BC.PUSH_LIT_VAR_A, BC.PUSH_LIT_VAR_B,
+                    BC.PUSH_LIT_VAR_C, BC.PUSH_LIT_VAR_D, BC.PUSH_LIT_VAR_E, BC.PUSH_LIT_VAR_F})
     public int handlePushLiteralVariable(
-            final int pc,
-            final State state,
-            final VirtualFrame frame,
-            final byte[] bc) {
+                    final int pc,
+                    final State state,
+                    final VirtualFrame frame,
+                    final byte[] bc) {
         final int index = getUnsignedInt(bc, pc) & 0x0F;
         push(frame, state.sp++, readLiteralVariable(pc, index));
-        state.resetExtensions();
         return pc + 1;
     }
 
     @SuppressWarnings("unused")
-    @BytecodeInterpreterHandler(value={BC.PUSH_LIT_CONST_00, BC.PUSH_LIT_CONST_01, BC.PUSH_LIT_CONST_02, BC.PUSH_LIT_CONST_03,
-            BC.PUSH_LIT_CONST_04, BC.PUSH_LIT_CONST_05, BC.PUSH_LIT_CONST_06, BC.PUSH_LIT_CONST_07,
-            BC.PUSH_LIT_CONST_08, BC.PUSH_LIT_CONST_09, BC.PUSH_LIT_CONST_0A, BC.PUSH_LIT_CONST_0B,
-            BC.PUSH_LIT_CONST_0C, BC.PUSH_LIT_CONST_0D, BC.PUSH_LIT_CONST_0E, BC.PUSH_LIT_CONST_0F,
-            BC.PUSH_LIT_CONST_10, BC.PUSH_LIT_CONST_11, BC.PUSH_LIT_CONST_12, BC.PUSH_LIT_CONST_13,
-            BC.PUSH_LIT_CONST_14, BC.PUSH_LIT_CONST_15, BC.PUSH_LIT_CONST_16, BC.PUSH_LIT_CONST_17,
-            BC.PUSH_LIT_CONST_18, BC.PUSH_LIT_CONST_19, BC.PUSH_LIT_CONST_1A, BC.PUSH_LIT_CONST_1B,
-            BC.PUSH_LIT_CONST_1C, BC.PUSH_LIT_CONST_1D, BC.PUSH_LIT_CONST_1E, BC.PUSH_LIT_CONST_1F})
+    @BytecodeInterpreterHandler(value = {BC.PUSH_LIT_CONST_00, BC.PUSH_LIT_CONST_01, BC.PUSH_LIT_CONST_02, BC.PUSH_LIT_CONST_03,
+                    BC.PUSH_LIT_CONST_04, BC.PUSH_LIT_CONST_05, BC.PUSH_LIT_CONST_06, BC.PUSH_LIT_CONST_07,
+                    BC.PUSH_LIT_CONST_08, BC.PUSH_LIT_CONST_09, BC.PUSH_LIT_CONST_0A, BC.PUSH_LIT_CONST_0B,
+                    BC.PUSH_LIT_CONST_0C, BC.PUSH_LIT_CONST_0D, BC.PUSH_LIT_CONST_0E, BC.PUSH_LIT_CONST_0F,
+                    BC.PUSH_LIT_CONST_10, BC.PUSH_LIT_CONST_11, BC.PUSH_LIT_CONST_12, BC.PUSH_LIT_CONST_13,
+                    BC.PUSH_LIT_CONST_14, BC.PUSH_LIT_CONST_15, BC.PUSH_LIT_CONST_16, BC.PUSH_LIT_CONST_17,
+                    BC.PUSH_LIT_CONST_18, BC.PUSH_LIT_CONST_19, BC.PUSH_LIT_CONST_1A, BC.PUSH_LIT_CONST_1B,
+                    BC.PUSH_LIT_CONST_1C, BC.PUSH_LIT_CONST_1D, BC.PUSH_LIT_CONST_1E, BC.PUSH_LIT_CONST_1F})
     public int handlePushLiteralConstant(
-            final int pc,
-            final State state,
-            final VirtualFrame frame,
-            final byte[] bc) {
+                    final int pc,
+                    final State state,
+                    final VirtualFrame frame,
+                    final byte[] bc) {
         final int index = getUnsignedInt(bc, pc) & 0x1F;
         push(frame, state.sp++, getAndResolveLiteral(pc, index));
-        state.resetExtensions();
         return pc + 1;
     }
 
     @SuppressWarnings("unused")
-    @BytecodeInterpreterHandler(value={BC.PUSH_TEMP_VAR_0, BC.PUSH_TEMP_VAR_1, BC.PUSH_TEMP_VAR_2, BC.PUSH_TEMP_VAR_3,
-            BC.PUSH_TEMP_VAR_4, BC.PUSH_TEMP_VAR_5, BC.PUSH_TEMP_VAR_6, BC.PUSH_TEMP_VAR_7,
-            BC.PUSH_TEMP_VAR_8, BC.PUSH_TEMP_VAR_9, BC.PUSH_TEMP_VAR_A, BC.PUSH_TEMP_VAR_B})
+    @BytecodeInterpreterHandler(value = {BC.PUSH_TEMP_VAR_0, BC.PUSH_TEMP_VAR_1, BC.PUSH_TEMP_VAR_2, BC.PUSH_TEMP_VAR_3,
+                    BC.PUSH_TEMP_VAR_4, BC.PUSH_TEMP_VAR_5, BC.PUSH_TEMP_VAR_6, BC.PUSH_TEMP_VAR_7,
+                    BC.PUSH_TEMP_VAR_8, BC.PUSH_TEMP_VAR_9, BC.PUSH_TEMP_VAR_A, BC.PUSH_TEMP_VAR_B})
     public int handlePushTemporaryVariable(
-            final int pc,
-            final State state,
-            final VirtualFrame frame,
-            final byte[] bc) {
+                    final int pc,
+                    final State state,
+                    final VirtualFrame frame,
+                    final byte[] bc) {
         final int index = getUnsignedInt(bc, pc) & 0x0F;
         pushFollowed(frame, pc, state.sp++, getTemp(frame, index));
-        state.resetExtensions();
         return pc + 1;
     }
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.PUSH_RECEIVER)
     public int handlePushReceiver(
-            final int pc,
-            final State state,
-            final VirtualFrame frame,
-            final byte[] bc) {
+                    final int pc,
+                    final State state,
+                    final VirtualFrame frame,
+                    final byte[] bc) {
         pushFollowed(frame, pc, state.sp++, FrameAccess.getReceiver(frame));
-        state.resetExtensions();
         return pc + 1;
     }
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.PUSH_CONSTANT_TRUE)
     public int handlePushConstantTrue(
-            final int pc,
-            final State state,
-            final VirtualFrame frame,
-            final byte[] bc) {
+                    final int pc,
+                    final State state,
+                    final VirtualFrame frame,
+                    final byte[] bc) {
         push(frame, state.sp++, BooleanObject.TRUE);
-        state.resetExtensions();
         return pc + 1;
     }
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.PUSH_CONSTANT_FALSE)
     public int handlePushConstantFalse(
-            final int pc,
-            final State state,
-            final VirtualFrame frame,
-            final byte[] bc) {
+                    final int pc,
+                    final State state,
+                    final VirtualFrame frame,
+                    final byte[] bc) {
         push(frame, state.sp++, BooleanObject.FALSE);
-        state.resetExtensions();
         return pc + 1;
     }
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.PUSH_CONSTANT_NIL)
     public int handlePushConstantNil(
-            final int pc,
-            final State state,
-            final VirtualFrame frame,
-            final byte[] bc) {
+                    final int pc,
+                    final State state,
+                    final VirtualFrame frame,
+                    final byte[] bc) {
         push(frame, state.sp++, NilObject.SINGLETON);
-        state.resetExtensions();
         return pc + 1;
     }
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.PUSH_CONSTANT_ZERO)
     public int handlePushConstantZero(
-            final int pc,
-            final State state,
-            final VirtualFrame frame,
-            final byte[] bc) {
+                    final int pc,
+                    final State state,
+                    final VirtualFrame frame,
+                    final byte[] bc) {
         push(frame, state.sp++, 0L);
-        state.resetExtensions();
         return pc + 1;
     }
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.PUSH_CONSTANT_ONE)
     public int handlePushConstantOne(
-            final int pc,
-            final State state,
-            final VirtualFrame frame,
-            final byte[] bc) {
+                    final int pc,
+                    final State state,
+                    final VirtualFrame frame,
+                    final byte[] bc) {
         push(frame, state.sp++, 1L);
-        state.resetExtensions();
         return pc + 1;
     }
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.EXT_PUSH_PSEUDO_VARIABLE)
     public int handlePushPseudoVariable(
-            final int pc,
-            final State state,
-            final VirtualFrame frame,
-            final byte[] bc) {
+                    final int pc,
+                    final State state,
+                    final VirtualFrame frame,
+                    final byte[] bc) {
         if (state.getExtB() == 0) {
             push(frame, state.sp++, getOrCreateContext(frame, pc));
         } else {
@@ -1024,25 +1018,24 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.DUPLICATE_TOP)
     public int handleDuplicateTop(
-            final int pc,
-            final State state,
-            final VirtualFrame frame,
-            final byte[] bc) {
+                    final int pc,
+                    final State state,
+                    final VirtualFrame frame,
+                    final byte[] bc) {
         pushFollowed(frame, pc, state.sp, top(frame, state.sp));
         state.sp++;
-        state.resetExtensions();
         return pc + 1;
     }
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.EXT_PUSH_RECEIVER_VARIABLE)
     public int handleExtendedPushReceiverVariable(
-            final int pc,
-            final State state,
-            final VirtualFrame frame,
-            final byte[] bc) {
-         pushFollowed(frame, pc, state.sp++,
-                uncheckedCast(data[pc], SqueakObjectAt0NodeGen.class).execute(this, FrameAccess.getReceiver(frame), getByteExtended(bc, pc + 1, state.getExtA())));
+                    final int pc,
+                    final State state,
+                    final VirtualFrame frame,
+                    final byte[] bc) {
+        pushFollowed(frame, pc, state.sp++,
+                        uncheckedCast(data[pc], SqueakObjectAt0NodeGen.class).execute(this, FrameAccess.getReceiver(frame), getByteExtended(bc, pc + 1, state.getExtA())));
         state.resetExtensions();
         return pc + 2;
     }
@@ -1050,10 +1043,10 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.EXT_PUSH_LITERAL_VARIABLE)
     public int handleExtendedPushLiteralVariable(
-            final int pc,
-            final State state,
-            final VirtualFrame frame,
-            final byte[] bc) {
+                    final int pc,
+                    final State state,
+                    final VirtualFrame frame,
+                    final byte[] bc) {
         push(frame, state.sp++, readLiteralVariable(pc, getByteExtended(bc, pc + 1, state.getExtA())));
         state.resetExtensions();
         return pc + 2;
@@ -1062,10 +1055,10 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.EXT_PUSH_LITERAL)
     public int handleExtendedPushLiteralConstant(
-            final int pc,
-            final State state,
-            final VirtualFrame frame,
-            final byte[] bc) {
+                    final int pc,
+                    final State state,
+                    final VirtualFrame frame,
+                    final byte[] bc) {
         push(frame, state.sp++, getAndResolveLiteral(pc, getByteExtended(bc, pc + 1, state.getExtA())));
         state.resetExtensions();
         return pc + 2;
@@ -1074,22 +1067,21 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.LONG_PUSH_TEMPORARY_VARIABLE)
     public int handleLongPushTemporaryVariable(
-            final int pc,
-            final State state,
-            final VirtualFrame frame,
-            final byte[] bc) {
+                    final int pc,
+                    final State state,
+                    final VirtualFrame frame,
+                    final byte[] bc) {
         pushFollowed(frame, pc, state.sp++, getTemp(frame, getUnsignedInt(bc, pc + 1)));
-        state.resetExtensions();
         return pc + 2;
     }
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.PUSH_NEW_ARRAY)
     public int handlePushNewArray(
-            final int pc,
-            final State state,
-            final VirtualFrame frame,
-            final byte[] bc) {
+                    final int pc,
+                    final State state,
+                    final VirtualFrame frame,
+                    final byte[] bc) {
         final int param = getByte(bc, pc + 1);
         final int arraySize = param & 127;
         final Object[] values;
@@ -1100,17 +1092,16 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
             values = ArrayUtils.withAll(arraySize, NilObject.SINGLETON);
         }
         push(frame, state.sp++, ArrayObject.createWithStorage(getContext().arrayClass, values));
-        state.resetExtensions();
         return pc + 2;
     }
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.EXT_PUSH_INTEGER)
     public int handleExtendedPushInteger(
-            final int pc,
-            final State state,
-            final VirtualFrame frame,
-            final byte[] bc) {
+                    final int pc,
+                    final State state,
+                    final VirtualFrame frame,
+                    final byte[] bc) {
         push(frame, state.sp++, (long) getByteExtended(bc, pc + 1, state.getExtB()));
         state.resetExtensions();
         return pc + 2;
@@ -1119,10 +1110,10 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.EXT_PUSH_CHARACTER)
     public int handleExtendedPushCharacter(
-            final int pc,
-            final State state,
-            final VirtualFrame frame,
-            final byte[] bc) {
+                    final int pc,
+                    final State state,
+                    final VirtualFrame frame,
+                    final byte[] bc) {
         push(frame, state.sp++, CharacterObject.valueOf(getByteExtended(bc, pc + 1, state.getExtA())));
         state.resetExtensions();
         return pc + 2;
@@ -1131,10 +1122,10 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.EXT_PUSH_FULL_CLOSURE)
     public int handleExtendedPushFullClosure(
-            final int pc,
-            final State state,
-            final VirtualFrame frame,
-            final byte[] bc) {
+                    final int pc,
+                    final State state,
+                    final VirtualFrame frame,
+                    final byte[] bc) {
         final int literalIndex = getByteExtended(bc, pc + 1, state.getExtA());
         final CompiledCodeObject block = (CompiledCodeObject) code.getLiteral(literalIndex);
         assert block.assertNotForwarded();
@@ -1155,10 +1146,10 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.EXT_PUSH_CLOSURE)
     public int handleExtendedPushClosure(
-            final int pc,
-            final State state,
-            final VirtualFrame frame,
-            final byte[] bc) {
+                    final int pc,
+                    final State state,
+                    final VirtualFrame frame,
+                    final byte[] bc) {
         final int byteA = getUnsignedInt(bc, pc + 1);
         final int numCopied = (byteA >> 3 & 0x7) + (state.getExtA() >> 4) * 8;
         final Object[] copiedValues = popN(frame, state.sp, numCopied);
@@ -1172,14 +1163,13 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.PUSH_REMOTE_TEMP_LONG)
     public int handleLongPushRemoteTemporaryVariable(
-            final int pc,
-            final State state,
-            final VirtualFrame frame,
-            final byte[] bc) {
+                    final int pc,
+                    final State state,
+                    final VirtualFrame frame,
+                    final byte[] bc) {
         final int remoteTempIndex = getUnsignedInt(bc, pc + 1);
         final int tempVectorIndex = getUnsignedInt(bc, pc + 2);
         pushFollowed(frame, pc, state.sp++, uncheckedCast(data[pc], SqueakObjectAt0NodeGen.class).execute(this, getTemp(frame, tempVectorIndex), remoteTempIndex));
-        state.resetExtensions();
         return pc + 3;
     }
 
@@ -1188,42 +1178,39 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
     // =========================================================================
 
     @SuppressWarnings("unused")
-    @BytecodeInterpreterHandler(value={BC.POP_INTO_RCVR_VAR_0, BC.POP_INTO_RCVR_VAR_1, BC.POP_INTO_RCVR_VAR_2, BC.POP_INTO_RCVR_VAR_3,
-            BC.POP_INTO_RCVR_VAR_4, BC.POP_INTO_RCVR_VAR_5, BC.POP_INTO_RCVR_VAR_6, BC.POP_INTO_RCVR_VAR_7})
+    @BytecodeInterpreterHandler(value = {BC.POP_INTO_RCVR_VAR_0, BC.POP_INTO_RCVR_VAR_1, BC.POP_INTO_RCVR_VAR_2, BC.POP_INTO_RCVR_VAR_3,
+                    BC.POP_INTO_RCVR_VAR_4, BC.POP_INTO_RCVR_VAR_5, BC.POP_INTO_RCVR_VAR_6, BC.POP_INTO_RCVR_VAR_7})
     public int handlePopIntoReceiverVariable(
-            final int pc,
-            final State state,
-            final VirtualFrame frame,
-            final byte[] bc) {
+                    final int pc,
+                    final State state,
+                    final VirtualFrame frame,
+                    final byte[] bc) {
         final int index = getUnsignedInt(bc, pc) & 0x07;
         uncheckedCast(data[pc], SqueakObjectAtPut0Node.class).execute(this, FrameAccess.getReceiver(frame), index, pop(frame, --state.sp));
-        state.resetExtensions();
         return pc + 1;
     }
 
     @SuppressWarnings("unused")
-    @BytecodeInterpreterHandler(value={BC.POP_INTO_TEMP_VAR_0, BC.POP_INTO_TEMP_VAR_1, BC.POP_INTO_TEMP_VAR_2, BC.POP_INTO_TEMP_VAR_3,
-            BC.POP_INTO_TEMP_VAR_4, BC.POP_INTO_TEMP_VAR_5, BC.POP_INTO_TEMP_VAR_6, BC.POP_INTO_TEMP_VAR_7})
+    @BytecodeInterpreterHandler(value = {BC.POP_INTO_TEMP_VAR_0, BC.POP_INTO_TEMP_VAR_1, BC.POP_INTO_TEMP_VAR_2, BC.POP_INTO_TEMP_VAR_3,
+                    BC.POP_INTO_TEMP_VAR_4, BC.POP_INTO_TEMP_VAR_5, BC.POP_INTO_TEMP_VAR_6, BC.POP_INTO_TEMP_VAR_7})
     public int handlePopIntoTemporaryVariable(
-            final int pc,
-            final State state,
-            final VirtualFrame frame,
-            final byte[] bc) {
+                    final int pc,
+                    final State state,
+                    final VirtualFrame frame,
+                    final byte[] bc) {
         final int index = getUnsignedInt(bc, pc) & 0x07;
         setStackValue(frame, index, pop(frame, --state.sp));
-        state.resetExtensions();
         return pc + 1;
     }
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.POP_STACK)
     public int handlePopStack(
-            final int pc,
-            final State state,
-            final VirtualFrame frame,
-            final byte[] bc) {
+                    final int pc,
+                    final State state,
+                    final VirtualFrame frame,
+                    final byte[] bc) {
         pop(frame, --state.sp);
-        state.resetExtensions();
         return pc + 1;
     }
 
@@ -1234,10 +1221,10 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.EXT_STORE_AND_POP_RECEIVER_VARIABLE)
     public int handleExtendedStoreAndPopReceiverVariable(
-            final int pc,
-            final State state,
-            final VirtualFrame frame,
-            final byte[] bc) {
+                    final int pc,
+                    final State state,
+                    final VirtualFrame frame,
+                    final byte[] bc) {
         final int index = getByteExtended(bc, pc + 1, state.getExtA());
         uncheckedCast(data[pc], SqueakObjectAtPut0Node.class).execute(this, FrameAccess.getReceiver(frame), index, pop(frame, --state.sp));
         state.resetExtensions();
@@ -1247,10 +1234,10 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.EXT_STORE_AND_POP_LITERAL_VARIABLE)
     public int handleExtendedStoreAndPopLiteralVariable(
-            final int pc,
-            final State state,
-            final VirtualFrame frame,
-            final byte[] bc) {
+                    final int pc,
+                    final State state,
+                    final VirtualFrame frame,
+                    final byte[] bc) {
         final int index = getByteExtended(bc, pc + 1, state.getExtA());
         uncheckedCast(data[pc], SqueakObjectAtPut0Node.class).execute(this, getAndResolveLiteral(pc, index), ASSOCIATION.VALUE, pop(frame, --state.sp));
         state.resetExtensions();
@@ -1260,22 +1247,21 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.LONG_STORE_AND_POP_TEMPORARY_VARIABLE)
     public int handleLongStoreAndPopTemporaryVariable(
-            final int pc,
-            final State state,
-            final VirtualFrame frame,
-            final byte[] bc) {
+                    final int pc,
+                    final State state,
+                    final VirtualFrame frame,
+                    final byte[] bc) {
         setStackValue(frame, getUnsignedInt(bc, pc + 1), pop(frame, --state.sp));
-        state.resetExtensions();
         return pc + 2;
     }
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.EXT_STORE_RECEIVER_VARIABLE)
     public int handleExtendedStoreReceiverVariable(
-            final int pc,
-            final State state,
-            final VirtualFrame frame,
-            final byte[] bc) {
+                    final int pc,
+                    final State state,
+                    final VirtualFrame frame,
+                    final byte[] bc) {
         final int index = getByteExtended(bc, pc + 1, state.getExtA());
         uncheckedCast(data[pc], SqueakObjectAtPut0Node.class).execute(this, FrameAccess.getReceiver(frame), index, top(frame, state.sp));
         state.resetExtensions();
@@ -1285,10 +1271,10 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.EXT_STORE_LITERAL_VARIABLE)
     public int handleExtendedStoreLiteralVariable(
-            final int pc,
-            final State state,
-            final VirtualFrame frame,
-            final byte[] bc) {
+                    final int pc,
+                    final State state,
+                    final VirtualFrame frame,
+                    final byte[] bc) {
         final int index = getByteExtended(bc, pc + 1, state.getExtA());
         uncheckedCast(data[pc], SqueakObjectAtPut0Node.class).execute(this, getAndResolveLiteral(pc, index), ASSOCIATION.VALUE, top(frame, state.sp));
         state.resetExtensions();
@@ -1298,40 +1284,37 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.LONG_STORE_TEMPORARY_VARIABLE)
     public int handleLongStoreTemporaryVariable(
-            final int pc,
-            final State state,
-            final VirtualFrame frame,
-            final byte[] bc) {
+                    final int pc,
+                    final State state,
+                    final VirtualFrame frame,
+                    final byte[] bc) {
         setStackValue(frame, getUnsignedInt(bc, pc + 1), top(frame, state.sp));
-        state.resetExtensions();
         return pc + 2;
     }
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.STORE_REMOTE_TEMP_LONG)
     public int handleLongStoreRemoteTemporaryVariable(
-            final int pc,
-            final State state,
-            final VirtualFrame frame,
-            final byte[] bc) {
+                    final int pc,
+                    final State state,
+                    final VirtualFrame frame,
+                    final byte[] bc) {
         final int remoteTempIndex = getUnsignedInt(bc, pc + 1);
         final int tempVectorIndex = getUnsignedInt(bc, pc + 2);
         uncheckedCast(data[pc], SqueakObjectAtPut0Node.class).execute(this, getTemp(frame, tempVectorIndex), remoteTempIndex, top(frame, state.sp));
-        state.resetExtensions();
         return pc + 3;
     }
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.STORE_AND_POP_REMOTE_TEMP_LONG)
     public int handleLongStoreAndPopRemoteTemporaryVariable(
-            final int pc,
-            final State state,
-            final VirtualFrame frame,
-            final byte[] bc) {
+                    final int pc,
+                    final State state,
+                    final VirtualFrame frame,
+                    final byte[] bc) {
         final int remoteTempIndex = getUnsignedInt(bc, pc + 1);
         final int tempVectorIndex = getUnsignedInt(bc, pc + 2);
         uncheckedCast(data[pc], SqueakObjectAtPut0Node.class).execute(this, getTemp(frame, tempVectorIndex), remoteTempIndex, pop(frame, --state.sp));
-        state.resetExtensions();
         return pc + 3;
     }
 
@@ -1342,21 +1325,21 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.RETURN_RECEIVER)
     public int handleReturnReceiver(
-            final int pc,
-            final State state,
-            final VirtualFrame frame,
-            final byte[] bc) {
+                    final int pc,
+                    final State state,
+                    final VirtualFrame frame,
+                    final byte[] bc) {
         state.returnValue = handleReturn(frame, pc, pc + 1, state.sp, FrameAccess.getReceiver(frame), state.getProfileCount());
-       return LOCAL_RETURN_PC;
+        return LOCAL_RETURN_PC;
     }
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.RETURN_TRUE)
     public int handleReturnTrue(
-            final int pc,
-            final State state,
-            final VirtualFrame frame,
-            final byte[] bc) {
+                    final int pc,
+                    final State state,
+                    final VirtualFrame frame,
+                    final byte[] bc) {
         state.returnValue = handleReturn(frame, pc, pc + 1, state.sp, BooleanObject.TRUE, state.getProfileCount());
         return LOCAL_RETURN_PC;
     }
@@ -1364,10 +1347,10 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.RETURN_FALSE)
     public int handleReturnFalse(
-            final int pc,
-            final State state,
-            final VirtualFrame frame,
-            final byte[] bc) {
+                    final int pc,
+                    final State state,
+                    final VirtualFrame frame,
+                    final byte[] bc) {
         state.returnValue = handleReturn(frame, pc, pc + 1, state.sp, BooleanObject.FALSE, state.getProfileCount());
         return LOCAL_RETURN_PC;
     }
@@ -1375,10 +1358,10 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.RETURN_NIL)
     public int handleReturnNil(
-            final int pc,
-            final State state,
-            final VirtualFrame frame,
-            final byte[] bc) {
+                    final int pc,
+                    final State state,
+                    final VirtualFrame frame,
+                    final byte[] bc) {
         state.returnValue = handleReturn(frame, pc, pc + 1, state.sp, NilObject.SINGLETON, state.getProfileCount());
         return LOCAL_RETURN_PC;
     }
@@ -1386,10 +1369,10 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.RETURN_TOP_FROM_METHOD)
     public int handleReturnTopFromMethod(
-            final int pc,
-            final State state,
-            final VirtualFrame frame,
-            final byte[] bc) {
+                    final int pc,
+                    final State state,
+                    final VirtualFrame frame,
+                    final byte[] bc) {
         state.returnValue = handleReturn(frame, pc, pc + 1, state.sp, top(frame, state.sp), state.getProfileCount());
         return LOCAL_RETURN_PC;
     }
@@ -1397,10 +1380,10 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.RETURN_NIL_FROM_BLOCK)
     public int handleReturnNilFromBlock(
-            final int pc,
-            final State state,
-            final VirtualFrame frame,
-            final byte[] bc) {
+                    final int pc,
+                    final State state,
+                    final VirtualFrame frame,
+                    final byte[] bc) {
         state.returnValue = handleReturnFromBlock(frame, pc, NilObject.SINGLETON, state.getProfileCount());
         return LOCAL_RETURN_PC;
     }
@@ -1408,10 +1391,10 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.RETURN_TOP_FROM_BLOCK)
     public int handleReturnTopFromBlock(
-            final int pc,
-            final State state,
-            final VirtualFrame frame,
-            final byte[] bc) {
+                    final int pc,
+                    final State state,
+                    final VirtualFrame frame,
+                    final byte[] bc) {
         state.returnValue = handleReturnFromBlock(frame, pc, top(frame, state.sp), state.getProfileCount());
         return LOCAL_RETURN_PC;
     }
@@ -1423,10 +1406,10 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.BYTECODE_PRIM_ADD)
     public int handlePrimitiveAdd(
-            final int pc,
-            final State state,
-            final VirtualFrame frame,
-            final byte[] bc) {
+                    final int pc,
+                    final State state,
+                    final VirtualFrame frame,
+                    final byte[] bc) {
         final Object arg = pop(frame, --state.sp);
         final Object receiver = popReceiver(frame, --state.sp);
         final byte profile = profiles[pc];
@@ -1453,17 +1436,16 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
             nextPC = internalizePC(frame, nextPC);
         }
         push(frame, state.sp++, result);
-        state.resetExtensions();
         return nextPC;
     }
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.BYTECODE_PRIM_SUBTRACT)
     public int handlePrimitiveSubtract(
-            final int pc,
-            final State state,
-            final VirtualFrame frame,
-            final byte[] bc) {
+                    final int pc,
+                    final State state,
+                    final VirtualFrame frame,
+                    final byte[] bc) {
         final Object arg = pop(frame, --state.sp);
         final Object receiver = popReceiver(frame, --state.sp);
         final byte profile = profiles[pc];
@@ -1490,17 +1472,16 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
             nextPC = internalizePC(frame, nextPC);
         }
         push(frame, state.sp++, result);
-        state.resetExtensions();
         return nextPC;
     }
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.BYTECODE_PRIM_LESS_THAN)
     public int handlePrimitiveLessThan(
-            final int pc,
-            final State state,
-            final VirtualFrame frame,
-            final byte[] bc) {
+                    final int pc,
+                    final State state,
+                    final VirtualFrame frame,
+                    final byte[] bc) {
         final Object arg = pop(frame, --state.sp);
         final Object receiver = popReceiver(frame, --state.sp);
         final byte profile = profiles[pc];
@@ -1519,17 +1500,16 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
             nextPC = internalizePC(frame, nextPC);
         }
         push(frame, state.sp++, result);
-        state.resetExtensions();
         return nextPC;
     }
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.BYTECODE_PRIM_GREATER_THAN)
     public int handlePrimitiveGreaterThan(
-            final int pc,
-            final State state,
-            final VirtualFrame frame,
-            final byte[] bc) {
+                    final int pc,
+                    final State state,
+                    final VirtualFrame frame,
+                    final byte[] bc) {
         final Object arg = pop(frame, --state.sp);
         final Object receiver = popReceiver(frame, --state.sp);
         final byte profile = profiles[pc];
@@ -1548,17 +1528,16 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
             nextPC = internalizePC(frame, nextPC);
         }
         push(frame, state.sp++, result);
-        state.resetExtensions();
         return nextPC;
     }
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.BYTECODE_PRIM_LESS_OR_EQUAL)
     public int handlePrimitiveLessOrEqual(
-            final int pc,
-            final State state,
-            final VirtualFrame frame,
-            final byte[] bc) {
+                    final int pc,
+                    final State state,
+                    final VirtualFrame frame,
+                    final byte[] bc) {
         final Object arg = pop(frame, --state.sp);
         final Object receiver = popReceiver(frame, --state.sp);
         final byte profile = profiles[pc];
@@ -1577,17 +1556,16 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
             nextPC = internalizePC(frame, nextPC);
         }
         push(frame, state.sp++, result);
-        state.resetExtensions();
         return nextPC;
     }
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.BYTECODE_PRIM_GREATER_OR_EQUAL)
     public int handlePrimitiveGreaterOrEqual(
-            final int pc,
-            final State state,
-            final VirtualFrame frame,
-            final byte[] bc) {
+                    final int pc,
+                    final State state,
+                    final VirtualFrame frame,
+                    final byte[] bc) {
         final Object arg = pop(frame, --state.sp);
         final Object receiver = popReceiver(frame, --state.sp);
         final byte profile = profiles[pc];
@@ -1606,17 +1584,16 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
             nextPC = internalizePC(frame, nextPC);
         }
         push(frame, state.sp++, result);
-        state.resetExtensions();
         return nextPC;
     }
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.BYTECODE_PRIM_EQUAL)
     public int handlePrimitiveEqual(
-            final int pc,
-            final State state,
-            final VirtualFrame frame,
-            final byte[] bc) {
+                    final int pc,
+                    final State state,
+                    final VirtualFrame frame,
+                    final byte[] bc) {
         final Object arg = pop(frame, --state.sp);
         final Object receiver = popReceiver(frame, --state.sp);
         final byte profile = profiles[pc];
@@ -1635,17 +1612,16 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
             nextPC = internalizePC(frame, nextPC);
         }
         push(frame, state.sp++, result);
-        state.resetExtensions();
         return nextPC;
     }
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.BYTECODE_PRIM_NOT_EQUAL)
     public int handlePrimitiveNotEqual(
-            final int pc,
-            final State state,
-            final VirtualFrame frame,
-            final byte[] bc) {
+                    final int pc,
+                    final State state,
+                    final VirtualFrame frame,
+                    final byte[] bc) {
         final Object arg = pop(frame, --state.sp);
         final Object receiver = popReceiver(frame, --state.sp);
         final byte profile = profiles[pc];
@@ -1664,17 +1640,16 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
             nextPC = internalizePC(frame, nextPC);
         }
         push(frame, state.sp++, result);
-        state.resetExtensions();
         return nextPC;
     }
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.BYTECODE_PRIM_BIT_AND)
     public int handlePrimitiveBitAnd(
-            final int pc,
-            final State state,
-            final VirtualFrame frame,
-            final byte[] bc) {
+                    final int pc,
+                    final State state,
+                    final VirtualFrame frame,
+                    final byte[] bc) {
         final Object arg = pop(frame, --state.sp);
         final Object receiver = popReceiver(frame, --state.sp);
         final byte profile = profiles[pc];
@@ -1690,17 +1665,16 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
             nextPC = internalizePC(frame, nextPC);
         }
         push(frame, state.sp++, result);
-        state.resetExtensions();
         return nextPC;
     }
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.BYTECODE_PRIM_BIT_OR)
     public int handlePrimitiveBitOr(
-            final int pc,
-            final State state,
-            final VirtualFrame frame,
-            final byte[] bc) {
+                    final int pc,
+                    final State state,
+                    final VirtualFrame frame,
+                    final byte[] bc) {
         final Object arg = pop(frame, --state.sp);
         final Object receiver = popReceiver(frame, --state.sp);
         final byte profile = profiles[pc];
@@ -1716,106 +1690,100 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
             nextPC = internalizePC(frame, nextPC);
         }
         push(frame, state.sp++, result);
-        state.resetExtensions();
         return nextPC;
     }
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.BYTECODE_PRIM_IDENTICAL)
     public int handlePrimitiveIdentical(
-            final int pc,
-            final State state,
-            final VirtualFrame frame,
-            final byte[] bc) {
+                    final int pc,
+                    final State state,
+                    final VirtualFrame frame,
+                    final byte[] bc) {
         final Object arg = pop(frame, --state.sp);
         final Object receiver = popReceiver(frame, --state.sp);
         push(frame, state.sp++, uncheckedCast(data[pc], SqueakObjectIdentityNodeGen.class).execute(this, receiver, arg));
-        state.resetExtensions();
         return pc + 1;
     }
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.BYTECODE_PRIM_CLASS)
     public int handlePrimitiveClass(
-            final int pc,
-            final State state,
-            final VirtualFrame frame,
-            final byte[] bc) {
+                    final int pc,
+                    final State state,
+                    final VirtualFrame frame,
+                    final byte[] bc) {
         final Object receiver = popReceiver(frame, --state.sp);
         push(frame, state.sp++, uncheckedCast(data[pc], SqueakObjectClassNodeGen.class).executeLookup(this, receiver));
-        state.resetExtensions();
         return pc + 1;
     }
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.BYTECODE_PRIM_NOT_IDENTICAL)
     public int handlePrimitiveNotIdentical(
-            final int pc,
-            final State state,
-            final VirtualFrame frame,
-            final byte[] bc) {
+                    final int pc,
+                    final State state,
+                    final VirtualFrame frame,
+                    final byte[] bc) {
         final Object arg = pop(frame, --state.sp);
         final Object receiver = popReceiver(frame, --state.sp);
         push(frame, state.sp++, !uncheckedCast(data[pc], SqueakObjectIdentityNodeGen.class).execute(this, receiver, arg));
-        state.resetExtensions();
         return pc + 1;
     }
 
     @SuppressWarnings("unused")
-    @BytecodeInterpreterHandler(value={BC.BYTECODE_PRIM_SIZE, BC.BYTECODE_PRIM_NEXT, BC.BYTECODE_PRIM_AT_END, BC.BYTECODE_PRIM_VALUE,
-            BC.BYTECODE_PRIM_NEW, BC.BYTECODE_PRIM_POINT_X, BC.BYTECODE_PRIM_POINT_Y,
-            BC.SEND_LIT_SEL0_0, BC.SEND_LIT_SEL0_1, BC.SEND_LIT_SEL0_2, BC.SEND_LIT_SEL0_3,
-            BC.SEND_LIT_SEL0_4, BC.SEND_LIT_SEL0_5, BC.SEND_LIT_SEL0_6, BC.SEND_LIT_SEL0_7,
-            BC.SEND_LIT_SEL0_8, BC.SEND_LIT_SEL0_9, BC.SEND_LIT_SEL0_A, BC.SEND_LIT_SEL0_B,
-            BC.SEND_LIT_SEL0_C, BC.SEND_LIT_SEL0_D, BC.SEND_LIT_SEL0_E, BC.SEND_LIT_SEL0_F})
+    @BytecodeInterpreterHandler(value = {BC.BYTECODE_PRIM_SIZE, BC.BYTECODE_PRIM_NEXT, BC.BYTECODE_PRIM_AT_END, BC.BYTECODE_PRIM_VALUE,
+                    BC.BYTECODE_PRIM_NEW, BC.BYTECODE_PRIM_POINT_X, BC.BYTECODE_PRIM_POINT_Y,
+                    BC.SEND_LIT_SEL0_0, BC.SEND_LIT_SEL0_1, BC.SEND_LIT_SEL0_2, BC.SEND_LIT_SEL0_3,
+                    BC.SEND_LIT_SEL0_4, BC.SEND_LIT_SEL0_5, BC.SEND_LIT_SEL0_6, BC.SEND_LIT_SEL0_7,
+                    BC.SEND_LIT_SEL0_8, BC.SEND_LIT_SEL0_9, BC.SEND_LIT_SEL0_A, BC.SEND_LIT_SEL0_B,
+                    BC.SEND_LIT_SEL0_C, BC.SEND_LIT_SEL0_D, BC.SEND_LIT_SEL0_E, BC.SEND_LIT_SEL0_F})
     public int handleSend0(
-            final int pc,
-            final State state,
-            final VirtualFrame frame,
-            final byte[] bc) {
+                    final int pc,
+                    final State state,
+                    final VirtualFrame frame,
+                    final byte[] bc) {
         int nextPC = pc + 1;
         final Object receiver = popReceiver(frame, --state.sp);
         externalizePCAndSP(frame, nextPC, state.sp);
         push(frame, state.sp++, send(frame, pc, receiver));
         nextPC = internalizePC(frame, nextPC);
-        state.resetExtensions();
         return nextPC;
     }
 
     @SuppressWarnings("unused")
-    @BytecodeInterpreterHandler(value={BC.BYTECODE_PRIM_MULTIPLY, BC.BYTECODE_PRIM_DIVIDE, BC.BYTECODE_PRIM_MOD, BC.BYTECODE_PRIM_MAKE_POINT,
-            BC.BYTECODE_PRIM_BIT_SHIFT, BC.BYTECODE_PRIM_DIV, BC.BYTECODE_PRIM_AT, BC.BYTECODE_PRIM_NEXT_PUT,
-            BC.BYTECODE_PRIM_VALUE_WITH_ARG, BC.BYTECODE_PRIM_DO, BC.BYTECODE_PRIM_NEW_WITH_ARG,
-            BC.SEND_LIT_SEL1_0, BC.SEND_LIT_SEL1_1, BC.SEND_LIT_SEL1_2, BC.SEND_LIT_SEL1_3,
-            BC.SEND_LIT_SEL1_4, BC.SEND_LIT_SEL1_5, BC.SEND_LIT_SEL1_6, BC.SEND_LIT_SEL1_7,
-            BC.SEND_LIT_SEL1_8, BC.SEND_LIT_SEL1_9, BC.SEND_LIT_SEL1_A, BC.SEND_LIT_SEL1_B,
-            BC.SEND_LIT_SEL1_C, BC.SEND_LIT_SEL1_D, BC.SEND_LIT_SEL1_E, BC.SEND_LIT_SEL1_F})
+    @BytecodeInterpreterHandler(value = {BC.BYTECODE_PRIM_MULTIPLY, BC.BYTECODE_PRIM_DIVIDE, BC.BYTECODE_PRIM_MOD, BC.BYTECODE_PRIM_MAKE_POINT,
+                    BC.BYTECODE_PRIM_BIT_SHIFT, BC.BYTECODE_PRIM_DIV, BC.BYTECODE_PRIM_AT, BC.BYTECODE_PRIM_NEXT_PUT,
+                    BC.BYTECODE_PRIM_VALUE_WITH_ARG, BC.BYTECODE_PRIM_DO, BC.BYTECODE_PRIM_NEW_WITH_ARG,
+                    BC.SEND_LIT_SEL1_0, BC.SEND_LIT_SEL1_1, BC.SEND_LIT_SEL1_2, BC.SEND_LIT_SEL1_3,
+                    BC.SEND_LIT_SEL1_4, BC.SEND_LIT_SEL1_5, BC.SEND_LIT_SEL1_6, BC.SEND_LIT_SEL1_7,
+                    BC.SEND_LIT_SEL1_8, BC.SEND_LIT_SEL1_9, BC.SEND_LIT_SEL1_A, BC.SEND_LIT_SEL1_B,
+                    BC.SEND_LIT_SEL1_C, BC.SEND_LIT_SEL1_D, BC.SEND_LIT_SEL1_E, BC.SEND_LIT_SEL1_F})
     public int handleSend1(
-            final int pc,
-            final State state,
-            final VirtualFrame frame,
-            final byte[] bc) {
+                    final int pc,
+                    final State state,
+                    final VirtualFrame frame,
+                    final byte[] bc) {
         int nextPC = pc + 1;
         final Object arg = pop(frame, --state.sp);
         final Object receiver = popReceiver(frame, --state.sp);
         externalizePCAndSP(frame, nextPC, state.sp);
         push(frame, state.sp++, send(frame, pc, receiver, arg));
         nextPC = internalizePC(frame, nextPC);
-        state.resetExtensions();
         return nextPC;
     }
 
     @SuppressWarnings("unused")
-    @BytecodeInterpreterHandler(value={BC.BYTECODE_PRIM_AT_PUT,
-            BC.SEND_LIT_SEL2_0, BC.SEND_LIT_SEL2_1, BC.SEND_LIT_SEL2_2, BC.SEND_LIT_SEL2_3,
-            BC.SEND_LIT_SEL2_4, BC.SEND_LIT_SEL2_5, BC.SEND_LIT_SEL2_6, BC.SEND_LIT_SEL2_7,
-            BC.SEND_LIT_SEL2_8, BC.SEND_LIT_SEL2_9, BC.SEND_LIT_SEL2_A, BC.SEND_LIT_SEL2_B,
-            BC.SEND_LIT_SEL2_C, BC.SEND_LIT_SEL2_D, BC.SEND_LIT_SEL2_E, BC.SEND_LIT_SEL2_F})
+    @BytecodeInterpreterHandler(value = {BC.BYTECODE_PRIM_AT_PUT,
+                    BC.SEND_LIT_SEL2_0, BC.SEND_LIT_SEL2_1, BC.SEND_LIT_SEL2_2, BC.SEND_LIT_SEL2_3,
+                    BC.SEND_LIT_SEL2_4, BC.SEND_LIT_SEL2_5, BC.SEND_LIT_SEL2_6, BC.SEND_LIT_SEL2_7,
+                    BC.SEND_LIT_SEL2_8, BC.SEND_LIT_SEL2_9, BC.SEND_LIT_SEL2_A, BC.SEND_LIT_SEL2_B,
+                    BC.SEND_LIT_SEL2_C, BC.SEND_LIT_SEL2_D, BC.SEND_LIT_SEL2_E, BC.SEND_LIT_SEL2_F})
     public int handleSend2(
-            final int pc,
-            final State state,
-            final VirtualFrame frame,
-            final byte[] bc) {
+                    final int pc,
+                    final State state,
+                    final VirtualFrame frame,
+                    final byte[] bc) {
         int nextPC = pc + 1;
         final Object arg2 = pop(frame, --state.sp);
         final Object arg1 = pop(frame, --state.sp);
@@ -1823,17 +1791,16 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
         externalizePCAndSP(frame, nextPC, state.sp);
         push(frame, state.sp++, send(frame, pc, receiver, arg1, arg2));
         nextPC = internalizePC(frame, nextPC);
-        state.resetExtensions();
         return nextPC;
     }
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.EXT_SEND)
     public int handleExtendedSend(
-            final int pc,
-            final State state,
-            final VirtualFrame frame,
-            final byte[] bc) {
+                    final int pc,
+                    final State state,
+                    final VirtualFrame frame,
+                    final byte[] bc) {
         int nextPC = pc + 2;
         final int byte1 = getUnsignedInt(bc, pc + 1);
         final int numArgs = (byte1 & 7) + (state.getExtB() << 3);
@@ -1850,10 +1817,10 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.EXT_SEND_SUPER)
     public int handleExtendedSuperSend(
-            final int pc,
-            final State state,
-            final VirtualFrame frame,
-            final byte[] bc) {
+                    final int pc,
+                    final State state,
+                    final VirtualFrame frame,
+                    final byte[] bc) {
         int nextPC = pc + 2;
         final boolean isDirected;
         final int extB = state.getExtB();
@@ -1884,13 +1851,13 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
     // =========================================================================
 
     @SuppressWarnings("unused")
-    @BytecodeInterpreterHandler(value={BC.SHORT_UJUMP_0, BC.SHORT_UJUMP_1, BC.SHORT_UJUMP_2, BC.SHORT_UJUMP_3,
-            BC.SHORT_UJUMP_4, BC.SHORT_UJUMP_5, BC.SHORT_UJUMP_6, BC.SHORT_UJUMP_7})
+    @BytecodeInterpreterHandler(value = {BC.SHORT_UJUMP_0, BC.SHORT_UJUMP_1, BC.SHORT_UJUMP_2, BC.SHORT_UJUMP_3,
+                    BC.SHORT_UJUMP_4, BC.SHORT_UJUMP_5, BC.SHORT_UJUMP_6, BC.SHORT_UJUMP_7})
     public int handleShortUnconditionalJump(
-            final int pc,
-            final State state,
-            final VirtualFrame frame,
-            final byte[] bc) {
+                    final int pc,
+                    final State state,
+                    final VirtualFrame frame,
+                    final byte[] bc) {
         final int offset = calculateShortOffset(getUnsignedInt(bc, pc));
         int nextPC = pc + 1 + offset;
         if (offset < 0) {
@@ -1909,26 +1876,25 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
                     }
                     state.resetProfileCount();
                 }
-//                                if (CompilerDirectives.inCompiledCode()) {
-//                                    state.resetProfileCount();
-//                                }
+// if (CompilerDirectives.inCompiledCode()) {
+// state.resetProfileCount();
+// }
             }
             if (data[pc] instanceof final CheckForInterruptsInLoopNode checkForInterruptsNode) {
                 checkForInterruptsNode.execute(frame, nextPC);
             }
         }
-        state.resetExtensions();
         return nextPC;
     }
 
     @SuppressWarnings("unused")
-    @BytecodeInterpreterHandler(value={BC.SHORT_CJUMP_TRUE_0, BC.SHORT_CJUMP_TRUE_1, BC.SHORT_CJUMP_TRUE_2, BC.SHORT_CJUMP_TRUE_3,
-            BC.SHORT_CJUMP_TRUE_4, BC.SHORT_CJUMP_TRUE_5, BC.SHORT_CJUMP_TRUE_6, BC.SHORT_CJUMP_TRUE_7})
+    @BytecodeInterpreterHandler(value = {BC.SHORT_CJUMP_TRUE_0, BC.SHORT_CJUMP_TRUE_1, BC.SHORT_CJUMP_TRUE_2, BC.SHORT_CJUMP_TRUE_3,
+                    BC.SHORT_CJUMP_TRUE_4, BC.SHORT_CJUMP_TRUE_5, BC.SHORT_CJUMP_TRUE_6, BC.SHORT_CJUMP_TRUE_7})
     public int handleShortConditionalJumpTrue(
-            final int pc,
-            final State state,
-            final VirtualFrame frame,
-            final byte[] bc) {
+                    final int pc,
+                    final State state,
+                    final VirtualFrame frame,
+                    final byte[] bc) {
         int nextPC = pc + 1;
         final Object stackValue = pop(frame, --state.sp);
         if (stackValue instanceof final Boolean condition) {
@@ -1938,18 +1904,17 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
         } else {
             sendMustBeBooleanInInterpreter(frame, nextPC, stackValue);
         }
-        state.resetExtensions();
         return nextPC;
     }
 
     @SuppressWarnings("unused")
-    @BytecodeInterpreterHandler(value={BC.SHORT_CJUMP_FALSE_0, BC.SHORT_CJUMP_FALSE_1, BC.SHORT_CJUMP_FALSE_2, BC.SHORT_CJUMP_FALSE_3,
-            BC.SHORT_CJUMP_FALSE_4, BC.SHORT_CJUMP_FALSE_5, BC.SHORT_CJUMP_FALSE_6, BC.SHORT_CJUMP_FALSE_7})
+    @BytecodeInterpreterHandler(value = {BC.SHORT_CJUMP_FALSE_0, BC.SHORT_CJUMP_FALSE_1, BC.SHORT_CJUMP_FALSE_2, BC.SHORT_CJUMP_FALSE_3,
+                    BC.SHORT_CJUMP_FALSE_4, BC.SHORT_CJUMP_FALSE_5, BC.SHORT_CJUMP_FALSE_6, BC.SHORT_CJUMP_FALSE_7})
     public int handleShortConditionalJumpFalse(
-            final int pc,
-            final State state,
-            final VirtualFrame frame,
-            final byte[] bc) {
+                    final int pc,
+                    final State state,
+                    final VirtualFrame frame,
+                    final byte[] bc) {
         int nextPC = pc + 1;
         final Object stackValue = pop(frame, --state.sp);
         if (stackValue instanceof final Boolean condition) {
@@ -1959,17 +1924,16 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
         } else {
             sendMustBeBooleanInInterpreter(frame, nextPC, stackValue);
         }
-        state.resetExtensions();
         return nextPC;
     }
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.EXT_UNCONDITIONAL_JUMP)
     public int handleExtendedUnconditionalJump(
-            final int pc,
-            final State state,
-            final VirtualFrame frame,
-            final byte[] bc) {
+                    final int pc,
+                    final State state,
+                    final VirtualFrame frame,
+                    final byte[] bc) {
         final int offset = calculateLongExtendedOffset(getByte(bc, pc + 1), state.getExtB());
         int nextPC = pc + 2 + offset;
         if (offset < 0) {
@@ -1988,9 +1952,9 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
                     }
                     state.resetProfileCount();
                 }
-//                                if (CompilerDirectives.inCompiledCode()) {
-//                                    counter = 0;
-//                                }
+// if (CompilerDirectives.inCompiledCode()) {
+// counter = 0;
+// }
             }
             if (data[pc] instanceof final CheckForInterruptsInLoopNode checkForInterruptsNode) {
                 checkForInterruptsNode.execute(frame, nextPC);
@@ -2003,10 +1967,10 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.EXT_JUMP_IF_TRUE)
     public int handleExtendedConditionalJumpTrue(
-            final int pc,
-            final State state,
-            final VirtualFrame frame,
-            final byte[] bc) {
+                    final int pc,
+                    final State state,
+                    final VirtualFrame frame,
+                    final byte[] bc) {
         final Object stackValue = pop(frame, --state.sp);
         final int offset = getByteExtended(bc, pc + 1, state.getExtB());
         int nextPC = pc + 2;
@@ -2024,10 +1988,10 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.EXT_JUMP_IF_FALSE)
     public int handleExtendedConditionalJumpFalse(
-            final int pc,
-            final State state,
-            final VirtualFrame frame,
-            final byte[] bc) {
+                    final int pc,
+                    final State state,
+                    final VirtualFrame frame,
+                    final byte[] bc) {
         final Object stackValue = pop(frame, --state.sp);
         final int offset = getByteExtended(bc, pc + 1, state.getExtB());
         int nextPC = pc + 2;
@@ -2049,10 +2013,10 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
     @SuppressWarnings({"unused", "static-method"})
     @BytecodeInterpreterHandler(BC.EXT_NOP)
     public int handleNoOperation(
-            final int pc,
-            final State state,
-            final VirtualFrame frame,
-            final byte[] bc) {
+                    final int pc,
+                    final State state,
+                    final VirtualFrame frame,
+                    final byte[] bc) {
         state.resetExtensions();
         return pc + 1;
     }
@@ -2060,10 +2024,10 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
     @SuppressWarnings({"unused", "static-method"})
     @BytecodeInterpreterHandler(BC.EXT_A)
     public int handleExtA(
-            final int pc,
-            final State state,
-            final VirtualFrame frame,
-            final byte[] bc) {
+                    final int pc,
+                    final State state,
+                    final VirtualFrame frame,
+                    final byte[] bc) {
         final int extA = state.getExtA();
         final int newExtA = (extA << 8) | getUnsignedInt(bc, pc + 1);
         state.extBA = (state.extBA & 0xFFFFFFFF00000000L) | Integer.toUnsignedLong(newExtA);
@@ -2073,24 +2037,22 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
     @SuppressWarnings({"unused", "static-method"})
     @BytecodeInterpreterHandler(BC.EXT_B)
     public int handleExtB(
-            final int pc,
-            final State state,
-            final VirtualFrame frame,
-            final byte[] bc) {
+                    final int pc,
+                    final State state,
+                    final VirtualFrame frame,
+                    final byte[] bc) {
         // {editor-fold desc="BC_EXT_B_LOGIC"}
         /*
-         * OSVM maintains a counter (numExtB) to determine whether an EXT_B byte
-         * code is the first in a series. Here, we use extB == 0 to indicate that
-         * the byte code is the first. At the moment, Squeak only emits single EXT_B
-         * byte codes, so this method will always work. However, when the image
-         * starts using sequences of EXT_B byte codes and the value being encoded is
-         * a positive integer with positions 7, 15 or 23 as the highest set bit, the
-         * decoded value will be interpreted as a negative integer. For example, the
-         * emitted sequence for the value 0x8765 would be 0x00, 0x87, 0x65. If we
-         * assume that the encoder will never try to encode the value 0 (since that
-         * is the default value without any emitted byte codes), we can detect the
-         * case of the leading zero byte by setting the upper byte of extB and
-         * relying on the next byte to shift that byte out of the register.
+         * OSVM maintains a counter (numExtB) to determine whether an EXT_B byte code is the first
+         * in a series. Here, we use extB == 0 to indicate that the byte code is the first. At the
+         * moment, Squeak only emits single EXT_B byte codes, so this method will always work.
+         * However, when the image starts using sequences of EXT_B byte codes and the value being
+         * encoded is a positive integer with positions 7, 15 or 23 as the highest set bit, the
+         * decoded value will be interpreted as a negative integer. For example, the emitted
+         * sequence for the value 0x8765 would be 0x00, 0x87, 0x65. If we assume that the encoder
+         * will never try to encode the value 0 (since that is the default value without any emitted
+         * byte codes), we can detect the case of the leading zero byte by setting the upper byte of
+         * extB and relying on the next byte to shift that byte out of the register.
          */
         // {/editor-fold}
         final int extB = state.getExtB();
@@ -2112,16 +2074,15 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.CALL_PRIMITIVE)
     public int handleCallPrimitive(
-            final int pc,
-            final State state,
-            final VirtualFrame frame,
-            final byte[] bc) {
+                    final int pc,
+                    final State state,
+                    final VirtualFrame frame,
+                    final byte[] bc) {
         if (getUnsignedInt(bc, pc + 3) == BC.LONG_STORE_TEMPORARY_VARIABLE) {
             assert state.sp > 0;
             // ToDo: should this push instead of setting the top of the stack
             setStackValue(frame, state.sp - 1, getErrorObject());
         }
-        state.resetExtensions();
         return pc + 3;
     }
 
