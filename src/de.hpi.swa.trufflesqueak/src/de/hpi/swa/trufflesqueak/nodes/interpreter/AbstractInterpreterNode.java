@@ -389,18 +389,32 @@ public abstract class AbstractInterpreterNode extends AbstractInterpreterInstrum
         return numPop == 0 ? ArrayUtils.EMPTY_ARRAY : popNExploded(frame, sp, numPop);
     }
 
-    @ExplodeLoop
     private Object[] popNExploded(final VirtualFrame frame, final int sp, final int numPop) {
+        // Use the @ExplodeLoop only when constant.
+        if (CompilerDirectives.isPartialEvaluationConstant(numPop)) {
+            return popNExplodedConstant(frame, sp, numPop);
+        } else {
+            return popNCommon(frame, sp, numPop);
+        }
+    }
+
+    @ExplodeLoop
+    private Object[] popNExplodedConstant(final VirtualFrame frame, final int sp, final int numPop) {
+        return popNCommon(frame, sp, numPop);
+    }
+
+    private Object[] popNCommon(final VirtualFrame frame, final int sp, final int numPop) {
         assert sp - numPop >= numArguments;
-        final int topSlotIndex = FrameAccess.toStackSlotIndex(sp - 1);
+        // Start at the bottom of the stack chunk we are popping and copy upwards.
+        int currentSlot = FrameAccess.toStackSlotIndex(sp - numPop);
         final Object[] stackValues = new Object[numPop];
         for (int i = 0; i < numPop; i++) {
-            final int slotIndex = topSlotIndex - i;
-            stackValues[numPop - 1 - i] = frame.getObjectStatic(slotIndex);
-            frame.setObjectStatic(slotIndex, NilObject.SINGLETON);
+            stackValues[i] = frame.getObjectStatic(currentSlot);
+            frame.setObjectStatic(currentSlot++, NilObject.SINGLETON);
         }
         return stackValues;
     }
+
 
     protected final Object top(final VirtualFrame frame, final int sp) {
         return getStackValue(frame, sp - 1);
