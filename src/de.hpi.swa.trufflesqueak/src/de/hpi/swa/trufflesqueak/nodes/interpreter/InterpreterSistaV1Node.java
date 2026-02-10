@@ -11,6 +11,8 @@ import static de.hpi.swa.trufflesqueak.util.UnsafeUtils.uncheckedCast;
 
 import com.oracle.truffle.api.CompilerAsserts;
 import com.oracle.truffle.api.CompilerDirectives;
+import com.oracle.truffle.api.CompilerDirectives.EarlyEscapeAnalysis;
+import com.oracle.truffle.api.CompilerDirectives.EarlyInline;
 import com.oracle.truffle.api.CompilerDirectives.ValueType;
 import com.oracle.truffle.api.HostCompilerDirectives;
 import com.oracle.truffle.api.HostCompilerDirectives.BytecodeInterpreterFetchOpcode;
@@ -91,6 +93,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
         int counter;
 // final LoopCounter loopCounter;
 
+        @EarlyInline
         State(final int sp) {
             this.sp = sp;
             this.returnValue = null;
@@ -374,7 +377,6 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
 
     @Override
     @BytecodeInterpreterSwitch
-    @ExplodeLoop(kind = ExplodeLoop.LoopExplosionKind.MERGE_EXPLODE)
     @BytecodeInterpreterHandlerConfig(maximumOperationCode = BC.STORE_AND_POP_REMOTE_TEMP_LONG, arguments = {
                     @Argument(nonNull = true), // Denotes `this' pointer
                     @Argument(returnValue = true),  // pc
@@ -382,6 +384,8 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
                     @Argument(nonNull = true),  // frame
                     @Argument(nonNull = true)  // bc
     })
+    @EarlyEscapeAnalysis
+    @ExplodeLoop(kind = ExplodeLoop.LoopExplosionKind.MERGE_EXPLODE)
     public Object execute(final VirtualFrame frame, final int startPC, final int startSP) {
         assert isBlock == FrameAccess.hasClosure(frame);
 
@@ -883,6 +887,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
                     BC.PUSH_RCVR_VAR_4, BC.PUSH_RCVR_VAR_5, BC.PUSH_RCVR_VAR_6, BC.PUSH_RCVR_VAR_7,
                     BC.PUSH_RCVR_VAR_8, BC.PUSH_RCVR_VAR_9, BC.PUSH_RCVR_VAR_A, BC.PUSH_RCVR_VAR_B,
                     BC.PUSH_RCVR_VAR_C, BC.PUSH_RCVR_VAR_D, BC.PUSH_RCVR_VAR_E, BC.PUSH_RCVR_VAR_F})
+    @EarlyInline
     public int handlePushReceiverVariable(
                     final int pc,
                     final State state,
@@ -899,6 +904,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
                     BC.PUSH_LIT_VAR_4, BC.PUSH_LIT_VAR_5, BC.PUSH_LIT_VAR_6, BC.PUSH_LIT_VAR_7,
                     BC.PUSH_LIT_VAR_8, BC.PUSH_LIT_VAR_9, BC.PUSH_LIT_VAR_A, BC.PUSH_LIT_VAR_B,
                     BC.PUSH_LIT_VAR_C, BC.PUSH_LIT_VAR_D, BC.PUSH_LIT_VAR_E, BC.PUSH_LIT_VAR_F})
+    @EarlyInline
     public int handlePushLiteralVariable(
                     final int pc,
                     final State state,
@@ -918,6 +924,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
                     BC.PUSH_LIT_CONST_14, BC.PUSH_LIT_CONST_15, BC.PUSH_LIT_CONST_16, BC.PUSH_LIT_CONST_17,
                     BC.PUSH_LIT_CONST_18, BC.PUSH_LIT_CONST_19, BC.PUSH_LIT_CONST_1A, BC.PUSH_LIT_CONST_1B,
                     BC.PUSH_LIT_CONST_1C, BC.PUSH_LIT_CONST_1D, BC.PUSH_LIT_CONST_1E, BC.PUSH_LIT_CONST_1F})
+    @EarlyInline
     public int handlePushLiteralConstant(
                     final int pc,
                     final State state,
@@ -932,6 +939,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
     @BytecodeInterpreterHandler(value = {BC.PUSH_TEMP_VAR_0, BC.PUSH_TEMP_VAR_1, BC.PUSH_TEMP_VAR_2, BC.PUSH_TEMP_VAR_3,
                     BC.PUSH_TEMP_VAR_4, BC.PUSH_TEMP_VAR_5, BC.PUSH_TEMP_VAR_6, BC.PUSH_TEMP_VAR_7,
                     BC.PUSH_TEMP_VAR_8, BC.PUSH_TEMP_VAR_9, BC.PUSH_TEMP_VAR_A, BC.PUSH_TEMP_VAR_B})
+    @EarlyInline
     public int handlePushTemporaryVariable(
                     final int pc,
                     final State state,
@@ -944,6 +952,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.PUSH_RECEIVER)
+    @EarlyInline
     public int handlePushReceiver(
                     final int pc,
                     final State state,
@@ -955,6 +964,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.PUSH_CONSTANT_TRUE)
+    @EarlyInline
     public int handlePushConstantTrue(
                     final int pc,
                     final State state,
@@ -966,6 +976,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.PUSH_CONSTANT_FALSE)
+    @EarlyInline
     public int handlePushConstantFalse(
                     final int pc,
                     final State state,
@@ -977,6 +988,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.PUSH_CONSTANT_NIL)
+    @EarlyInline
     public int handlePushConstantNil(
                     final int pc,
                     final State state,
@@ -988,6 +1000,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.PUSH_CONSTANT_ZERO)
+    @EarlyInline
     public int handlePushConstantZero(
                     final int pc,
                     final State state,
@@ -999,6 +1012,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.PUSH_CONSTANT_ONE)
+    @EarlyInline
     public int handlePushConstantOne(
                     final int pc,
                     final State state,
@@ -1010,6 +1024,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.EXT_PUSH_PSEUDO_VARIABLE)
+    @EarlyInline
     public int handlePushPseudoVariable(
                     final int pc,
                     final State state,
@@ -1025,6 +1040,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.DUPLICATE_TOP)
+    @EarlyInline
     public int handleDuplicateTop(
                     final int pc,
                     final State state,
@@ -1037,6 +1053,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.EXT_PUSH_RECEIVER_VARIABLE)
+    @EarlyInline
     public int handleExtendedPushReceiverVariable(
                     final int pc,
                     final State state,
@@ -1049,6 +1066,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.EXT_PUSH_LITERAL_VARIABLE)
+    @EarlyInline
     public int handleExtendedPushLiteralVariable(
                     final int pc,
                     final State state,
@@ -1060,6 +1078,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.EXT_PUSH_LITERAL)
+    @EarlyInline
     public int handleExtendedPushLiteralConstant(
                     final int pc,
                     final State state,
@@ -1071,6 +1090,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.LONG_PUSH_TEMPORARY_VARIABLE)
+    @EarlyInline
     public int handleLongPushTemporaryVariable(
                     final int pc,
                     final State state,
@@ -1082,6 +1102,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.PUSH_NEW_ARRAY)
+    @EarlyInline
     public int handlePushNewArray(
                     final int pc,
                     final State state,
@@ -1102,6 +1123,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.EXT_PUSH_INTEGER)
+    @EarlyInline
     public int handleExtendedPushInteger(
                     final int pc,
                     final State state,
@@ -1113,6 +1135,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.EXT_PUSH_CHARACTER)
+    @EarlyInline
     public int handleExtendedPushCharacter(
                     final int pc,
                     final State state,
@@ -1124,6 +1147,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.EXT_PUSH_FULL_CLOSURE)
+    @EarlyInline
     public int handleExtendedPushFullClosure(
                     final int pc,
                     final State state,
@@ -1147,6 +1171,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.EXT_PUSH_CLOSURE)
+    @EarlyInline
     public int handleExtendedPushClosure(
                     final int pc,
                     final State state,
@@ -1163,6 +1188,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.PUSH_REMOTE_TEMP_LONG)
+    @EarlyInline
     public int handleLongPushRemoteTemporaryVariable(
                     final int pc,
                     final State state,
@@ -1181,6 +1207,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(value = {BC.POP_INTO_RCVR_VAR_0, BC.POP_INTO_RCVR_VAR_1, BC.POP_INTO_RCVR_VAR_2, BC.POP_INTO_RCVR_VAR_3,
                     BC.POP_INTO_RCVR_VAR_4, BC.POP_INTO_RCVR_VAR_5, BC.POP_INTO_RCVR_VAR_6, BC.POP_INTO_RCVR_VAR_7})
+    @EarlyInline
     public int handlePopIntoReceiverVariable(
                     final int pc,
                     final State state,
@@ -1194,6 +1221,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(value = {BC.POP_INTO_TEMP_VAR_0, BC.POP_INTO_TEMP_VAR_1, BC.POP_INTO_TEMP_VAR_2, BC.POP_INTO_TEMP_VAR_3,
                     BC.POP_INTO_TEMP_VAR_4, BC.POP_INTO_TEMP_VAR_5, BC.POP_INTO_TEMP_VAR_6, BC.POP_INTO_TEMP_VAR_7})
+    @EarlyInline
     public int handlePopIntoTemporaryVariable(
                     final int pc,
                     final State state,
@@ -1206,6 +1234,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.POP_STACK)
+    @EarlyInline
     public int handlePopStack(
                     final int pc,
                     final State state,
@@ -1221,6 +1250,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.EXT_STORE_AND_POP_RECEIVER_VARIABLE)
+    @EarlyInline
     public int handleExtendedStoreAndPopReceiverVariable(
                     final int pc,
                     final State state,
@@ -1233,6 +1263,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.EXT_STORE_AND_POP_LITERAL_VARIABLE)
+    @EarlyInline
     public int handleExtendedStoreAndPopLiteralVariable(
                     final int pc,
                     final State state,
@@ -1245,6 +1276,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.LONG_STORE_AND_POP_TEMPORARY_VARIABLE)
+    @EarlyInline
     public int handleLongStoreAndPopTemporaryVariable(
                     final int pc,
                     final State state,
@@ -1256,6 +1288,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.EXT_STORE_RECEIVER_VARIABLE)
+    @EarlyInline
     public int handleExtendedStoreReceiverVariable(
                     final int pc,
                     final State state,
@@ -1268,6 +1301,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.EXT_STORE_LITERAL_VARIABLE)
+    @EarlyInline
     public int handleExtendedStoreLiteralVariable(
                     final int pc,
                     final State state,
@@ -1280,6 +1314,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.LONG_STORE_TEMPORARY_VARIABLE)
+    @EarlyInline
     public int handleLongStoreTemporaryVariable(
                     final int pc,
                     final State state,
@@ -1291,6 +1326,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.STORE_REMOTE_TEMP_LONG)
+    @EarlyInline
     public int handleLongStoreRemoteTemporaryVariable(
                     final int pc,
                     final State state,
@@ -1304,6 +1340,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.STORE_AND_POP_REMOTE_TEMP_LONG)
+    @EarlyInline
     public int handleLongStoreAndPopRemoteTemporaryVariable(
                     final int pc,
                     final State state,
@@ -1321,6 +1358,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.RETURN_RECEIVER)
+    @EarlyInline
     public int handleReturnReceiver(
                     final int pc,
                     final State state,
@@ -1332,6 +1370,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.RETURN_TRUE)
+    @EarlyInline
     public int handleReturnTrue(
                     final int pc,
                     final State state,
@@ -1343,6 +1382,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.RETURN_FALSE)
+    @EarlyInline
     public int handleReturnFalse(
                     final int pc,
                     final State state,
@@ -1354,6 +1394,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.RETURN_NIL)
+    @EarlyInline
     public int handleReturnNil(
                     final int pc,
                     final State state,
@@ -1365,6 +1406,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.RETURN_TOP_FROM_METHOD)
+    @EarlyInline
     public int handleReturnTopFromMethod(
                     final int pc,
                     final State state,
@@ -1376,6 +1418,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.RETURN_NIL_FROM_BLOCK)
+    @EarlyInline
     public int handleReturnNilFromBlock(
                     final int pc,
                     final State state,
@@ -1387,6 +1430,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.RETURN_TOP_FROM_BLOCK)
+    @EarlyInline
     public int handleReturnTopFromBlock(
                     final int pc,
                     final State state,
@@ -1402,6 +1446,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.BYTECODE_PRIM_ADD)
+    @EarlyInline
     public int handlePrimitiveAdd(
                     final int pc,
                     final State state,
@@ -1438,6 +1483,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.BYTECODE_PRIM_SUBTRACT)
+    @EarlyInline
     public int handlePrimitiveSubtract(
                     final int pc,
                     final State state,
@@ -1474,6 +1520,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.BYTECODE_PRIM_LESS_THAN)
+    @EarlyInline
     public int handlePrimitiveLessThan(
                     final int pc,
                     final State state,
@@ -1502,6 +1549,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.BYTECODE_PRIM_GREATER_THAN)
+    @EarlyInline
     public int handlePrimitiveGreaterThan(
                     final int pc,
                     final State state,
@@ -1530,6 +1578,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.BYTECODE_PRIM_LESS_OR_EQUAL)
+    @EarlyInline
     public int handlePrimitiveLessOrEqual(
                     final int pc,
                     final State state,
@@ -1558,6 +1607,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.BYTECODE_PRIM_GREATER_OR_EQUAL)
+    @EarlyInline
     public int handlePrimitiveGreaterOrEqual(
                     final int pc,
                     final State state,
@@ -1586,6 +1636,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.BYTECODE_PRIM_EQUAL)
+    @EarlyInline
     public int handlePrimitiveEqual(
                     final int pc,
                     final State state,
@@ -1614,6 +1665,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.BYTECODE_PRIM_NOT_EQUAL)
+    @EarlyInline
     public int handlePrimitiveNotEqual(
                     final int pc,
                     final State state,
@@ -1642,6 +1694,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.BYTECODE_PRIM_BIT_AND)
+    @EarlyInline
     public int handlePrimitiveBitAnd(
                     final int pc,
                     final State state,
@@ -1667,6 +1720,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.BYTECODE_PRIM_BIT_OR)
+    @EarlyInline
     public int handlePrimitiveBitOr(
                     final int pc,
                     final State state,
@@ -1692,6 +1746,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.BYTECODE_PRIM_IDENTICAL)
+    @EarlyInline
     public int handlePrimitiveIdentical(
                     final int pc,
                     final State state,
@@ -1705,6 +1760,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.BYTECODE_PRIM_CLASS)
+    @EarlyInline
     public int handlePrimitiveClass(
                     final int pc,
                     final State state,
@@ -1717,6 +1773,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.BYTECODE_PRIM_NOT_IDENTICAL)
+    @EarlyInline
     public int handlePrimitiveNotIdentical(
                     final int pc,
                     final State state,
@@ -1735,6 +1792,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
                     BC.SEND_LIT_SEL0_4, BC.SEND_LIT_SEL0_5, BC.SEND_LIT_SEL0_6, BC.SEND_LIT_SEL0_7,
                     BC.SEND_LIT_SEL0_8, BC.SEND_LIT_SEL0_9, BC.SEND_LIT_SEL0_A, BC.SEND_LIT_SEL0_B,
                     BC.SEND_LIT_SEL0_C, BC.SEND_LIT_SEL0_D, BC.SEND_LIT_SEL0_E, BC.SEND_LIT_SEL0_F})
+    @EarlyInline
     public int handleSend0(
                     final int pc,
                     final State state,
@@ -1756,6 +1814,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
                     BC.SEND_LIT_SEL1_4, BC.SEND_LIT_SEL1_5, BC.SEND_LIT_SEL1_6, BC.SEND_LIT_SEL1_7,
                     BC.SEND_LIT_SEL1_8, BC.SEND_LIT_SEL1_9, BC.SEND_LIT_SEL1_A, BC.SEND_LIT_SEL1_B,
                     BC.SEND_LIT_SEL1_C, BC.SEND_LIT_SEL1_D, BC.SEND_LIT_SEL1_E, BC.SEND_LIT_SEL1_F})
+    @EarlyInline
     public int handleSend1(
                     final int pc,
                     final State state,
@@ -1776,6 +1835,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
                     BC.SEND_LIT_SEL2_4, BC.SEND_LIT_SEL2_5, BC.SEND_LIT_SEL2_6, BC.SEND_LIT_SEL2_7,
                     BC.SEND_LIT_SEL2_8, BC.SEND_LIT_SEL2_9, BC.SEND_LIT_SEL2_A, BC.SEND_LIT_SEL2_B,
                     BC.SEND_LIT_SEL2_C, BC.SEND_LIT_SEL2_D, BC.SEND_LIT_SEL2_E, BC.SEND_LIT_SEL2_F})
+    @EarlyInline
     public int handleSend2(
                     final int pc,
                     final State state,
@@ -1793,6 +1853,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.EXT_SEND)
+    @EarlyInline
     public int handleExtendedSend(
                     final int pc,
                     final State state,
@@ -1812,6 +1873,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.EXT_SEND_SUPER)
+    @EarlyInline
     public int handleExtendedSuperSend(
                     final int pc,
                     final State state,
@@ -1848,6 +1910,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(value = {BC.SHORT_UJUMP_0, BC.SHORT_UJUMP_1, BC.SHORT_UJUMP_2, BC.SHORT_UJUMP_3,
                     BC.SHORT_UJUMP_4, BC.SHORT_UJUMP_5, BC.SHORT_UJUMP_6, BC.SHORT_UJUMP_7})
+    @EarlyInline
     public int handleShortUnconditionalJump(
                     final int pc,
                     final State state,
@@ -1885,6 +1948,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(value = {BC.SHORT_CJUMP_TRUE_0, BC.SHORT_CJUMP_TRUE_1, BC.SHORT_CJUMP_TRUE_2, BC.SHORT_CJUMP_TRUE_3,
                     BC.SHORT_CJUMP_TRUE_4, BC.SHORT_CJUMP_TRUE_5, BC.SHORT_CJUMP_TRUE_6, BC.SHORT_CJUMP_TRUE_7})
+    @EarlyInline
     public int handleShortConditionalJumpTrue(
                     final int pc,
                     final State state,
@@ -1905,6 +1969,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(value = {BC.SHORT_CJUMP_FALSE_0, BC.SHORT_CJUMP_FALSE_1, BC.SHORT_CJUMP_FALSE_2, BC.SHORT_CJUMP_FALSE_3,
                     BC.SHORT_CJUMP_FALSE_4, BC.SHORT_CJUMP_FALSE_5, BC.SHORT_CJUMP_FALSE_6, BC.SHORT_CJUMP_FALSE_7})
+    @EarlyInline
     public int handleShortConditionalJumpFalse(
                     final int pc,
                     final State state,
@@ -1924,6 +1989,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.EXT_UNCONDITIONAL_JUMP)
+    @EarlyInline
     public int handleExtendedUnconditionalJump(
                     final int pc,
                     final State state,
@@ -1960,6 +2026,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.EXT_JUMP_IF_TRUE)
+    @EarlyInline
     public int handleExtendedConditionalJumpTrue(
                     final int pc,
                     final State state,
@@ -1980,6 +2047,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.EXT_JUMP_IF_FALSE)
+    @EarlyInline
     public int handleExtendedConditionalJumpFalse(
                     final int pc,
                     final State state,
@@ -2004,6 +2072,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
 
     @SuppressWarnings({"unused", "static-method"})
     @BytecodeInterpreterHandler(BC.EXT_NOP)
+    @EarlyInline
     public int handleNoOperation(
                     final int pc,
                     final State state,
@@ -2014,6 +2083,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
 
     @SuppressWarnings({"unused", "static-method"})
     @BytecodeInterpreterHandler(BC.EXT_A)
+    @EarlyInline
     public int handleExtA(
                     final int pc,
                     final State state,
@@ -2024,6 +2094,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
 
     @SuppressWarnings({"unused", "static-method"})
     @BytecodeInterpreterHandler(BC.EXT_B)
+    @EarlyInline
     public int handleExtB(
                     final int pc,
                     final State state,
@@ -2034,6 +2105,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
 
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.CALL_PRIMITIVE)
+    @EarlyInline
     public int handleCallPrimitive(
                     final int pc,
                     final State state,
