@@ -14,6 +14,7 @@ import com.oracle.truffle.api.CompilerAsserts;
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.CompilerDirectives.EarlyEscapeAnalysis;
 import com.oracle.truffle.api.CompilerDirectives.EarlyInline;
+import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.CompilerDirectives.ValueType;
 import com.oracle.truffle.api.HostCompilerDirectives;
 import com.oracle.truffle.api.HostCompilerDirectives.BytecodeInterpreterFetchOpcode;
@@ -71,6 +72,8 @@ import de.hpi.swa.trufflesqueak.nodes.primitives.impl.ArithmeticPrimitives.PrimS
 import de.hpi.swa.trufflesqueak.nodes.primitives.impl.ArithmeticPrimitives.PrimSmallFloatSubtractNode;
 import de.hpi.swa.trufflesqueak.util.ArrayUtils;
 import de.hpi.swa.trufflesqueak.util.FrameAccess;
+
+import java.io.Serial;
 
 public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
     public InterpreterSistaV1Node(final CompiledCodeObject code) {
@@ -875,14 +878,15 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
     }
 
     private static class OSRException extends RuntimeException {
-        private final Object osrResult;
+        @Serial private static final long serialVersionUID = 1L;
+        private final transient Object osrResult;
 
         OSRException(Object osrResult) {
             this.osrResult = osrResult;
         }
     }
 
-    @CompilerDirectives.TruffleBoundary(allowInlining = true)
+    @TruffleBoundary(allowInlining = true)
     private void hoistState(int i1, int i2) {
         // required
     }
@@ -905,6 +909,8 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
                     BC.PUSH_RCVR_VAR_C, BC.PUSH_RCVR_VAR_D, BC.PUSH_RCVR_VAR_E, BC.PUSH_RCVR_VAR_F})
     @EarlyInline
     private int handlePushReceiverVariable(final int pc, final State state, final VirtualState virtualState, final VirtualFrame frame) {
+        // ToDo: I am not sure that a running Context can access its own instance variables since this
+        //  would require that the receiver == thisContext
         // externalizePCAndSP(frame, virtualState.pc, virtualState.sp); // for ContextObject access
         final int index = getUnsignedInt(state.bytecode, pc) & 0x0F;
         pushFollowed(frame, pc, virtualState.sp++, uncheckedCast(data[pc], SqueakObjectAt0NodeGen.class).execute(this, FrameAccess.getReceiver(frame), index));
@@ -1250,77 +1256,6 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
         final int tempVectorIndex = getUnsignedInt(state.bytecode, pc + 2);
         uncheckedCast(data[pc], SqueakObjectAtPut0Node.class).execute(this, getTemp(frame, tempVectorIndex), remoteTempIndex, pop(frame, --virtualState.sp));
         return pc + 3;
-    }
-
-    // =========================================================================
-    // SECTION: RETURN BYTECODES
-    // =========================================================================
-
-    @SuppressWarnings("unused")
-    @BytecodeInterpreterHandler(BC.RETURN_RECEIVER)
-    @EarlyInline
-    private int handleReturnReceiver(final int pc, final State state, final VirtualState virtualState, final VirtualFrame frame) {
-        // virtualState.returnValue = handleReturn(frame, pc, pc + 1, virtualState.sp,
-        // FrameAccess.getReceiver(frame));
-        return LOCAL_RETURN_PC;
-    }
-
-    @SuppressWarnings("unused")
-    @BytecodeInterpreterHandler(BC.RETURN_TRUE)
-    @EarlyInline
-    private int handleReturnTrue(final int pc, final State state, final VirtualState virtualState, final VirtualFrame frame) {
-        // virtualState.returnValue = handleReturn(frame, pc, pc + 1, virtualState.sp,
-        // BooleanObject.TRUE,
-        // virtualState.getProfileCount());
-        return LOCAL_RETURN_PC;
-    }
-
-    @SuppressWarnings("unused")
-    @BytecodeInterpreterHandler(BC.RETURN_FALSE)
-    @EarlyInline
-    private int handleReturnFalse(final int pc, final State state, final VirtualState virtualState, final VirtualFrame frame) {
-        // virtualState.returnValue = handleReturn(frame, pc, pc + 1, virtualState.sp,
-        // BooleanObject.FALSE,
-        // virtualState.getProfileCount());
-        return LOCAL_RETURN_PC;
-    }
-
-    @SuppressWarnings("unused")
-    @BytecodeInterpreterHandler(BC.RETURN_NIL)
-    @EarlyInline
-    private int handleReturnNil(final int pc, final State state, final VirtualState virtualState, final VirtualFrame frame) {
-        // virtualState.returnValue = handleReturn(frame, pc, pc + 1, virtualState.sp,
-        // NilObject.SINGLETON,
-        // virtualState.getProfileCount());
-        return LOCAL_RETURN_PC;
-    }
-
-    @SuppressWarnings("unused")
-    @BytecodeInterpreterHandler(BC.RETURN_TOP_FROM_METHOD)
-    @EarlyInline
-    private int handleReturnTopFromMethod(final int pc, final State state, final VirtualState virtualState, final VirtualFrame frame) {
-        // virtualState.returnValue = handleReturn(frame, pc, pc + 1, virtualState.sp, top(frame,
-        // virtualState.sp),
-        // virtualState.getProfileCount());
-        return LOCAL_RETURN_PC;
-    }
-
-    @SuppressWarnings("unused")
-    @BytecodeInterpreterHandler(BC.RETURN_NIL_FROM_BLOCK)
-    @EarlyInline
-    private int handleReturnNilFromBlock(final int pc, final State state, final VirtualState virtualState, final VirtualFrame frame) {
-        // virtualState.returnValue = handleReturnFromBlock(frame, pc, NilObject.SINGLETON,
-        // virtualState.getProfileCount());
-        return LOCAL_RETURN_PC;
-    }
-
-    @SuppressWarnings("unused")
-    @BytecodeInterpreterHandler(BC.RETURN_TOP_FROM_BLOCK)
-    @EarlyInline
-    private int handleReturnTopFromBlock(final int pc, final State state, final VirtualState virtualState, final VirtualFrame frame) {
-        // virtualState.returnValue = handleReturnFromBlock(frame, pc, top(frame, virtualState.sp),
-        // virtualState.getProfileCount());
-        return LOCAL_RETURN_PC;
     }
 
     // =========================================================================
@@ -1922,7 +1857,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
     private int handleCallPrimitive(final int pc, final State state, final VirtualState virtualState, final VirtualFrame frame) {
         if (getUnsignedInt(state.bytecode, pc + 3) == BC.LONG_STORE_TEMPORARY_VARIABLE) {
             assert virtualState.sp > 0;
-            // ToDo: should this push instead of setting the top of the stack
+            // ToDo: should this push instead of setting the top of the stack?
             setStackValue(frame, virtualState.sp - 1, getErrorObject());
         }
         return pc + 3;
