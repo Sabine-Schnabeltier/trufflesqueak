@@ -131,6 +131,100 @@ suite = {
             },
             "useModulePath": True,
         },
+        # ==========================================================================
+        #  JWM (Java Window Manager) - AWT-Free Windowing
+        # ==========================================================================
+        "JWM": {
+            "moduleName": "jwm",
+            "maven": {
+                "groupId": "io.github.humbleui",
+                "artifactId": "jwm",
+                "version": "0.4.24",
+            },
+            "digest": "sha256:a67c689bafb15f596c8ccefcf880d9b2457e2087b4af8c4b6a7b51bad982696a",
+            "licence": "Apache-2.0",
+            "useModulePath": True,
+        },
+        "JETBRAINS_ANNOTATIONS": {
+            "moduleName": "org.jetbrains.annotations",
+            "maven": {
+                "groupId": "org.jetbrains",
+                "artifactId": "annotations",
+                "version": "24.1.0",
+            },
+            "digest": "sha256:27a770dc7ce50500918bb8c3c0660c98290630ec796b5e3cf6b90f403b3033c6",
+            "licence": "Apache-2.0",
+            "useModulePath": True,
+        },
+        "TYPES": {
+            "moduleName": "io.github.humbleui.types",
+            "maven": {
+                "groupId": "io.github.humbleui",
+                "artifactId": "types",
+                "version": "0.2.0",
+            },
+            "digest": "sha256:38d94d00770c4f261ffb50ee68d5da853c416c8fe7c57842f0e28049fc26cca8",
+            "licence": "Apache-2.0",
+            "useModulePath": True,
+        },
+        # ==========================================================================
+        #  Skija (Skia Bindings - HumbleUI fork)
+        # ==========================================================================
+        "SKIJA_SHARED": {
+            "moduleName": "io.github.humbleui.skija.shared",
+            "maven": {
+                "groupId": "io.github.humbleui",
+                "artifactId": "skija-shared",
+                "version": "0.143.9",
+            },
+            "digest": "sha256:012a91105a10f2974547679803b304ffc37353fd28dca408b4a9acfa68642c0f",
+            "licence": "Apache-2.0",
+            "useModulePath": True,
+        },
+        "SKIJA_PLATFORM": {
+            "licence": "Apache-2.0",
+            "dependencies": ["SKIJA_SHARED"],
+            "os_arch": {
+                "linux": {
+                    "amd64": {
+                        "maven": {
+                            "groupId": "io.github.humbleui",
+                            "artifactId": "skija-linux-x64",
+                            "version": "0.143.9",
+                        },
+                        "digest": "sha256:2fb033c4ea1594bda5a182e28cd91e675ab93b2029c5930c5d4c29515be9b70a",
+                    },
+                    "aarch64": {
+                        "maven": {
+                            "groupId": "io.github.humbleui",
+                            "artifactId": "skija-linux-arm64",
+                            "version": "0.143.9",
+                        },
+                        "digest": "sha256:0b103f144a7a0ae28bcdd0b7c79cabcc8459aec33011bb868720cc9750ceb16c",
+                    },
+                },
+                "darwin": {
+                    "aarch64": {
+                        "maven": {
+                            "groupId": "io.github.humbleui",
+                            "artifactId": "skija-macos-arm64",
+                            "version": "0.143.9",
+                        },
+                        "digest": "sha256:8c525e882b8ad9f648e28a97ce38698f9636d3cdab4696667f9de393067db81a",
+                    },
+                },
+                "windows": {
+                    "amd64": {
+                        "maven": {
+                            "groupId": "io.github.humbleui",
+                            "artifactId": "skija-windows-x64",
+                            "version": "0.143.9",
+                        },
+                        "digest": "sha256:cff43eb34b38f572753f2971f2cc9f53395835b83017325a61519c5d4f312001",
+                    },
+                },
+            },
+        },
     },
     # ==========================================================================
     #  PROJECTS
@@ -146,10 +240,16 @@ suite = {
                 "TRUFFLESQUEAK_SHARED",
                 "truffle:TRUFFLE_API",
                 "truffle:TRUFFLE_NFI",
+                # The Clean Stack: JWM + Skija
+                "JWM",
+                "TYPES",
+                "JETBRAINS_ANNOTATIONS",
+                "SKIJA_SHARED",
             ],
             "requires": [
                 "java.datatransfer",
-                "java.desktop",
+                "java.xml",
+                # "java.desktop",  <-- REMOVED (Ensures AWT-free build)
                 "java.logging",
                 "java.management",
                 "jdk.management",
@@ -171,9 +271,11 @@ suite = {
                 "TRUFFLESQUEAK_SHARED",
                 "sdk:LAUNCHER_COMMON",
                 "sdk:MAVEN_DOWNLOADER",
+                "JWM",
             ],
             "requires": [
-                "java.desktop",
+                "java.xml",
+                # "java.desktop", <-- REMOVED
             ],
             "checkstyle": "de.hpi.swa.trufflesqueak",
             "jacoco": "include",
@@ -252,6 +354,10 @@ suite = {
             "liblang_relpath": "../lib/<lib:smalltalkvm>",
             "default_vm_args": [
                 "--vm.-add-exports=java.base/jdk.internal.module=de.hpi.swa.trufflesqueak",
+                # Grant both JWM and Skija permission to execute fast native memory operations
+                "--vm.-enable-native-access=jwm,io.github.humbleui.skija.shared",
+                # Force headless AWT just in case some transitive dep tries to init it
+                "-Djava.awt.headless=true",
             ],
         },
         "libsmalltalkvm": {
@@ -267,8 +373,36 @@ suite = {
                 # Configure launcher
                 "-Dorg.graalvm.launcher.class=de.hpi.swa.trufflesqueak.launcher.TruffleSqueakLauncher",
                 "-H:+IncludeNodeSourcePositions",  # for improved stack traces on deopts
-                "-H:+DetectUserDirectoriesInImageHeap",
+                "-H:-DetectUserDirectoriesInImageHeap",  # ToDo: scrub GitHub path from Skija packages
+                # JNI/JWM Configuration
+                "-H:+JNI",
+                # Tells Native Image to defer Skija/JWM native library loading until the app actually runs
+                "--initialize-at-run-time=io.github.humbleui",
             ],
+            # Dynamically select the correct native libraries and icons to bundle into the Native Image
+            "os_arch": {
+                "linux": {
+                    "<others>": {
+                        "build_args": [
+                            "-H:IncludeResources=.*(jwm|skija).*\\.so|.*trufflesqueak-icon\\.png",
+                        ]
+                    }
+                },
+                "darwin": {
+                    "<others>": {
+                        "build_args": [
+                            "-H:IncludeResources=.*(jwm|skija).*\\.dylib|.*trufflesqueak-icon\\.icns",
+                        ]
+                    }
+                },
+                "windows": {
+                    "<others>": {
+                        "build_args": [
+                            "-H:IncludeResources=.*(jwm|skija).*\\.dll|.*trufflesqueak-icon\\.ico",
+                        ]
+                    }
+                },
+            },
             "dynamicBuildArgs": "libsmalltalkvm_build_args",
         },
     },
@@ -292,12 +426,23 @@ suite = {
             "dependencies": [
                 "de.hpi.swa.trufflesqueak",
             ],
+            "exclude": [
+                "JWM",
+                "SKIJA_SHARED",
+                "TYPES",
+                "JETBRAINS_ANNOTATIONS",
+            ],
             "distDependencies": [
                 "TRUFFLESQUEAK_SHARED",
                 "truffle:TRUFFLE_API",
                 "truffle:TRUFFLE_NFI",
                 "truffle:TRUFFLE_NFI_LIBFFI",  # runtime dependency
                 "truffle:TRUFFLE_NFI_PANAMA",  # runtime dependency
+                # Ensure runtime deps are on classpath
+                "JWM",
+                "SKIJA_SHARED",
+                "TYPES",
+                "JETBRAINS_ANNOTATIONS",
             ],
             "javaProperties": {
                 "org.graalvm.language.smalltalk.home": "<path:TRUFFLESQUEAK_HOME>",
@@ -361,6 +506,10 @@ suite = {
                         "dependency": "OSVM_PLUGINS",
                         "path": "*",
                     },
+                    # Add Native Libraries for JWM & Skija
+                    # JWM extracts libraries automatically, but for Native Image we bundle them
+                    "extracted-dependency:JWM/*",
+                    "extracted-dependency:SKIJA_PLATFORM/*",
                 ],
             },
             "maven": False,
@@ -377,10 +526,14 @@ suite = {
             "dependencies": [
                 "de.hpi.swa.trufflesqueak.launcher",
             ],
+            "exclude": [
+                "JWM",
+            ],
             "distDependencies": [
                 "TRUFFLESQUEAK_SHARED",
                 "sdk:LAUNCHER_COMMON",
                 "sdk:MAVEN_DOWNLOADER",
+                "JWM",
             ],
             "maven": {
                 "groupId": "de.hpi.swa.trufflesqueak",
@@ -466,6 +619,9 @@ suite = {
                         "dependency": "OSVM_PLUGINS",
                         "path": "*",
                     },
+                    # Add Native Libraries for JWM & Skija (Platform Specific)
+                    "extracted-dependency:JWM/*",
+                    "extracted-dependency:SKIJA_PLATFORM/*",
                 ],
             },
             "license": ["MIT"],
@@ -490,6 +646,7 @@ suite = {
                 "trufflesqueak:TRUFFLESQUEAK_LAUNCHER",
                 "trufflesqueak:TRUFFLESQUEAK",
                 "sdk:TOOLS_FOR_STANDALONE",
+                "SKIJA_PLATFORM",
             ],
             "dynamicDistDependencies": "trufflesqueak_standalone_deps",
             "maven": False,
@@ -567,6 +724,7 @@ suite = {
                         "bin/native-image*",
                         "lib/static",
                         "lib/svm",
+                        # comment out next line to capture reachability metadata
                         "lib/<lib:native-image-agent>",
                         "lib/<lib:native-image-diagnostics-agent>",
                         # unnecessary and big
