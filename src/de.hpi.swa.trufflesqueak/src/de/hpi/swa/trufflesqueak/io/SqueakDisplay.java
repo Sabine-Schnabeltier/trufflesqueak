@@ -13,6 +13,7 @@ import java.nio.ByteOrder;
 import java.nio.IntBuffer;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 
 import com.oracle.truffle.api.CompilerAsserts;
@@ -120,6 +121,15 @@ public final class SqueakDisplay implements Consumer<Event> {
             }
 
             window.setLayer(layer);
+
+            final int snapWidth = image.flags.getSnapshotScreenWidth();
+            final int snapHeight = image.flags.getSnapshotScreenHeight();
+            final int initialWidth = snapWidth > 0 ? snapWidth : 1024;
+            final int initialHeight = snapHeight > 0 ? snapHeight : 768;
+            window.setContentSize(initialWidth, initialHeight);
+
+            System.out.println("initial window: " + initialWidth + "x" + initialHeight);
+
             window.setVisible(true);
             window.bringToFront();
             tryToSetTaskbarIcon();
@@ -177,7 +187,7 @@ public final class SqueakDisplay implements Consumer<Event> {
     @TruffleBoundary
     private static double getScreenScaleFactorSlow() {
         // Request is occurring before Display has been created; have to do an inter-thread call.
-        final java.util.concurrent.CompletableFuture<Double> future = new java.util.concurrent.CompletableFuture<>();
+        final CompletableFuture<Double> future = new CompletableFuture<>();
         App.runOnUIThread(() -> {
             try {
                 future.complete((double) App.getPrimaryScreen().getScale());
@@ -186,6 +196,7 @@ public final class SqueakDisplay implements Consumer<Event> {
             }
         });
         try {
+            System.out.println("getScale = " + future.get());
             return future.get();
         } catch (Exception e) {
             return 1.0d;
@@ -203,6 +214,7 @@ public final class SqueakDisplay implements Consumer<Event> {
             windowHeight = 0;
             windowScaleFactor = 1.0d;
         }
+        System.out.println("cacheWindowInfo: " + windowWidth + "x" + windowHeight);
     }
 
     @Override
@@ -346,6 +358,7 @@ public final class SqueakDisplay implements Consumer<Event> {
         final int width = readNode.executeInt(squeakDisplay, FORM.WIDTH);
         final int height = readNode.executeInt(squeakDisplay, FORM.HEIGHT);
         assert (long) squeakDisplay.instVarAt0Slow(FORM.DEPTH) == 32 : "Unsupported display depth";
+        System.out.println("setSqueakDisplay: " + width + "x" + height);
 
         if (width > 0 && height > 0) {
             synchronized (this) {
@@ -406,11 +419,25 @@ public final class SqueakDisplay implements Consumer<Event> {
 
     @TruffleBoundary
     public void resizeTo(final int width, final int height) {
+        System.out.println("resizeTo(" + width + ", " + height + ")");
+
+        final CompletableFuture<Void> future = new CompletableFuture<>();
+
         App.runOnUIThread(() -> {
-            if (window != null) {
-                window.setContentSize(width, height);
+            try {
+                if (window != null) {
+                    window.setContentSize(width, height);
+                    cacheWindowInfo();
+                }
+            } finally {
+                future.complete(null);
             }
         });
+
+        try {
+            future.get();
+        } catch (Exception e) {
+        }
     }
 
     public int getWindowWidth() {
@@ -570,7 +597,7 @@ public final class SqueakDisplay implements Consumer<Event> {
 
     @TruffleBoundary
     public static String getClipboardData() {
-        final java.util.concurrent.CompletableFuture<String> future = new java.util.concurrent.CompletableFuture<>();
+        final CompletableFuture<String> future = new CompletableFuture<>();
 
         App.runOnUIThread(() -> {
             try {
