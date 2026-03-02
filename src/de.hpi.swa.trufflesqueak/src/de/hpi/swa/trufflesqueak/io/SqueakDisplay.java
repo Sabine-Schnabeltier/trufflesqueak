@@ -197,7 +197,8 @@ public final class SqueakDisplay implements Consumer<Event> {
 
             case EventWindowResize r -> {
                 cacheWindowInfo();
-                addWindowEvent(WINDOW.METRIC_CHANGE);
+                addWindowWithDamageEvent(WINDOW.METRIC_CHANGE);
+                addWindowWithDamageEvent(WINDOW.PAINT);
             }
             case EventWindowScreenChange sc -> {
                 // Reconfigure the GPU swap chain for the new monitor
@@ -205,7 +206,8 @@ public final class SqueakDisplay implements Consumer<Event> {
                     layer.reconfigure();
                 }
                 cacheWindowInfo();
-                addWindowEvent(WINDOW.METRIC_CHANGE);
+                addWindowWithDamageEvent(WINDOW.CHANGED_SCREEN);
+                addWindowWithDamageEvent(WINDOW.PAINT);
             }
 
             case EventWindowFocusIn fi -> addWindowEvent(WINDOW.ACTIVATED);
@@ -324,7 +326,7 @@ public final class SqueakDisplay implements Consumer<Event> {
             if (shouldRequestFrame) {
                 App.runOnUIThread(() -> {
                     if (window != null) {
-                        // If this is the very first frame of the app, show the window!
+                        // If this is the very first frame of the app, show the window
                         if (!hasShownWindow) {
                             hasShownWindow = true;
                             window.setVisible(true);
@@ -454,7 +456,7 @@ public final class SqueakDisplay implements Consumer<Event> {
     @TruffleBoundary
     @SuppressWarnings("unused")
     public void setCursor(final int[] cursorWords, final int[] mask, final int width, final int height, final int depth, final int offsetX, final int offsetY) {
-        // ToDo: Do this right!
+        // ToDo: Add support to JWM for custom cursors, in progress...
 
         final int hash = (cursorWords != null && cursorWords.length > 0) ? Arrays.hashCode(cursorWords) : 0;
 
@@ -498,6 +500,10 @@ public final class SqueakDisplay implements Consumer<Event> {
 
     private void addWindowEvent(final long type) {
         addEvent(EVENT_TYPE.WINDOW, type, 0L, 0L, 0L);
+    }
+
+    private void addWindowWithDamageEvent(final long type) {
+        addEvent(EVENT_TYPE.WINDOW, type, 0L, 0L, windowWidth, windowHeight);
     }
 
     public void addEvent(final long eventType, final long value3, final long value4, final long value5, final long value6, final long value7) {
