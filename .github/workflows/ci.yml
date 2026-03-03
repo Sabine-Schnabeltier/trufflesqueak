@@ -111,19 +111,17 @@ jobs:
     - name: Archive TruffleSqueak standalone
       shell: bash
       run: mx.trufflesqueak/utils.sh archive-standalone ${{ matrix.type }}
-      # GraalVM Native Image does not support AWT on macOS yet (https://github.com/oracle/graal/issues/4921)
-      if: ${{ matrix.type == 'jvm' || runner.os != 'macOS' }}
     - name: Deploy TruffleSqueak standalone
       shell: bash
       run: mx.trufflesqueak/utils.sh deploy-asset ${{ env.STANDALONE_ARCHIVE }} ${{ secrets.GITHUB_TOKEN }}
-      if: ${{ matrix.type == 'jvm' || runner.os != 'macOS' }}
     - name: Upload TruffleSqueak standalone
       uses: actions/upload-artifact@v4
       with:
         name: trufflesqueak-${{ matrix.type }}-${{ matrix.os }}
-        path: ${{ env.STANDALONE_ARCHIVE }}
+        path: |
+          trufflesqueak-*.tar.gz
+          trufflesqueak-*.zip
         retention-days: 7
-      if: ${{ matrix.os == 'ubuntu-22.04-arm' && matrix.type == 'native' }} # for run-benchmarks
     - name: Run trufflesqueak-polyglot-get on TruffleSqueak JVM standalone
       run: |
         trufflesqueak-polyglot-get -v ${{ env.JAVA_VERSION }} -a js
@@ -310,19 +308,17 @@ jobs:
     - name: Archive TruffleSqueak standalone
       shell: bash
       run: mx.trufflesqueak/utils.sh archive-standalone ${{ matrix.type }}
-      # GraalVM Native Image does not support AWT on macOS yet (https://github.com/oracle/graal/issues/4921)
-      if: ${{ matrix.type == 'jvm' || runner.os != 'macOS' }}
     - name: Deploy TruffleSqueak standalone
       shell: bash
       run: mx.trufflesqueak/utils.sh deploy-asset ${{ env.STANDALONE_ARCHIVE }} ${{ secrets.GITHUB_TOKEN }}
-      if: ${{ matrix.type == 'jvm' || runner.os != 'macOS' }}
     - name: Upload TruffleSqueak standalone
       uses: actions/upload-artifact@v4
       with:
         name: trufflesqueak-${{ matrix.type }}-${{ matrix.os }}
-        path: ${{ env.STANDALONE_ARCHIVE }}
+        path: |
+          trufflesqueak-*.tar.gz
+          trufflesqueak-*.zip
         retention-days: 7
-      if: ${{ matrix.os == 'ubuntu-22.04-arm' && matrix.type == 'native' }} # for run-benchmarks
     - name: Run trufflesqueak-polyglot-get on TruffleSqueak JVM standalone
       run: |
         trufflesqueak-polyglot-get -v ${{ env.JAVA_VERSION }} -a js
