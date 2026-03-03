@@ -197,8 +197,7 @@ public final class SqueakDisplay implements Consumer<Event> {
 
             case EventWindowResize r -> {
                 cacheWindowInfo();
-                addWindowWithDamageEvent(WINDOW.METRIC_CHANGE);
-                addWindowWithDamageEvent(WINDOW.PAINT);
+                addWindowEvent(WINDOW.METRIC_CHANGE);
             }
             case EventWindowScreenChange sc -> {
                 // Reconfigure the GPU swap chain for the new monitor
@@ -206,8 +205,7 @@ public final class SqueakDisplay implements Consumer<Event> {
                     layer.reconfigure();
                 }
                 cacheWindowInfo();
-                addWindowWithDamageEvent(WINDOW.CHANGED_SCREEN);
-                addWindowWithDamageEvent(WINDOW.PAINT);
+                addWindowEvent(WINDOW.CHANGED_SCREEN);
             }
 
             case EventWindowFocusIn fi -> addWindowEvent(WINDOW.ACTIVATED);
@@ -500,10 +498,6 @@ public final class SqueakDisplay implements Consumer<Event> {
 
     private void addWindowEvent(final long type) {
         addEvent(EVENT_TYPE.WINDOW, type, 0L, 0L, 0L);
-    }
-
-    private void addWindowWithDamageEvent(final long type) {
-        addEvent(EVENT_TYPE.WINDOW, type, 0L, 0L, windowWidth, windowHeight);
     }
 
     public void addEvent(final long eventType, final long value3, final long value4, final long value5, final long value6, final long value7) {
