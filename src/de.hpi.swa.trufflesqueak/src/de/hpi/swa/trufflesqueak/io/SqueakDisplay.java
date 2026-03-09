@@ -30,6 +30,7 @@ import static org.lwjgl.sdl.SDLEvents.SDL_EVENT_WINDOW_MOUSE_LEAVE;
 import static org.lwjgl.sdl.SDLEvents.SDL_EVENT_WINDOW_RESIZED;
 import static org.lwjgl.sdl.SDLInit.SDL_Quit;
 import static org.lwjgl.sdl.SDLInit.SDL_RunOnMainThread;
+import static org.lwjgl.sdl.SDLIOStream.SDL_IOFromMem;
 import static org.lwjgl.sdl.SDLKeyboard.SDL_StartTextInput;
 import static org.lwjgl.sdl.SDLMouse.SDL_CreateCursor;
 import static org.lwjgl.sdl.SDLMouse.SDL_DestroyCursor;
@@ -45,9 +46,9 @@ import static org.lwjgl.sdl.SDLRender.SDL_SetTextureScaleMode;
 import static org.lwjgl.sdl.SDLRender.SDL_TEXTUREACCESS_STREAMING;
 import static org.lwjgl.sdl.SDLRender.nSDL_CreateRenderer;
 import static org.lwjgl.sdl.SDLRender.nSDL_UpdateTexture;
-import static org.lwjgl.sdl.SDLSurface.SDL_CreateSurfaceFrom;
 import static org.lwjgl.sdl.SDLSurface.SDL_DestroySurface;
 import static org.lwjgl.sdl.SDLSurface.SDL_SCALEMODE_NEAREST;
+import static org.lwjgl.sdl.SDLSurface.SDL_LoadBMP_IO;
 import static org.lwjgl.sdl.SDLVideo.SDL_CreateWindow;
 import static org.lwjgl.sdl.SDLVideo.SDL_DestroyWindow;
 import static org.lwjgl.sdl.SDLVideo.SDL_GetWindowDisplayScale;
@@ -61,15 +62,12 @@ import static org.lwjgl.sdl.SDLVideo.SDL_WINDOW_RESIZABLE;
 import static org.lwjgl.system.MemoryStack.stackPush;
 import static org.lwjgl.system.MemoryUtil.NULL;
 
-import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ConcurrentLinkedDeque;
-
-import javax.imageio.ImageIO;
 
 import org.lwjgl.sdl.SDLKeycode;
 import org.lwjgl.sdl.SDLMouse;
@@ -504,7 +502,7 @@ public final class SqueakDisplay {
             return;
         }
 
-        final String resourcePath = "/trufflesqueak-icon.png";
+        final String resourcePath = "/trufflesqueak-icon.bmp";
 
         try (InputStream is = SqueakDisplay.class.getResourceAsStream(resourcePath)) {
             if (is == null) {
@@ -512,28 +510,22 @@ public final class SqueakDisplay {
                 return;
             }
 
-            // Read the PNG into standard Java memory
-            final BufferedImage image = ImageIO.read(is);
-            final int width = image.getWidth();
-            final int height = image.getHeight();
+            final byte[] imageBytes = is.readAllBytes();
+            ByteBuffer imageBuffer = null;
 
-            // Extract ARGB pixels
-            final int[] pixels = new int[width * height];
-            image.getRGB(0, 0, width, height, pixels, 0, width);
-
-            // Move pixels to native off-heap memory
-            ByteBuffer pixelBuffer = null;
             try {
-                pixelBuffer = MemoryUtil.memAlloc(pixels.length * Integer.BYTES);
-                pixelBuffer.asIntBuffer().put(pixels);
+                // Move BMP bytes to native memory
+                imageBuffer = MemoryUtil.memAlloc(imageBytes.length);
+                imageBuffer.put(imageBytes).flip();
+                long ioStream = SDL_IOFromMem(imageBuffer);
 
-                // Wrap the native memory in an SDL_Surface
-                final SDL_Surface iconSurface = SDL_CreateSurfaceFrom(
-                                width,
-                                height,
-                                SDL_PIXELFORMAT_ARGB8888, // Matches Java's getRGB format
-                                pixelBuffer,
-                                width * Integer.BYTES);
+                // Create an SDL IO stream from the native memory
+                if (ioStream == NULL) {
+                    return;
+                }
+
+                // Have SDL natively parse the BMP into a surface (the 'true' flag auto-closes the IO stream)
+                final SDL_Surface iconSurface = SDL_LoadBMP_IO(ioStream, true);
 
                 if (iconSurface != null) {
                     SDL_SetWindowIcon(window, iconSurface);
@@ -542,8 +534,8 @@ public final class SqueakDisplay {
                     LogUtils.IO.warning("Failed to create SDL icon surface: " + SDL_GetError());
                 }
             } finally {
-                if (pixelBuffer != null) {
-                    MemoryUtil.memFree(pixelBuffer);
+                if (imageBuffer != null) {
+                    MemoryUtil.memFree(imageBuffer);
                 }
             }
         } catch (Exception e) {
