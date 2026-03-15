@@ -230,6 +230,7 @@ public final class MiscUtils {
 
     /* Wraps bitmap in a BufferedImage for efficient drawing. */
     @TruffleBoundary
+    @SuppressWarnings("unused")
     public static /*BufferedImage*/ Object new32BitBufferedImage(final int[] words, final int width, final int height, final boolean withAlpha) {
         /**
          * {@link ColorModel#getRGBdefault()} with alpha = 1.0. Transparency not needed at this
