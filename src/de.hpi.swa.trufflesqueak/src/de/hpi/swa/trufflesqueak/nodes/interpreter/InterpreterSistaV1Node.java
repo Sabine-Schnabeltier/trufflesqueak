@@ -1097,7 +1097,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
     // =========================================================================
     // SECTION: RETURN BYTECODES
     // =========================================================================
-
+/*
     @SuppressWarnings("unused")
     @BytecodeInterpreterHandler(BC.RETURN_RECEIVER)
     @EarlyInline
@@ -1164,7 +1164,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
         // virtualState.getProfileCount());
         return LOCAL_RETURN_PC;
     }
-
+*/
     // =========================================================================
     // SECTION: SEND BYTECODES
     // =========================================================================
@@ -1480,7 +1480,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
     }
 
     @SuppressWarnings("unused")
-    @BytecodeInterpreterHandler(value = {BC.BYTECODE_PRIM_SIZE, BC.BYTECODE_PRIM_NEXT, BC.BYTECODE_PRIM_AT_END, BC.BYTECODE_PRIM_VALUE,
+    @BytecodeInterpreterHandler(value = {BC.BYTECODE_PRIM_NEXT, BC.BYTECODE_PRIM_AT_END, BC.BYTECODE_PRIM_VALUE,
                     BC.BYTECODE_PRIM_NEW, BC.BYTECODE_PRIM_POINT_X, BC.BYTECODE_PRIM_POINT_Y,
                     BC.SEND_LIT_SEL0_0, BC.SEND_LIT_SEL0_1, BC.SEND_LIT_SEL0_2, BC.SEND_LIT_SEL0_3,
                     BC.SEND_LIT_SEL0_4, BC.SEND_LIT_SEL0_5, BC.SEND_LIT_SEL0_6, BC.SEND_LIT_SEL0_7,
