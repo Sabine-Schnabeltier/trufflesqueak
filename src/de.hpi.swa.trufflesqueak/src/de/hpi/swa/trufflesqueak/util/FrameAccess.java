@@ -253,6 +253,7 @@ public final class FrameAccess {
             for (int slotIndex = SlotIndices.STACK_START; slotIndex < frameDescriptor.getNumberOfSlots(); slotIndex++) {
                 frame.setObjectStatic(slotIndex, null);
             }
+            // ToDo: determine if auxSlots are actually used and remove the following if not.
             for (int auxSlotIndex = 0; auxSlotIndex < frameDescriptor.getNumberOfAuxiliarySlots(); auxSlotIndex++) {
                 frame.setAuxiliarySlot(auxSlotIndex, null);
             }
@@ -260,11 +261,13 @@ public final class FrameAccess {
     }
 
     /* Iterates used stack slots (may not be ordered). The stack of a dead frame is unreachable. */
-    public static void iterateStackSlots(final Frame frame, final Consumer<Integer> action) {
+    public static void iterateStackSlots(final Frame frame, final int sp, final Consumer<Integer> action) {
         if (isDead(frame)) {
             clearStackSlots(frame);
         } else {
-            for (int slotIndex = SlotIndices.STACK_START; slotIndex < frame.getFrameDescriptor().getNumberOfSlots(); slotIndex++) {
+            /* Iterate defined stack slots only. */
+            final int slotLimit = Integer.min(SlotIndices.STACK_START + sp, frame.getFrameDescriptor().getNumberOfSlots());
+            for (int slotIndex = SlotIndices.STACK_START; slotIndex < slotLimit; slotIndex++) {
                 action.accept(slotIndex);
             }
         }
@@ -277,10 +280,19 @@ public final class FrameAccess {
                 clearStackSlots(frame);
             }
         } else {
+            /* Iterate defined stack slots only. */
+            final int sp = getStackPointer(frame);
             final FrameDescriptor frameDescriptor = frame.getFrameDescriptor();
-            for (int slotIndex = SlotIndices.STACK_START; slotIndex < frameDescriptor.getNumberOfSlots(); slotIndex++) {
+            final int slotCount = frameDescriptor.getNumberOfSlots();
+            final int slotLimit = Integer.min(SlotIndices.STACK_START + sp, slotCount);
+            for (int slotIndex = SlotIndices.STACK_START; slotIndex < slotLimit; slotIndex++) {
                 action.accept(frame.getObjectStatic(slotIndex));
             }
+            /* Nil unreachable stack entries. */
+            for (int slotIndex = slotLimit; slotIndex < slotCount; slotIndex++) {
+                frame.setObjectStatic(slotIndex, null);
+            }
+            // ToDo: determine if auxSlots are actually used and remove the following if not.
             for (int auxSlotIndex = 0; auxSlotIndex < frameDescriptor.getNumberOfAuxiliarySlots(); auxSlotIndex++) {
                 action.accept(frame.getAuxiliarySlot(auxSlotIndex));
             }
@@ -304,6 +316,7 @@ public final class FrameAccess {
                     frame.setObjectStatic(slotIndex, replacement);
                 }
             }
+            // ToDo: determine if auxSlots are actually used and remove the following if not.
             for (int auxSlotIndex = 0; auxSlotIndex < frameDescriptor.getNumberOfAuxiliarySlots(); auxSlotIndex++) {
                 final Object replacement = action.apply(frame.getAuxiliarySlot(auxSlotIndex));
                 if (replacement != null) {
