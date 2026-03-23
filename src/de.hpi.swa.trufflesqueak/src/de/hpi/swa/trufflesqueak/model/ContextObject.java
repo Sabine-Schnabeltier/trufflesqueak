@@ -399,7 +399,7 @@ public final class ContextObject extends AbstractSqueakObjectWithHash {
         FrameAccess.setClosure(frame, value);
         // Cannot use copyTo here as frame descriptors may be different
         // ToDo: This does not handle any stack slots held in auxiliarySlots.
-        FrameAccess.iterateStackSlots(oldFrame, slotIndex -> {
+        FrameAccess.iterateStackSlots(oldFrame, sp, slotIndex -> {
             final Object stackValue = oldFrame.getObjectStatic(slotIndex);
             if (stackValue != null) {
                 frame.setObjectStatic(slotIndex, stackValue);
