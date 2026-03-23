@@ -289,10 +289,8 @@ public final class FrameAccess {
                 action.accept(frame.getObjectStatic(slotIndex));
             }
             /* Nil unreachable stack entries. */
-            if (clearStackSlots) {
-                for (int slotIndex = slotLimit; slotIndex < slotCount; slotIndex++) {
-                    frame.setObjectStatic(slotIndex, null);
-                }
+            for (int slotIndex = slotLimit; slotIndex < slotCount; slotIndex++) {
+                frame.setObjectStatic(slotIndex, null);
             }
             // ToDo: determine if auxSlots are actually used and remove the following if not.
             for (int auxSlotIndex = 0; auxSlotIndex < frameDescriptor.getNumberOfAuxiliarySlots(); auxSlotIndex++) {
