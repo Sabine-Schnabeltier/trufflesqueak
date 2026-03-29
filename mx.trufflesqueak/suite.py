@@ -51,6 +51,12 @@ suite = {
                 "subdir": True,
                 "version": "fcbc5553eb65a0d6c88495efc24e998606dd5fa6",
                 "urls": [{"url": "https://github.com/oracle/graal", "kind": "git"}],
+            },
+            {
+                "name": "compiler",
+                "subdir": True,
+                "version": "fcbc5553eb65a0d6c88495efc24e998606dd5fa6",
+                "urls": [{"url": "https://github.com/oracle/graal", "kind": "git"}],
             }
         ],
     },

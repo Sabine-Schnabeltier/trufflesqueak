@@ -25,7 +25,10 @@ _SUITE = mx.suite("trufflesqueak")
 
 # Called from suite.py
 def trufflesqueak_standalone_deps():
-    return mx_truffle.resolve_truffle_dist_names(use_optimized_runtime=True)
+    deps = mx_truffle.resolve_truffle_dist_names(use_optimized_runtime=True)
+    if "compiler:GRAAL" not in deps:
+        deps.append("compiler:GRAAL")
+    return deps
 
 
 # Called from suite.py
