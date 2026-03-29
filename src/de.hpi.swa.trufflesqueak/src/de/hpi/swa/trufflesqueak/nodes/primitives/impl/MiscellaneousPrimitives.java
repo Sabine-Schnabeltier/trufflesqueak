@@ -493,7 +493,7 @@ public final class MiscellaneousPrimitives extends AbstractPrimitiveFactoryHolde
         protected final NativeObject getClipboardText(@SuppressWarnings("unused") final Object receiver) {
             final SqueakImageContext image = getContext();
             if (image.hasDisplay()) {
-                return image.asByteString(SqueakDisplay.getClipboardData());
+                return image.asByteString(image.getDisplay().getClipboardData());
             } else {
                 return image.clipboardTextHeadless;
             }

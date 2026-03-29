@@ -29,6 +29,65 @@ public class SDL_h extends SDL_h$shared {
             .or(Linker.nativeLinker().defaultLookup());
 
 
+    private static class SDL_free {
+        public static final FunctionDescriptor DESC = FunctionDescriptor.ofVoid(
+            SDL_h.C_POINTER
+        );
+
+        public static final MemorySegment ADDR = SYMBOL_LOOKUP.findOrThrow("SDL_free");
+
+        public static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(ADDR, DESC);
+    }
+
+    /**
+     * Function descriptor for:
+     * {@snippet lang=c :
+     * extern void SDL_free(void *mem)
+     * }
+     */
+    public static FunctionDescriptor SDL_free$descriptor() {
+        return SDL_free.DESC;
+    }
+
+    /**
+     * Downcall method handle for:
+     * {@snippet lang=c :
+     * extern void SDL_free(void *mem)
+     * }
+     */
+    public static MethodHandle SDL_free$handle() {
+        return SDL_free.HANDLE;
+    }
+
+    /**
+     * Address for:
+     * {@snippet lang=c :
+     * extern void SDL_free(void *mem)
+     * }
+     */
+    public static MemorySegment SDL_free$address() {
+        return SDL_free.ADDR;
+    }
+
+    /**
+     * {@snippet lang=c :
+     * extern void SDL_free(void *mem)
+     * }
+     */
+    public static void SDL_free(MemorySegment mem) {
+        var mh$ = SDL_free.HANDLE;
+        try {
+            if (TRACE_DOWNCALLS) {
+                traceDowncall("SDL_free", mem);
+            }
+            mh$.invokeExact(mem);
+        } catch (Error | RuntimeException ex) {
+           throw ex;
+        } catch (Throwable ex$) {
+           throw new AssertionError("should not reach here", ex$);
+        }
+    }
+
     private static class SDL_GetError {
         public static final FunctionDescriptor DESC = FunctionDescriptor.of(
             SDL_h.C_POINTER    );

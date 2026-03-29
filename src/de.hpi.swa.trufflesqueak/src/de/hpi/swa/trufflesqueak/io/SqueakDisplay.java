@@ -118,6 +118,7 @@ import static de.hpi.swa.trufflesqueak.sdl3.bindings.SDL_h.SDL_SetWindowTitle;
 import static de.hpi.swa.trufflesqueak.sdl3.bindings.SDL_h.SDL_StartTextInput;
 import static de.hpi.swa.trufflesqueak.sdl3.bindings.SDL_h.SDL_UnlockSurface;
 import static de.hpi.swa.trufflesqueak.sdl3.bindings.SDL_h.SDL_UpdateTexture;
+import static de.hpi.swa.trufflesqueak.sdl3.bindings.SDL_h.SDL_free;
 
 import java.io.File;
 import java.io.IOException;
@@ -221,6 +222,7 @@ public final class SqueakDisplay {
     }
 
     private String title = "TruffleSqueak";
+    private String clipboardText = "";
 
     private final MemorySegment getPrimaryDisplayDimensionsTask = SDL_MainThreadCallback.allocate((_) -> {
         final int displayId = SDL_GetPrimaryDisplay();
@@ -235,15 +237,29 @@ public final class SqueakDisplay {
 
     private final MemorySegment setFullscreenTask = SDL_MainThreadCallback.allocate((userdata) -> checkSdlError(SDL_SetWindowFullscreen(window, userdata.address() == 1L)), Arena.global());
 
-    private final MemorySegment resizeTask = SDL_MainThreadCallback.allocate((_ /* userdata */) -> checkSdlError(SDL_SetWindowSize(window, osWindowWidth, osWindowHeight)), Arena.global());
+    private final MemorySegment resizeTask = SDL_MainThreadCallback.allocate((_) -> checkSdlError(SDL_SetWindowSize(window, osWindowWidth, osWindowHeight)), Arena.global());
 
-    private final MemorySegment updateTitleTask = SDL_MainThreadCallback.allocate((_ /* userdata */) -> {
+    private final MemorySegment clipboardTextTask = SDL_MainThreadCallback.allocate((_) -> {
+        if (SDL_HasClipboardText()) {
+            final MemorySegment textPtr = SDL_GetClipboardText();
+            if (textPtr != MemorySegment.NULL) {
+                final String text = textPtr.getString(0);
+                SDL_free(textPtr);
+                clipboardText = text;
+                return;
+            }
+            LogUtils.IO.warning("Failed to get clipboard data");
+        }
+        clipboardText = "";
+    }, Arena.global());
+
+    private final MemorySegment updateTitleTask = SDL_MainThreadCallback.allocate((_) -> {
         try (Arena arena = Arena.ofConfined()) {
             checkSdlError(SDL_SetWindowTitle(window, arena.allocateFrom(title)));
         }
     }, Arena.global());
 
-    private final MemorySegment setCursorTask = SDL_MainThreadCallback.allocate((_ /* userdata */) -> {
+    private final MemorySegment setCursorTask = SDL_MainThreadCallback.allocate((_) -> {
         if (cursorData == null) {
             return;
         }
@@ -1110,15 +1126,9 @@ public final class SqueakDisplay {
     }
 
     @TruffleBoundary
-    public static String getClipboardData() {
-        if (SDL_HasClipboardText()) {
-            final MemorySegment textPtr = SDL_GetClipboardText();
-            if (textPtr != MemorySegment.NULL) {
-                return textPtr.getString(0);
-            }
-            LogUtils.IO.warning("Failed to get clipboard data");
-        }
-        return "";
+    public String getClipboardData() {
+        SDL_RunOnMainThread(clipboardTextTask, MemorySegment.NULL, true);
+        return clipboardText;
     }
 
     @TruffleBoundary
