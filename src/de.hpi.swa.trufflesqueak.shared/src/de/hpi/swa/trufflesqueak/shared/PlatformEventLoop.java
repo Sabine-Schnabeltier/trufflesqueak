@@ -44,11 +44,18 @@ public final class PlatformEventLoop {
     private static final CountDownLatch startLatch = new CountDownLatch(1);
     private static volatile boolean isRunning = false;
     private static volatile boolean shutdownRequested = false;
+    private static volatile Consumer<MemorySegment> osEventHandler = null;
+    private static volatile Runnable renderFrameIfNeeded = null;
+    private static final MemorySegment wakeUpEvent;
 
-    public static volatile Consumer<MemorySegment> osEventHandler = null;
-    public static volatile Runnable renderFrameIfNeeded = null;
+    static {
+        wakeUpEvent = SDL_Event.allocate(Arena.global());
+        SDL_Event.type(wakeUpEvent, SDL_EVENT_USER);
+    }
 
-    public static void start() {
+    public static void start(final Consumer<MemorySegment> eventHandler, final Runnable renderFrame) {
+        osEventHandler = eventHandler;
+        renderFrameIfNeeded = renderFrame;
         startLatch.countDown();
     }
 
@@ -61,22 +68,13 @@ public final class PlatformEventLoop {
 
         if (isRunning) {
             isRunning = false;
-            pushWakeUpEvent();
-        }
-    }
-
-    private static void pushWakeUpEvent() {
-        // Use a confined arena for a single-use stack-like allocation
-        try (Arena arena = Arena.ofConfined()) {
-            final MemorySegment wakeupEvent = SDL_Event.allocate(arena);
-            SDL_Event.type(wakeupEvent, SDL_EVENT_USER);
-            SDL_PushEvent(wakeupEvent);
+            SDL_PushEvent(wakeUpEvent);
         }
     }
 
     public static void wakeUp() {
         if (isRunning) {
-            pushWakeUpEvent();
+            SDL_PushEvent(wakeUpEvent);
         }
     }
 

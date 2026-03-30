@@ -215,31 +215,38 @@ public final class SqueakDisplay {
     private double pendingScrollX = 0.0;
     private double pendingScrollY = 0.0;
 
+    private String clipboardText;
     private final List<String> dropFilesAccumulator = new ArrayList<>();
     private final int[] primaryDisplayDimensions = {0, 0};
 
     record CursorData(int[] cursorWords, int[] maskWords, int width, int height, int depth, int offsetX, int offsetY) {
     }
 
-    private String title = "TruffleSqueak";
-    private String clipboardText = "";
-
-    private final MemorySegment getPrimaryDisplayDimensionsTask = SDL_MainThreadCallback.allocate((_) -> {
-        final int displayId = SDL_GetPrimaryDisplay();
-        if (displayId != 0) {
-            final MemorySegment mode = SDL_GetDesktopDisplayMode(displayId);
-            if (mode != MemorySegment.NULL) {
-                primaryDisplayDimensions[0] = SDL_DisplayMode.w(mode);
-                primaryDisplayDimensions[1] = SDL_DisplayMode.h(mode);
-            }
+    final MemorySegment closeTask = SDL_MainThreadCallback.allocate((_) -> {
+        stagingArena = null; // Just drop the reference so the GC can safely free the native memory
+        if (texture != MemorySegment.NULL) {
+            SDL_DestroyTexture(texture);
+            texture = MemorySegment.NULL;
         }
-    }, Arena.global());
+        if (renderer != MemorySegment.NULL) {
+            SDL_DestroyRenderer(renderer);
+            renderer = MemorySegment.NULL;
+        }
+        if (cursor != MemorySegment.NULL) {
+            SDL_DestroyCursor(cursor);
+            cursor = MemorySegment.NULL;
+        }
+        if (window != MemorySegment.NULL) {
+            SDL_DestroyWindow(window);
+            window = MemorySegment.NULL;
+        }
+    }, Arena.ofAuto());
 
-    private final MemorySegment setFullscreenTask = SDL_MainThreadCallback.allocate((userdata) -> checkSdlError(SDL_SetWindowFullscreen(window, userdata.address() == 1L)), Arena.global());
+    private final MemorySegment setFullscreenTask = SDL_MainThreadCallback.allocate((isFullScreen) -> checkSdlError(SDL_SetWindowFullscreen(window, isFullScreen.address() == 1L)), Arena.ofAuto());
 
-    private final MemorySegment resizeTask = SDL_MainThreadCallback.allocate((_) -> checkSdlError(SDL_SetWindowSize(window, osWindowWidth, osWindowHeight)), Arena.global());
+    private final MemorySegment resizeTask = SDL_MainThreadCallback.allocate((_) -> checkSdlError(SDL_SetWindowSize(window, osWindowWidth, osWindowHeight)), Arena.ofAuto());
 
-    private final MemorySegment clipboardTextTask = SDL_MainThreadCallback.allocate((_) -> {
+    private final MemorySegment getClipboardTextTask = SDL_MainThreadCallback.allocate((_) -> {
         if (SDL_HasClipboardText()) {
             final MemorySegment textPtr = SDL_GetClipboardText();
             if (textPtr != MemorySegment.NULL) {
@@ -251,13 +258,15 @@ public final class SqueakDisplay {
             LogUtils.IO.warning("Failed to get clipboard data");
         }
         clipboardText = "";
-    }, Arena.global());
+    }, Arena.ofAuto());
 
-    private final MemorySegment updateTitleTask = SDL_MainThreadCallback.allocate((_) -> {
-        try (Arena arena = Arena.ofConfined()) {
-            checkSdlError(SDL_SetWindowTitle(window, arena.allocateFrom(title)));
+    private final MemorySegment setClipboardTextTask = SDL_MainThreadCallback.allocate((text) -> {
+        if (!SDL_SetClipboardText(text)) {
+            LogUtils.IO.warning("Failed to set clipboard text");
         }
-    }, Arena.global());
+    }, Arena.ofAuto());
+
+    private final MemorySegment updateTitleTask = SDL_MainThreadCallback.allocate((title) -> checkSdlError(SDL_SetWindowTitle(window, title)), Arena.ofAuto());
 
     private final MemorySegment setCursorTask = SDL_MainThreadCallback.allocate((_) -> {
         if (cursorData == null) {
@@ -340,26 +349,44 @@ public final class SqueakDisplay {
             checkSdlError(SDL_SetCursor(cursor));
         }
         cursorData = null;
-    }, Arena.global());
+    }, Arena.ofAuto());
+
+    private final MemorySegment getPrimaryDisplayDimensionsTask = SDL_MainThreadCallback.allocate((_) -> {
+        final int displayId = SDL_GetPrimaryDisplay();
+        if (displayId != 0) {
+            final MemorySegment mode = SDL_GetDesktopDisplayMode(displayId);
+            if (mode != MemorySegment.NULL) {
+                primaryDisplayDimensions[0] = SDL_DisplayMode.w(mode);
+                primaryDisplayDimensions[1] = SDL_DisplayMode.h(mode);
+            }
+        }
+    }, Arena.ofAuto());
 
     private SqueakDisplay(final SqueakImageContext image) {
         this.image = image;
+        PlatformEventLoop.start(this::processEvent, this::performRenderIfNeeded);
+    }
 
-        PlatformEventLoop.osEventHandler = this::processEvent;
-        PlatformEventLoop.renderFrameIfNeeded = this::performRenderIfNeeded;
-
-        PlatformEventLoop.start();
+    private static String getSDLError() {
+        return "SDL error encountered: " + SDL_GetError().getString(0);
     }
 
     private static void checkSdlError(final boolean success) {
         if (!success) {
-            throw SqueakException.create("SDL error encountered: " + SDL_GetError().getString(0));
+            throw SqueakException.create(getSDLError());
         }
     }
 
     private static float checkSdlError(final float value) {
         if (value == 0.0f) {
-            throw SqueakException.create("SDL error encountered: " + SDL_GetError().getString(0));
+            throw SqueakException.create(getSDLError());
+        }
+        return value;
+    }
+
+    private static MemorySegment checkSdlError(final MemorySegment value) {
+        if (value == null || value == MemorySegment.NULL) {
+            throw SqueakException.create(getSDLError());
         }
         return value;
     }
@@ -388,9 +415,10 @@ public final class SqueakDisplay {
         }
     }
 
-    // Called by the Main Thread at the end of the event loop
+    // Called by the main thread at the end of the event loop
     private void performRenderIfNeeded() {
-        if (renderer == MemorySegment.NULL) {
+        if (renderer == MemorySegment.NULL || stagingBuffer == MemorySegment.NULL) {
+            frameRequested = false;
             return;
         }
 
@@ -426,9 +454,7 @@ public final class SqueakDisplay {
                 textureWidth = width;
                 textureHeight = height;
                 texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, textureWidth, textureHeight);
-                if (texture == null || texture == MemorySegment.NULL) {
-                    throw SqueakException.create("Failed to create texture");
-                }
+                checkSdlError(texture != null && texture != MemorySegment.NULL);
                 checkSdlError(SDL_SetTextureScaleMode(texture, SDL_SCALEMODE_NEAREST));
             }
 
@@ -443,9 +469,7 @@ public final class SqueakDisplay {
                 final long pixelStartOffsetBytes = ((long) safeTop * stagingPitchBytes) + ((long) safeLeft * Integer.BYTES);
                 final MemorySegment pixelPointer = stagingBuffer.asSlice(pixelStartOffsetBytes);
 
-                if (!SDL_UpdateTexture(texture, dirtyRect, pixelPointer, stagingPitchBytes)) {
-                    return; // FIXME: invalid pixels
-                }
+                checkSdlError(SDL_UpdateTexture(texture, dirtyRect, pixelPointer, stagingPitchBytes));
             }
         }
 
@@ -494,10 +518,6 @@ public final class SqueakDisplay {
                 return;
             }
 
-            // TODO: on SVM, we should be able to use PinnedObject to get a fixed pointer into the
-            // bitmap, which makes the staging pixel redundant.
-            // SS: I think this could result in visual tearing since Squeak would be able to change
-            // the pixels during the time interval before the pixels are pushed to the screen.
             ensureStagingPixels(currentWidth, currentHeight);
             final int[] sqPixels = bitmap.getIntStorage();
 
@@ -554,32 +574,6 @@ public final class SqueakDisplay {
 
     @TruffleBoundary
     public void close() {
-        final MemorySegment closeTask = SDL_MainThreadCallback.allocate((_ /* userdata */) -> {
-
-            // Just drop the reference so the GC can safely free the native memory
-            stagingArena = null;
-
-            if (texture != MemorySegment.NULL) {
-                SDL_DestroyTexture(texture);
-                texture = MemorySegment.NULL;
-            }
-            if (renderer != MemorySegment.NULL) {
-                SDL_DestroyRenderer(renderer);
-                renderer = MemorySegment.NULL;
-            }
-            if (cursor != MemorySegment.NULL) {
-                SDL_DestroyCursor(cursor);
-                cursor = MemorySegment.NULL;
-            }
-            if (window != MemorySegment.NULL) {
-                SDL_DestroyWindow(window);
-                window = MemorySegment.NULL;
-            }
-
-            // Terminate the event loop.
-            PlatformEventLoop.stop();
-        }, Arena.global());
-
         SDL_RunOnMainThread(closeTask, MemorySegment.NULL, true);
     }
 
@@ -604,7 +598,6 @@ public final class SqueakDisplay {
         if (window == MemorySegment.NULL) {
             return;
         }
-        // Use MemorySegment.ofAddress to pass the flag as a raw pointer value
         SDL_RunOnMainThread(setFullscreenTask, MemorySegment.ofAddress(fullscreen ? 1L : 0L), false);
     }
 
@@ -626,52 +619,52 @@ public final class SqueakDisplay {
         }
 
         if (window == MemorySegment.NULL) {
-            // When Smalltalk opens the Display the first time, we do not yet know the scaleFactor.
-            // We assume that Smalltalk uses the values stored in the image header together with
-            // the current scaleFactor (1.0 initially) to create the initial Display. Therefore,
-            // we can request an initial window with logical pixel dimensions equal to the bitmap
-            // dimensions. After we create the window, we will know the scaleFactor and Smalltalk
-            // can use that scaleFactor to resize Display.
-            final MemorySegment openTask = SDL_MainThreadCallback.allocate((_ /* userdata */) -> {
-                long windowFlags = SDL_WINDOW_RESIZABLE;
-                if (image.flags.upscaleDisplayIfHighDPI()) {
-                    windowFlags |= SDL_WINDOW_HIGH_PIXEL_DENSITY;
-                }
-
-                try (Arena arena = Arena.ofConfined()) {
-                    window = SDL_CreateWindow(arena.allocateFrom(title), width, height, windowFlags);
-                    if (window == MemorySegment.NULL) {
-                        throw SqueakException.create("Failed to create SDL window: " + SDL_GetError().getString(0));
+            final String imageFileName = new File(image.getImagePath()).getName();
+            final String windowTitle = imageFileName.contains(SqueakLanguageConfig.IMPLEMENTATION_NAME) ? imageFileName
+                            : imageFileName + " running on " + SqueakLanguageConfig.IMPLEMENTATION_NAME;
+            try (Arena arena = Arena.ofConfined()) {
+                /*
+                 * When Smalltalk opens the Display the first time, we do not yet know the
+                 * scaleFactor. We assume that Smalltalk uses the values stored in the image header
+                 * together with the current scaleFactor (1.0 initially) to create the initial
+                 * Display. Therefore, we can request an initial window with logical pixel
+                 * dimensions equal to the bitmap dimensions. After we create the window, we will
+                 * know the scaleFactor and Smalltalk can use that scaleFactor to resize Display.
+                 */
+                SDL_RunOnMainThread(SDL_MainThreadCallback.allocate((_) -> {
+                    long windowFlags = SDL_WINDOW_RESIZABLE;
+                    if (image.flags.upscaleDisplayIfHighDPI()) {
+                        windowFlags |= SDL_WINDOW_HIGH_PIXEL_DENSITY;
                     }
-                }
 
-                renderer = SDL_CreateRenderer(window, MemorySegment.NULL);
-                if (renderer == MemorySegment.NULL) {
-                    throw SqueakException.create("Failed to create SDL renderer: " + SDL_GetError().getString(0));
-                }
+                    try (Arena windowTitleArena = Arena.ofConfined()) {
+                        window = checkSdlError(SDL_CreateWindow(windowTitleArena.allocateFrom(windowTitle), width, height, windowFlags));
+                    }
+                    renderer = checkSdlError(SDL_CreateRenderer(window, MemorySegment.NULL));
 
-                setWindowIcon(window);
-                checkSdlError(SDL_RaiseWindow(window));
+                    setWindowIcon(window);
+                    checkSdlError(SDL_RaiseWindow(window));
 
-                // Query the actual display scale factor now that the window exists
-                scaleFactor = checkSdlError(SDL_GetWindowDisplayScale(window));
+                    // Query the actual display scale factor now that the window exists
+                    scaleFactor = checkSdlError(SDL_GetWindowDisplayScale(window));
 
-                // Store the logical dimensions exactly as Smalltalk requested them
-                osWindowWidth = width;
-                osWindowHeight = height;
+                    // Store the logical dimensions exactly as Smalltalk requested them
+                    osWindowWidth = width;
+                    osWindowHeight = height;
 
-                checkSdlError(SDL_StartTextInput(window));
-                fullDamage();
-                if (cursorData != null) {
-                    SDL_RunOnMainThread(setCursorTask, MemorySegment.NULL, false);
-                }
-            }, Arena.global());
-
-            SDL_RunOnMainThread(openTask, MemorySegment.NULL, true);
+                    checkSdlError(SDL_StartTextInput(window));
+                    fullDamage();
+                    if (cursorData != null) {
+                        SDL_RunOnMainThread(setCursorTask, MemorySegment.NULL, false);
+                    }
+                }, arena), MemorySegment.NULL, true);
+            }
         } else {
-            // On subsequent calls to open() (via DisplayScreen>>beDisplay), we assume that
-            // Smalltalk knows the scaleFactor and the dimensions are in physical pixels.
-            // Therefore, we request the window to resize to the logical pixel dimensions.
+            /*
+             * On subsequent calls to open() (via DisplayScreen>>beDisplay), we assume that
+             * Smalltalk knows the scaleFactor and the dimensions are in physical pixels. Therefore,
+             * we request the window to resize to the logical pixel dimensions.
+             */
             final int targetLogicalWidth = (int) Math.ceil(width / getDisplayScale());
             final int targetLogicalHeight = (int) Math.ceil(height / getDisplayScale());
             if (targetLogicalWidth != osWindowWidth || targetLogicalHeight != osWindowHeight) {
@@ -683,9 +676,6 @@ public final class SqueakDisplay {
 
         // Save current logical window size in flags for later writing to disk image
         image.flags.setScreenSize(getLogicalWindowWidth(), getLogicalWindowHeight());
-
-        final String imageFileName = new File(image.getImagePath()).getName();
-        setWindowTitle(imageFileName.contains(SqueakLanguageConfig.IMPLEMENTATION_NAME) ? imageFileName : imageFileName + " running on " + SqueakLanguageConfig.IMPLEMENTATION_NAME);
     }
 
     private static void setWindowIcon(final MemorySegment window) {
@@ -705,10 +695,10 @@ public final class SqueakDisplay {
                 }
 
                 // Load the PNG directly from the IO stream
-                final MemorySegment iconSurface = SDL_LoadPNG_IO(ioStream, true);
+                final MemorySegment iconSurface = checkSdlError(SDL_LoadPNG_IO(ioStream, true));
 
                 if (iconSurface != MemorySegment.NULL) {
-                    SDL_SetWindowIcon(window, iconSurface);
+                    checkSdlError(SDL_SetWindowIcon(window, iconSurface));
                     SDL_DestroySurface(iconSurface);
                 } else {
                     LogUtils.IO.warning("Failed to create SDL icon surface: " + SDL_GetError().getString(0));
@@ -1116,8 +1106,9 @@ public final class SqueakDisplay {
         if (window == MemorySegment.NULL) {
             return;
         }
-        this.title = title;
-        SDL_RunOnMainThread(updateTitleTask, MemorySegment.NULL, false);
+        try (Arena arena = Arena.ofConfined()) {
+            SDL_RunOnMainThread(updateTitleTask, arena.allocateFrom(title), true);
+        }
     }
 
     public void setInputSemaphoreIndex(final int interruptSemaphoreIndex) {
@@ -1127,19 +1118,18 @@ public final class SqueakDisplay {
 
     @TruffleBoundary
     public String getClipboardData() {
-        SDL_RunOnMainThread(clipboardTextTask, MemorySegment.NULL, true);
+        SDL_RunOnMainThread(getClipboardTextTask, MemorySegment.NULL, true);
         return clipboardText;
     }
 
     @TruffleBoundary
-    public static void setClipboardData(final String text) {
+    public void setClipboardData(final String text) {
         try (Arena arena = Arena.ofConfined()) {
-            if (!SDL_SetClipboardText(arena.allocateFrom(text))) {
-                LogUtils.IO.warning("Failed to set clipboard text");
-            }
+            SDL_RunOnMainThread(setClipboardTextTask, arena.allocateFrom(text), true);
         }
     }
 
+    @TruffleBoundary
     public int[] getPrimaryDisplayDimensions() {
         SDL_RunOnMainThread(getPrimaryDisplayDimensionsTask, MemorySegment.NULL, true);
         return primaryDisplayDimensions;

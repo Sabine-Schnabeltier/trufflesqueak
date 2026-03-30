@@ -13,7 +13,6 @@ import java.util.Locale;
 
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.CompilerDirectives.CompilationFinal;
-import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 
 import de.hpi.swa.trufflesqueak.model.AbstractSqueakObject;
 import de.hpi.swa.trufflesqueak.model.NativeObject;
@@ -205,7 +204,6 @@ public final class SqueakSystemAttributes {
     }
 
     /** Attribute #10003. */
-    @TruffleBoundary
     private NativeObject getGraphicsHardwareDetails() {
         int width = 0;
         int height = 0;
@@ -214,7 +212,7 @@ public final class SqueakSystemAttributes {
             width = dimensions[0];
             height = dimensions[1];
         }
-        return asByteString(String.format("Display Information: \n\tPrimary monitor resolution: %s x %s\n", width, height));
+        return asByteString(MiscUtils.format("Display Information: \n\tPrimary monitor resolution: %s x %s\n", width, height));
     }
 
     /**
