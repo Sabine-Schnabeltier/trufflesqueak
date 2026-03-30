@@ -69,6 +69,7 @@ public abstract class AbstractInterpreterNode extends AbstractInterpreterInstrum
 
     @CompilationFinal protected int numArguments;
 
+    @Children protected Node[] childNodes;
     @CompilationFinal(dimensions = 1) private final Object[] data;
     @CompilationFinal(dimensions = 1) private final byte[] profiles;
     @CompilationFinal private Object osrMetadata;
@@ -80,6 +81,7 @@ public abstract class AbstractInterpreterNode extends AbstractInterpreterInstrum
         numArguments = -1;
         final int startPC = code.getStartPCZeroBased();
         final int endPC = code.getMaxPCZeroBased();
+        childNodes = new Node[endPC];
         data = new Object[endPC];
         profiles = new byte[endPC];
         processBytecode(startPC, endPC);
@@ -94,6 +96,7 @@ public abstract class AbstractInterpreterNode extends AbstractInterpreterInstrum
         // fresh fields
         final int startPC = code.getStartPCZeroBased();
         final int endPC = code.getMaxPCZeroBased();
+        childNodes = new Node[endPC];
         data = new Object[endPC];
         profiles = new byte[endPC];
         processBytecode(startPC, endPC);
@@ -101,6 +104,14 @@ public abstract class AbstractInterpreterNode extends AbstractInterpreterInstrum
     }
 
     protected abstract void processBytecode(int startPC, int endPC);
+
+    public final Node getChildNode(final int pc) {
+        return childNodes[pc];
+    }
+
+    public final void setChildNode(final int pc, final Node node) {
+        childNodes[pc] = node;
+    }
 
     public Object getData(final long pc) {
         return UnsafeUtils.getObject(data, pc);
@@ -141,7 +152,7 @@ public abstract class AbstractInterpreterNode extends AbstractInterpreterInstrum
     @InliningCutoff
     private Object dispatch(final VirtualFrame frame, final int currentPC, final Object receiver) {
         try {
-            return uncheckedCast(getData(currentPC), Dispatch0NodeGen.class).execute(frame, receiver);
+            return ((Dispatch0NodeGen) getChildNode(currentPC)).execute(frame, receiver);
         } catch (final AbstractStandardSendReturn r) {
             return handleReturnException(frame, currentPC, r);
         }
@@ -154,7 +165,7 @@ public abstract class AbstractInterpreterNode extends AbstractInterpreterInstrum
     @InliningCutoff
     private Object dispatch(final VirtualFrame frame, final int currentPC, final Object receiver, final Object arg) {
         try {
-            return uncheckedCast(getData(currentPC), Dispatch1NodeGen.class).execute(frame, receiver, arg);
+            return ((Dispatch1NodeGen) getChildNode(currentPC)).execute(frame, receiver, arg);
         } catch (final AbstractStandardSendReturn r) {
             return handleReturnException(frame, currentPC, r);
         }
@@ -167,7 +178,7 @@ public abstract class AbstractInterpreterNode extends AbstractInterpreterInstrum
     @InliningCutoff
     private Object dispatch(final VirtualFrame frame, final int currentPC, final Object receiver, final Object arg1, final Object arg2) {
         try {
-            return uncheckedCast(getData(currentPC), Dispatch2NodeGen.class).execute(frame, receiver, arg1, arg2);
+            return ((Dispatch2NodeGen) getChildNode(currentPC)).execute(frame, receiver, arg1, arg2);
         } catch (final AbstractStandardSendReturn r) {
             return handleReturnException(frame, currentPC, r);
         }
@@ -180,7 +191,7 @@ public abstract class AbstractInterpreterNode extends AbstractInterpreterInstrum
     @InliningCutoff
     private Object dispatchNary(final VirtualFrame frame, final int currentPC, final Object receiver, final Object[] arguments) {
         try {
-            return uncheckedCast(getData(currentPC), DispatchNaryNodeGen.class).execute(frame, receiver, arguments);
+            return ((DispatchNaryNodeGen) getChildNode(currentPC)).execute(frame, receiver, arguments);
         } catch (final AbstractStandardSendReturn r) {
             return handleReturnException(frame, currentPC, r);
         }
@@ -227,13 +238,13 @@ public abstract class AbstractInterpreterNode extends AbstractInterpreterInstrum
      * Literals
      */
 
-    protected static final Object getLiteralVariableOrCreateLiteralNode(final Object literal) {
+    protected final void createPushLiteralVariableNode(final int currentPC, final Object literal) {
         if (literal instanceof final AbstractSqueakObjectWithClassAndHash l) {
             final String squeakClassName = l.getSqueakClassName();
             if (ArrayUtils.containsEqual(READONLY_CLASSES, squeakClassName)) {
-                return SqueakObjectAt0NodeGen.executeUncached(literal, ASSOCIATION.VALUE);
+                setData(currentPC, SqueakObjectAt0NodeGen.executeUncached(literal, ASSOCIATION.VALUE));
             } else {
-                return new ReadLiteralVariableNode();
+                setChildNode(currentPC, insert(new ReadLiteralVariableNode()));
             }
         } else {
             throw SqueakException.create("Unexpected literal", literal);
@@ -241,11 +252,11 @@ public abstract class AbstractInterpreterNode extends AbstractInterpreterInstrum
     }
 
     protected final Object readLiteralVariable(final int currentPC, final int index) {
-        final Object literalVariableOrNode = getData(currentPC);
-        if (literalVariableOrNode instanceof final ReadLiteralVariableNode node) {
-            return node.execute(this, code.getAndResolveLiteral(index));
+        final Node node = getChildNode(currentPC);
+        if (node != null) {
+            return ((ReadLiteralVariableNode) node).execute(this, code.getAndResolveLiteral(index));
         } else {
-            return literalVariableOrNode;
+            return getData(currentPC);
         }
     }
 
@@ -322,11 +333,7 @@ public abstract class AbstractInterpreterNode extends AbstractInterpreterInstrum
             final ContextObject firstMarkedContext = firstUnwindMarkedOrThrowNLR(FrameAccess.getSender(frame), homeContext, result);
             if (firstMarkedContext != null) {
                 externalizePCAndSP(frame, pc, sp);
-                if (getData(currentPC) == null) {
-                    CompilerDirectives.transferToInterpreterAndInvalidate();
-                    setData(currentPC, insert(Dispatch2NodeGen.create(getContext().aboutToReturnSelector)));
-                }
-                ((Dispatch2NodeGen) getData(currentPC)).execute(frame, getOrCreateContext(frame, currentPC), result, firstMarkedContext);
+                ((Dispatch2NodeGen) getChildNode(currentPC)).execute(frame, getOrCreateContext(frame, currentPC), result, firstMarkedContext);
             }
         }
         throw cannotReturn(frame, result);

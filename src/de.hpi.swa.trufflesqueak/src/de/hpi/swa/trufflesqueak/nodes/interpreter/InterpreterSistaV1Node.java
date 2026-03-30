@@ -147,12 +147,12 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
                 /* 1 byte bytecodes */
                 case BC.PUSH_RCVR_VAR_0, BC.PUSH_RCVR_VAR_1, BC.PUSH_RCVR_VAR_2, BC.PUSH_RCVR_VAR_3, BC.PUSH_RCVR_VAR_4, BC.PUSH_RCVR_VAR_5, BC.PUSH_RCVR_VAR_6, BC.PUSH_RCVR_VAR_7, //
                     BC.PUSH_RCVR_VAR_8, BC.PUSH_RCVR_VAR_9, BC.PUSH_RCVR_VAR_A, BC.PUSH_RCVR_VAR_B, BC.PUSH_RCVR_VAR_C, BC.PUSH_RCVR_VAR_D, BC.PUSH_RCVR_VAR_E, BC.PUSH_RCVR_VAR_F: {
-                    setData(currentPC, insert(SqueakObjectAt0NodeGen.create()));
+                    setChildNode(currentPC, insert(SqueakObjectAt0NodeGen.create()));
                     break;
                 }
                 case BC.PUSH_LIT_VAR_0, BC.PUSH_LIT_VAR_1, BC.PUSH_LIT_VAR_2, BC.PUSH_LIT_VAR_3, BC.PUSH_LIT_VAR_4, BC.PUSH_LIT_VAR_5, BC.PUSH_LIT_VAR_6, BC.PUSH_LIT_VAR_7, //
                     BC.PUSH_LIT_VAR_8, BC.PUSH_LIT_VAR_9, BC.PUSH_LIT_VAR_A, BC.PUSH_LIT_VAR_B, BC.PUSH_LIT_VAR_C, BC.PUSH_LIT_VAR_D, BC.PUSH_LIT_VAR_E, BC.PUSH_LIT_VAR_F: {
-                    setData(currentPC, getLiteralVariableOrCreateLiteralNode(code.getAndResolveLiteral(b & 0xF)));
+                    createPushLiteralVariableNode(currentPC, code.getAndResolveLiteral(b & 0xF));
                     break;
                 }
                 case BC.PUSH_LIT_CONST_00, BC.PUSH_LIT_CONST_01, BC.PUSH_LIT_CONST_02, BC.PUSH_LIT_CONST_03, BC.PUSH_LIT_CONST_04, BC.PUSH_LIT_CONST_05, BC.PUSH_LIT_CONST_06, BC.PUSH_LIT_CONST_07, //
@@ -162,10 +162,18 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
                     BC.PUSH_TEMP_VAR_0, BC.PUSH_TEMP_VAR_1, BC.PUSH_TEMP_VAR_2, BC.PUSH_TEMP_VAR_3, BC.PUSH_TEMP_VAR_4, BC.PUSH_TEMP_VAR_5, BC.PUSH_TEMP_VAR_6, BC.PUSH_TEMP_VAR_7, //
                     BC.PUSH_TEMP_VAR_8, BC.PUSH_TEMP_VAR_9, BC.PUSH_TEMP_VAR_A, BC.PUSH_TEMP_VAR_B, //
                     BC.PUSH_RECEIVER, BC.PUSH_CONSTANT_TRUE, BC.PUSH_CONSTANT_FALSE, BC.PUSH_CONSTANT_NIL, BC.PUSH_CONSTANT_ZERO, BC.PUSH_CONSTANT_ONE, //
-                    BC.RETURN_RECEIVER, BC.RETURN_TRUE, BC.RETURN_FALSE, BC.RETURN_NIL, BC.RETURN_TOP_FROM_METHOD, BC.RETURN_NIL_FROM_BLOCK, BC.RETURN_TOP_FROM_BLOCK, //
                     BC.DUPLICATE_TOP, //
                     BC.POP_INTO_TEMP_VAR_0, BC.POP_INTO_TEMP_VAR_1, BC.POP_INTO_TEMP_VAR_2, BC.POP_INTO_TEMP_VAR_3, BC.POP_INTO_TEMP_VAR_4, BC.POP_INTO_TEMP_VAR_5, BC.POP_INTO_TEMP_VAR_6, BC.POP_INTO_TEMP_VAR_7, //
                     BC.POP_STACK: {
+                    break;
+                }
+                case BC.RETURN_RECEIVER, BC.RETURN_TRUE, BC.RETURN_FALSE, BC.RETURN_NIL, BC.RETURN_TOP_FROM_METHOD: {
+                    if (isBlock) {
+                        setChildNode(currentPC, insert(Dispatch2NodeGen.create(image.aboutToReturnSelector)));
+                    }
+                    break;
+                }
+                case BC.RETURN_NIL_FROM_BLOCK, BC.RETURN_TOP_FROM_BLOCK: {
                     break;
                 }
                 case BC.EXT_PUSH_PSEUDO_VARIABLE: {
@@ -179,49 +187,49 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
                     extBA = 0;
                     break;
                 case BC.BYTECODE_PRIM_SIZE, BC.BYTECODE_PRIM_NEXT, BC.BYTECODE_PRIM_AT_END, BC.BYTECODE_PRIM_VALUE, BC.BYTECODE_PRIM_NEW, BC.BYTECODE_PRIM_POINT_X, BC.BYTECODE_PRIM_POINT_Y: {
-                    setData(currentPC, insert(Dispatch0NodeGen.create(image.getSpecialSelector(b - BC.BYTECODE_PRIM_ADD))));
+                    setChildNode(currentPC, insert(Dispatch0NodeGen.create(image.getSpecialSelector(b - BC.BYTECODE_PRIM_ADD))));
                     break;
                 }
                 case BC.BYTECODE_PRIM_CLASS: {
-                    setData(currentPC, insert(SqueakObjectClassNodeGen.create()));
+                    setChildNode(currentPC, insert(SqueakObjectClassNodeGen.create()));
                     break;
                 }
                 case BC.BYTECODE_PRIM_ADD, BC.BYTECODE_PRIM_SUBTRACT, BC.BYTECODE_PRIM_LESS_THAN, BC.BYTECODE_PRIM_GREATER_THAN, BC.BYTECODE_PRIM_LESS_OR_EQUAL, BC.BYTECODE_PRIM_GREATER_OR_EQUAL, //
                     BC.BYTECODE_PRIM_EQUAL, BC.BYTECODE_PRIM_NOT_EQUAL, BC.BYTECODE_PRIM_MULTIPLY, BC.BYTECODE_PRIM_DIVIDE, BC.BYTECODE_PRIM_MOD, BC.BYTECODE_PRIM_MAKE_POINT, BC.BYTECODE_PRIM_BIT_SHIFT, BC.BYTECODE_PRIM_DIV, //
                     BC.BYTECODE_PRIM_BIT_AND, BC.BYTECODE_PRIM_BIT_OR, BC.BYTECODE_PRIM_AT, BC.BYTECODE_PRIM_NEXT_PUT, BC.BYTECODE_PRIM_VALUE_WITH_ARG, BC.BYTECODE_PRIM_DO, BC.BYTECODE_PRIM_NEW_WITH_ARG: {
-                    setData(currentPC, insert(Dispatch1NodeGen.create(image.getSpecialSelector(b - BC.BYTECODE_PRIM_ADD))));
+                    setChildNode(currentPC, insert(Dispatch1NodeGen.create(image.getSpecialSelector(b - BC.BYTECODE_PRIM_ADD))));
                     break;
                 }
                 case BC.BYTECODE_PRIM_IDENTICAL, BC.BYTECODE_PRIM_NOT_IDENTICAL: {
-                    setData(currentPC, insert(SqueakObjectIdentityNodeGen.create()));
+                    setChildNode(currentPC, insert(SqueakObjectIdentityNodeGen.create()));
                     break;
                 }
                 case BC.BYTECODE_PRIM_AT_PUT: {
-                    setData(currentPC, insert(Dispatch2NodeGen.create(image.getSpecialSelector(b - BC.BYTECODE_PRIM_ADD))));
+                    setChildNode(currentPC, insert(Dispatch2NodeGen.create(image.getSpecialSelector(b - BC.BYTECODE_PRIM_ADD))));
                     break;
                 }
                 case BC.SEND_LIT_SEL0_0, BC.SEND_LIT_SEL0_1, BC.SEND_LIT_SEL0_2, BC.SEND_LIT_SEL0_3, BC.SEND_LIT_SEL0_4, BC.SEND_LIT_SEL0_5, BC.SEND_LIT_SEL0_6, BC.SEND_LIT_SEL0_7, //
                     BC.SEND_LIT_SEL0_8, BC.SEND_LIT_SEL0_9, BC.SEND_LIT_SEL0_A, BC.SEND_LIT_SEL0_B, BC.SEND_LIT_SEL0_C, BC.SEND_LIT_SEL0_D, BC.SEND_LIT_SEL0_E, BC.SEND_LIT_SEL0_F: {
                     final NativeObject selector = (NativeObject) code.getAndResolveLiteral(b & 0xF);
-                    setData(currentPC, insert(Dispatch0NodeGen.create(selector)));
+                    setChildNode(currentPC, insert(Dispatch0NodeGen.create(selector)));
                     break;
                 }
                 case BC.SEND_LIT_SEL1_0, BC.SEND_LIT_SEL1_1, BC.SEND_LIT_SEL1_2, BC.SEND_LIT_SEL1_3, BC.SEND_LIT_SEL1_4, BC.SEND_LIT_SEL1_5, BC.SEND_LIT_SEL1_6, BC.SEND_LIT_SEL1_7, //
                     BC.SEND_LIT_SEL1_8, BC.SEND_LIT_SEL1_9, BC.SEND_LIT_SEL1_A, BC.SEND_LIT_SEL1_B, BC.SEND_LIT_SEL1_C, BC.SEND_LIT_SEL1_D, BC.SEND_LIT_SEL1_E, BC.SEND_LIT_SEL1_F: {
                     final NativeObject selector = (NativeObject) code.getAndResolveLiteral(b & 0xF);
-                    setData(currentPC, insert(Dispatch1NodeGen.create(selector)));
+                    setChildNode(currentPC, insert(Dispatch1NodeGen.create(selector)));
                     break;
                 }
                 case BC.SEND_LIT_SEL2_0, BC.SEND_LIT_SEL2_1, BC.SEND_LIT_SEL2_2, BC.SEND_LIT_SEL2_3, BC.SEND_LIT_SEL2_4, BC.SEND_LIT_SEL2_5, BC.SEND_LIT_SEL2_6, BC.SEND_LIT_SEL2_7, //
                     BC.SEND_LIT_SEL2_8, BC.SEND_LIT_SEL2_9, BC.SEND_LIT_SEL2_A, BC.SEND_LIT_SEL2_B, BC.SEND_LIT_SEL2_C, BC.SEND_LIT_SEL2_D, BC.SEND_LIT_SEL2_E, BC.SEND_LIT_SEL2_F: {
                     final NativeObject selector = (NativeObject) code.getAndResolveLiteral(b & 0xF);
-                    setData(currentPC, insert(Dispatch2NodeGen.create(selector)));
+                    setChildNode(currentPC, insert(Dispatch2NodeGen.create(selector)));
                     break;
                 }
                 case BC.SHORT_UJUMP_0, BC.SHORT_UJUMP_1, BC.SHORT_UJUMP_2, BC.SHORT_UJUMP_3, BC.SHORT_UJUMP_4, BC.SHORT_UJUMP_5, BC.SHORT_UJUMP_6, BC.SHORT_UJUMP_7: {
                     final int offset = calculateShortOffset(b);
                     if (offset < 0) {
-                        setData(currentPC, insert(createCheckForInterruptsInLoopNode(pc, 1, offset)));
+                        setChildNode(currentPC, insert(createCheckForInterruptsInLoopNode(pc, 1, offset)));
                     }
                     break;
                 }
@@ -231,7 +239,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
                     break;
                 }
                 case BC.POP_INTO_RCVR_VAR_0, BC.POP_INTO_RCVR_VAR_1, BC.POP_INTO_RCVR_VAR_2, BC.POP_INTO_RCVR_VAR_3, BC.POP_INTO_RCVR_VAR_4, BC.POP_INTO_RCVR_VAR_5, BC.POP_INTO_RCVR_VAR_6, BC.POP_INTO_RCVR_VAR_7: {
-                    setData(currentPC, insert(SqueakObjectAtPut0NodeGen.create()));
+                    setChildNode(currentPC, insert(SqueakObjectAtPut0NodeGen.create()));
                     break;
                 }
                 /* 2 byte bytecodes */
@@ -259,14 +267,13 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
                     break;
                 }
                 case BC.EXT_PUSH_RECEIVER_VARIABLE: {
-                    setData(currentPC, insert(SqueakObjectAt0NodeGen.create()));
+                    setChildNode(currentPC, insert(SqueakObjectAt0NodeGen.create()));
                     pc++;
                     extBA = 0;
                     break;
                 }
                 case BC.EXT_PUSH_LITERAL_VARIABLE: {
-                    setData(currentPC, getLiteralVariableOrCreateLiteralNode(code.getAndResolveLiteral(getByteExtended(bc, pc, getExtA(extBA)))));
-                    pc++;
+                    createPushLiteralVariableNode(currentPC, code.getAndResolveLiteral(getByteExtended(bc, pc, getExtA(extBA))));                    pc++;
                     extBA = 0;
                     break;
                 }
@@ -283,7 +290,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
                     final int byte1 = getUnsignedInt(bc, pc++);
                     final int literalIndex = (byte1 >> 3) + (getExtA(extBA) << 5);
                     final NativeObject selector = (NativeObject) code.getAndResolveLiteral(literalIndex);
-                    setData(currentPC, insert(DispatchNaryNodeGen.create(selector)));
+                    setChildNode(currentPC, insert(DispatchNaryNodeGen.create(selector)));
                     extBA = 0;
                     break;
                 }
@@ -293,10 +300,10 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
                     final int literalIndex = (byte1 >> 3) + (getExtA(extBA) << 5);
                     final NativeObject selector = (NativeObject) code.getAndResolveLiteral(literalIndex);
                     if (isDirected) {
-                        setData(currentPC, insert(DispatchDirectedSuperNaryNodeGen.create(selector)));
+                        setChildNode(currentPC, insert(DispatchDirectedSuperNaryNodeGen.create(selector)));
                     } else {
                         final ClassObject methodClass = code.getMethod().getMethodClassSlow();
-                        setData(currentPC, insert(DispatchSuperNaryNodeGen.create(methodClass, selector)));
+                        setChildNode(currentPC, insert(DispatchSuperNaryNodeGen.create(methodClass, selector)));
                     }
                     extBA = 0;
                     break;
@@ -304,7 +311,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
                 case BC.EXT_UNCONDITIONAL_JUMP: {
                     final int offset = calculateLongExtendedOffset(getByte(bc, pc++), getExtB(extBA));
                     if (offset < 0) {
-                        setData(currentPC, insert(createCheckForInterruptsInLoopNode(currentPC, 2, offset)));
+                        setChildNode(currentPC, insert(createCheckForInterruptsInLoopNode(currentPC, 2, offset)));
                     }
                     extBA = 0;
                     break;
@@ -316,7 +323,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
                     break;
                 }
                 case BC.EXT_STORE_AND_POP_RECEIVER_VARIABLE, BC.EXT_STORE_AND_POP_LITERAL_VARIABLE, BC.EXT_STORE_RECEIVER_VARIABLE, BC.EXT_STORE_LITERAL_VARIABLE: {
-                    setData(currentPC, insert(SqueakObjectAtPut0NodeGen.create()));
+                    setChildNode(currentPC, insert(SqueakObjectAtPut0NodeGen.create()));
                     pc++;
                     extBA = 0;
                     break;
@@ -343,12 +350,12 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
                     break;
                 }
                 case BC.PUSH_REMOTE_TEMP_LONG: {
-                    setData(currentPC, insert(SqueakObjectAt0NodeGen.create()));
+                    setChildNode(currentPC, insert(SqueakObjectAt0NodeGen.create()));
                     pc += 2;
                     break;
                 }
                 case BC.STORE_REMOTE_TEMP_LONG, BC.STORE_AND_POP_REMOTE_TEMP_LONG: {
-                    setData(currentPC, insert(SqueakObjectAtPut0NodeGen.create()));
+                    setChildNode(currentPC, insert(SqueakObjectAtPut0NodeGen.create()));
                     pc += 2;
                     break;
                 }
@@ -1166,7 +1173,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
     @SuppressWarnings("unused")
     @EarlyInline
     private int handlePushReceiverVariable(final int pc, final State state, final VirtualState virtualState, final VirtualFrame frame, final int index) {
-        pushFollowed(frame, pc, virtualState.sp++, uncheckedCast(getData(pc), SqueakObjectAt0NodeGen.class).execute(this, FrameAccess.getReceiver(frame), index));
+        pushFollowed(frame, pc, virtualState.sp++, ((SqueakObjectAt0NodeGen) getChildNode(pc)).execute(this, FrameAccess.getReceiver(frame), index));
         return pc + 1;
     }
 
@@ -1722,7 +1729,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
     @EarlyInline
     private int handleExtendedPushReceiverVariable(final int pc, final State state, final VirtualState virtualState, final VirtualFrame frame) {
         pushFollowed(frame, pc, virtualState.sp++,
-                        uncheckedCast(getData(pc), SqueakObjectAt0NodeGen.class).execute(this, FrameAccess.getReceiver(frame), getByteExtended(state.bytecode, pc + 1, virtualState.getExtA())));
+                        ((SqueakObjectAt0NodeGen) getChildNode(pc)).execute(this, FrameAccess.getReceiver(frame), getByteExtended(state.bytecode, pc + 1, virtualState.getExtA())));
         virtualState.resetExtensions();
         return pc + 2;
     }
@@ -1833,7 +1840,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
     private int handleLongPushRemoteTemporaryVariable(final int pc, final State state, final VirtualState virtualState, final VirtualFrame frame) {
         final int remoteTempIndex = getUnsignedInt(state.bytecode, pc + 1);
         final int tempVectorIndex = getUnsignedInt(state.bytecode, pc + 2);
-        pushFollowed(frame, pc, virtualState.sp++, uncheckedCast(getData(pc), SqueakObjectAt0NodeGen.class).execute(this, getTemp(frame, tempVectorIndex), remoteTempIndex));
+        pushFollowed(frame, pc, virtualState.sp++, ((SqueakObjectAt0NodeGen) getChildNode(pc)).execute(this, getTemp(frame, tempVectorIndex), remoteTempIndex));
         return pc + 3;
     }
 
@@ -1844,7 +1851,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
     @SuppressWarnings("unused")
     @EarlyInline
     private int handlePopIntoReceiverVariable(final int pc, final State state, final VirtualState virtualState, final VirtualFrame frame, final int index) {
-        uncheckedCast(getData(pc), SqueakObjectAtPut0Node.class).execute(this, FrameAccess.getReceiver(frame), index, pop(frame, --virtualState.sp));
+        ((SqueakObjectAtPut0Node) getChildNode(pc)).execute(this, FrameAccess.getReceiver(frame), index, pop(frame, --virtualState.sp));
         return pc + 1;
     }
 
@@ -1968,7 +1975,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
     @EarlyInline
     private int handleExtendedStoreAndPopReceiverVariable(final int pc, final State state, final VirtualState virtualState, final VirtualFrame frame) {
         final int index = getByteExtended(state.bytecode, pc + 1, virtualState.getExtA());
-        uncheckedCast(getData(pc), SqueakObjectAtPut0Node.class).execute(this, FrameAccess.getReceiver(frame), index, pop(frame, --virtualState.sp));
+        ((SqueakObjectAtPut0Node) getChildNode(pc)).execute(this, FrameAccess.getReceiver(frame), index, pop(frame, --virtualState.sp));
         virtualState.resetExtensions();
         return pc + 2;
     }
@@ -1978,7 +1985,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
     @EarlyInline
     private int handleExtendedStoreAndPopLiteralVariable(final int pc, final State state, final VirtualState virtualState, final VirtualFrame frame) {
         final int index = getByteExtended(state.bytecode, pc + 1, virtualState.getExtA());
-        uncheckedCast(getData(pc), SqueakObjectAtPut0Node.class).execute(this, getAndResolveLiteral(pc, index), ASSOCIATION.VALUE, pop(frame, --virtualState.sp));
+        ((SqueakObjectAtPut0Node) getChildNode(pc)).execute(this, getAndResolveLiteral(pc, index), ASSOCIATION.VALUE, pop(frame, --virtualState.sp));
         virtualState.resetExtensions();
         return pc + 2;
     }
@@ -1996,7 +2003,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
     @EarlyInline
     private int handleExtendedStoreReceiverVariable(final int pc, final State state, final VirtualState virtualState, final VirtualFrame frame) {
         final int index = getByteExtended(state.bytecode, pc + 1, virtualState.getExtA());
-        uncheckedCast(getData(pc), SqueakObjectAtPut0Node.class).execute(this, FrameAccess.getReceiver(frame), index, top(frame, virtualState.sp));
+        ((SqueakObjectAtPut0Node) getChildNode(pc)).execute(this, FrameAccess.getReceiver(frame), index, top(frame, virtualState.sp));
         virtualState.resetExtensions();
         return pc + 2;
     }
@@ -2006,7 +2013,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
     @EarlyInline
     private int handleExtendedStoreLiteralVariable(final int pc, final State state, final VirtualState virtualState, final VirtualFrame frame) {
         final int index = getByteExtended(state.bytecode, pc + 1, virtualState.getExtA());
-        uncheckedCast(getData(pc), SqueakObjectAtPut0Node.class).execute(this, getAndResolveLiteral(pc, index), ASSOCIATION.VALUE, top(frame, virtualState.sp));
+        ((SqueakObjectAtPut0Node) getChildNode(pc)).execute(this, getAndResolveLiteral(pc, index), ASSOCIATION.VALUE, top(frame, virtualState.sp));
         virtualState.resetExtensions();
         return pc + 2;
     }
@@ -2025,7 +2032,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
     private int handleLongStoreRemoteTemporaryVariable(final int pc, final State state, final VirtualState virtualState, final VirtualFrame frame) {
         final int remoteTempIndex = getUnsignedInt(state.bytecode, pc + 1);
         final int tempVectorIndex = getUnsignedInt(state.bytecode, pc + 2);
-        uncheckedCast(getData(pc), SqueakObjectAtPut0Node.class).execute(this, getTemp(frame, tempVectorIndex), remoteTempIndex, top(frame, virtualState.sp));
+        ((SqueakObjectAtPut0Node) getChildNode(pc)).execute(this, getTemp(frame, tempVectorIndex), remoteTempIndex, top(frame, virtualState.sp));
         return pc + 3;
     }
 
@@ -2035,7 +2042,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
     private int handleLongStoreAndPopRemoteTemporaryVariable(final int pc, final State state, final VirtualState virtualState, final VirtualFrame frame) {
         final int remoteTempIndex = getUnsignedInt(state.bytecode, pc + 1);
         final int tempVectorIndex = getUnsignedInt(state.bytecode, pc + 2);
-        uncheckedCast(getData(pc), SqueakObjectAtPut0Node.class).execute(this, getTemp(frame, tempVectorIndex), remoteTempIndex, pop(frame, --virtualState.sp));
+        ((SqueakObjectAtPut0Node) getChildNode(pc)).execute(this, getTemp(frame, tempVectorIndex), remoteTempIndex, pop(frame, --virtualState.sp));
         return pc + 3;
     }
 
@@ -2330,7 +2337,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
     private int handlePrimitiveIdentical(final int pc, final State state, final VirtualState virtualState, final VirtualFrame frame) {
         final Object arg = pop(frame, --virtualState.sp);
         final Object receiver = popReceiver(frame, --virtualState.sp);
-        push(frame, virtualState.sp++, uncheckedCast(getData(pc), SqueakObjectIdentityNodeGen.class).execute(this, receiver, arg));
+        push(frame, virtualState.sp++, ((SqueakObjectIdentityNodeGen) getChildNode(pc)).execute(this, receiver, arg));
         return pc + 1;
     }
 
@@ -2339,7 +2346,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
     @EarlyInline
     private int handlePrimitiveClass(final int pc, final State state, final VirtualState virtualState, final VirtualFrame frame) {
         final Object receiver = popReceiver(frame, --virtualState.sp);
-        push(frame, virtualState.sp++, uncheckedCast(getData(pc), SqueakObjectClassNodeGen.class).executeLookup(this, receiver));
+        push(frame, virtualState.sp++, ((SqueakObjectClassNodeGen) getChildNode(pc)).executeLookup(this, receiver));
         return pc + 1;
     }
 
@@ -2349,7 +2356,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
     private int handlePrimitiveNotIdentical(final int pc, final State state, final VirtualState virtualState, final VirtualFrame frame) {
         final Object arg = pop(frame, --virtualState.sp);
         final Object receiver = popReceiver(frame, --virtualState.sp);
-        push(frame, virtualState.sp++, !uncheckedCast(getData(pc), SqueakObjectIdentityNodeGen.class).execute(this, receiver, arg));
+        push(frame, virtualState.sp++, !((SqueakObjectIdentityNodeGen) getChildNode(pc)).execute(this, receiver, arg));
         return pc + 1;
     }
 
@@ -2483,7 +2490,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
                     }
                 }
             }
-            if (getData(pc) instanceof final CheckForInterruptsInLoopNode checkForInterruptsNode) {
+            if (getChildNode(pc) instanceof final CheckForInterruptsInLoopNode checkForInterruptsNode) {
                 checkForInterruptsNode.execute(frame, nextPC);
             }
         }
@@ -2690,7 +2697,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
                     }
                 }
             }
-            if (getData(pc) instanceof final CheckForInterruptsInLoopNode checkForInterruptsNode) {
+            if (getChildNode(pc) instanceof final CheckForInterruptsInLoopNode checkForInterruptsNode) {
                 checkForInterruptsNode.execute(frame, nextPC);
             }
         }
@@ -2811,9 +2818,9 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
     private Object sendSuper(final VirtualFrame frame, final boolean isDirected, final int pc, final ClassObject lookupClass, final Object receiver, final Object[] arguments) {
         try {
             if (isDirected) {
-                return uncheckedCast(getData(pc), DispatchDirectedSuperNaryNodeGen.class).execute(frame, lookupClass, receiver, arguments);
+                return ((DispatchDirectedSuperNaryNodeGen) getChildNode(pc)).execute(frame, lookupClass, receiver, arguments);
             } else {
-                return uncheckedCast(getData(pc), DispatchSuperNaryNodeGen.class).execute(frame, receiver, arguments);
+                return ((DispatchSuperNaryNodeGen) getChildNode(pc)).execute(frame, receiver, arguments);
             }
         } catch (final AbstractStandardSendReturn r) {
             return handleReturnException(frame, pc, r);
