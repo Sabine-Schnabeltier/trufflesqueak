@@ -222,6 +222,8 @@ public final class SqueakDisplay {
     record CursorData(int[] cursorWords, int[] maskWords, int width, int height, int depth, int offsetX, int offsetY) {
     }
 
+    private String windowTitle;
+
     final MemorySegment closeTask = SDL_MainThreadCallback.allocate((_) -> {
         stagingArena = null; // Just drop the reference so the GC can safely free the native memory
         if (texture != MemorySegment.NULL) {
@@ -316,7 +318,9 @@ public final class SqueakDisplay {
                             } else if (m) {
                                 argb = 0xFFFFFFFF;      // White (1,0)
                             } else if (c) {
-                                argb = 0x00FFFFFF;      // Invert (0,1)
+                                // True XOR/Invert is not supported by SDL3 ARGB cursors.
+                                // Fallback to opaque Black so XOR crosshairs remain visible.
+                                argb = 0xFF000000;      // Fallback Black (0,1)
                             }
 
                             pixels.set(ValueLayout.JAVA_INT, (long) y * pitch + (long) x * 4, argb);
@@ -625,9 +629,14 @@ public final class SqueakDisplay {
         clampDamageToBounds();
 
         if (window == MemorySegment.NULL) {
-            final String imageFileName = new File(image.getImagePath()).getName();
-            final String windowTitle = imageFileName.contains(SqueakLanguageConfig.IMPLEMENTATION_NAME) ? imageFileName
-                            : imageFileName + " running on " + SqueakLanguageConfig.IMPLEMENTATION_NAME;
+            final String title;
+            if (windowTitle != null) {
+                title = windowTitle;
+            } else {
+                final String imageFileName = new File(image.getImagePath()).getName();
+                title = imageFileName.contains(SqueakLanguageConfig.IMPLEMENTATION_NAME) ? imageFileName
+                                : imageFileName + " running on " + SqueakLanguageConfig.IMPLEMENTATION_NAME;
+            }
             try (Arena arena = Arena.ofConfined()) {
                 /*
                  * When Smalltalk opens the Display the first time, we do not yet know the
@@ -644,24 +653,38 @@ public final class SqueakDisplay {
                     }
 
                     try (Arena windowTitleArena = Arena.ofConfined()) {
-                        window = checkSdlError(SDL_CreateWindow(windowTitleArena.allocateFrom(windowTitle), width, height, windowFlags));
+                        window = checkSdlError(SDL_CreateWindow(windowTitleArena.allocateFrom(title), width, height, windowFlags));
                     }
-                    renderer = checkSdlError(SDL_CreateRenderer(window, MemorySegment.NULL));
 
-                    setWindowIcon(window);
-                    checkSdlError(SDL_RaiseWindow(window));
+                    try {
+                        renderer = checkSdlError(SDL_CreateRenderer(window, MemorySegment.NULL));
 
-                    // Query the actual display scale factor now that the window exists
-                    scaleFactor = checkSdlError(SDL_GetWindowDisplayScale(window));
+                        setWindowIcon(window);
+                        checkSdlError(SDL_RaiseWindow(window));
 
-                    // Store the logical dimensions exactly as Smalltalk requested them
-                    osWindowWidth = width;
-                    osWindowHeight = height;
+                        // Query the actual display scale factor now that the window exists
+                        scaleFactor = checkSdlError(SDL_GetWindowDisplayScale(window));
 
-                    checkSdlError(SDL_StartTextInput(window));
-                    fullDamage();
-                    if (cursorData != null) {
-                        SDL_RunOnMainThread(setCursorTask, MemorySegment.NULL, false);
+                        // Store the logical dimensions exactly as Smalltalk requested them
+                        osWindowWidth = width;
+                        osWindowHeight = height;
+
+                        checkSdlError(SDL_StartTextInput(window));
+                        fullDamage();
+                        if (cursorData != null) {
+                            SDL_RunOnMainThread(setCursorTask, MemorySegment.NULL, false);
+                        }
+                    } catch (final SqueakException e) {
+                        // Explicitly clean up on initialization failure to prevent native leaks
+                        if (renderer != MemorySegment.NULL) {
+                            SDL_DestroyRenderer(renderer);
+                            renderer = MemorySegment.NULL;
+                        }
+                        if (window != MemorySegment.NULL) {
+                            SDL_DestroyWindow(window);
+                            window = MemorySegment.NULL;
+                        }
+                        throw e;
                     }
                 }, arena), MemorySegment.NULL, true);
             }
@@ -841,11 +864,18 @@ public final class SqueakDisplay {
             case SDL_EVENT_WINDOW_RESIZED:
                 osWindowWidth = SDL_WindowEvent.data1(event);
                 osWindowHeight = SDL_WindowEvent.data2(event);
+                image.flags.setScreenSize(getLogicalWindowWidth(), getLogicalWindowHeight());
                 addWindowEvent(WINDOW.METRIC_CHANGE);
                 fullDamage();
                 requestRender();
                 break;
             case SDL_EVENT_RENDER_TARGETS_RESET, SDL_EVENT_RENDER_DEVICE_RESET:
+                synchronized (this) {
+                    if (texture != MemorySegment.NULL) {
+                        SDL_DestroyTexture(texture);
+                        texture = MemorySegment.NULL;
+                    }
+                }
                 fullDamage();
                 requestRender();
                 break;
@@ -865,8 +895,7 @@ public final class SqueakDisplay {
 
         addKeyboardEvent(KEYBOARD_EVENT.DOWN, keyChar);
 
-        final boolean isCommandOrCtrl = (sdlModifiers & (SDL_KMOD_LCTRL | SDL_KMOD_RCTRL |
-                        SDL_KMOD_LGUI | SDL_KMOD_RGUI)) != 0;
+        final boolean isCommandOrCtrl = (buttons & (KEYBOARD.CTRL | KEYBOARD.CMD)) != 0;
 
         if (isControlKey(sdlKeySym) || isCommandOrCtrl) {
             if (keyChar <= 65535) {
@@ -1119,6 +1148,7 @@ public final class SqueakDisplay {
 
     @TruffleBoundary
     public void setWindowTitle(final String title) {
+        windowTitle = title; /* for window title set before window open */
         if (window == MemorySegment.NULL) {
             return;
         }
