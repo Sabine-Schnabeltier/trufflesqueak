@@ -45,6 +45,15 @@ public final class ObjectGraphUtils {
     private static final int USABLE_THREAD_COUNT = Math.min(Runtime.getRuntime().availableProcessors(), 4);
     private static final ExecutorService EXECUTOR = Executors.newFixedThreadPool(USABLE_THREAD_COUNT, r -> new Thread(r, "TruffleSqueakObjectGraphUtils"));
 
+    public enum FrameHandling {
+        /** Do not enumerate objects found in Truffle frames. */
+        IGNORE,
+        /** Enumerate live objects in Truffle frames (Read-Only). */
+        SCAN,
+        /** Enumerate live objects and nil dead objects in Truffle frames (Read-Write). */
+        SCRUB
+    }
+
     private final SqueakImageContext image;
     private final boolean trackOperations;
 
@@ -57,6 +66,22 @@ public final class ObjectGraphUtils {
 
     public static int getLastSeenObjects() {
         return lastSeenObjects;
+    }
+
+    /**
+     * Triggered by a Smalltalk garbage collection request. We need to do two things: remove
+     * forwarding pointers, and remove spurious references from the stacks of dead frames. Any
+     * tracing of the object graph will remove the spurious references, so if an unfollow is needed
+     * to remove the forwarding pointers, we're done. Otherwise, we ask for all instances of an
+     * unknown class to force a full trace.
+     */
+    @TruffleBoundary
+    public void flushDeadReferences() {
+        if (isUnfollowNeeded()) {
+            unfollow();
+        } else {
+            allInstancesOf(null);
+        }
     }
 
     private record AllInstancesTask(ObjectTracer roots, ArrayDeque<AbstractSqueakObjectWithHash> objects,
@@ -79,7 +104,7 @@ public final class ObjectGraphUtils {
     public Object[] allInstances() {
         final long startTime = System.nanoTime();
 
-        final ObjectTracer roots = ObjectTracer.fromRoots(image, true);
+        final ObjectTracer roots = ObjectTracer.fromRoots(image, FrameHandling.SCAN);
 
         final Runnable[] tasks = new Runnable[USABLE_THREAD_COUNT];
         final List<ArrayDeque<AbstractSqueakObjectWithHash>> objectsList = new ArrayList<>(USABLE_THREAD_COUNT);
@@ -136,7 +161,8 @@ public final class ObjectGraphUtils {
     public Object[] allInstancesOf(final ClassObject targetClass) {
         final long startTime = System.nanoTime();
 
-        final ObjectTracer roots = ObjectTracer.fromRoots(image, true);
+        // Scrub the stack frames if targetClass is null.
+        final ObjectTracer roots = ObjectTracer.fromRoots(image, targetClass == null ? FrameHandling.SCRUB : FrameHandling.SCAN);
 
         final Runnable[] tasks = new Runnable[USABLE_THREAD_COUNT];
         final List<ArrayDeque<AbstractSqueakObjectWithHash>> objectsList = new ArrayList<>(USABLE_THREAD_COUNT);
@@ -171,7 +197,7 @@ public final class ObjectGraphUtils {
     public AbstractSqueakObject someInstanceOf(final ClassObject targetClass) {
         final long startTime = System.nanoTime();
         final ArrayDeque<AbstractSqueakObjectWithHash> marked = new ArrayDeque<>(lastSeenObjects / 2);
-        final ObjectTracer tracer = ObjectTracer.fromRoots(image, true);
+        final ObjectTracer tracer = ObjectTracer.fromRoots(image, FrameHandling.SCAN);
         AbstractSqueakObject result = NilObject.SINGLETON;
         AbstractSqueakObjectWithHash currentObject;
         while ((currentObject = tracer.getNext()) != null) {
@@ -200,7 +226,7 @@ public final class ObjectGraphUtils {
         // each time it is called.
         final long startTime = System.nanoTime();
         final ArrayDeque<AbstractSqueakObjectWithHash> marked = new ArrayDeque<>(lastSeenObjects / 2);
-        final ObjectTracer tracer = ObjectTracer.fromRoots(image, true);
+        final ObjectTracer tracer = ObjectTracer.fromRoots(image, FrameHandling.SCAN);
         AbstractSqueakObjectWithHash currentObject = tracer.getNext();
         AbstractSqueakObject result = currentObject; // first object
         boolean foundObject = false;
@@ -251,7 +277,7 @@ public final class ObjectGraphUtils {
                 pointersBecomeOneWayFrames(_ -> {
                 }, becomeMap);
             } else {
-                final ObjectTracer roots = ObjectTracer.fromRoots(image, false);
+                final ObjectTracer roots = ObjectTracer.fromRoots(image, FrameHandling.IGNORE);
                 pointersBecomeOneWayFrames(roots::addIfUnmarked, becomeMap);
                 becomeOneWayManyPairs(roots);
             }
@@ -284,7 +310,7 @@ public final class ObjectGraphUtils {
             return; // nothing to do
         }
         final long startTime = System.nanoTime();
-        becomeOneWayManyPairs(ObjectTracer.fromRoots(image, true));
+        becomeOneWayManyPairs(ObjectTracer.fromRoots(image, FrameHandling.SCRUB));
         if (trackOperations) {
             ObjectGraphOperations.UNFOLLOW.addNanos(System.nanoTime() - startTime);
         }
@@ -392,7 +418,7 @@ public final class ObjectGraphUtils {
     public boolean checkEphemerons() {
         final long startTime = System.nanoTime();
 
-        final ObjectTracer roots = ObjectTracer.fromRoots(image, true);
+        final ObjectTracer roots = ObjectTracer.fromRoots(image, FrameHandling.SCAN);
 
         // Mark and trace all non-ephemeron objects. Mark and trace ephemerons that have
         // been signaled or whose keys have been marked. Save all other ephemerons for later.
@@ -497,16 +523,16 @@ public final class ObjectGraphUtils {
          * Return an ObjectTracer initialized with the roots and optionally including objects in the
          * Truffle frames. Flips the global marking flag.
          */
-        private static ObjectTracer fromRoots(final SqueakImageContext image, final boolean addObjectsFromFrames) {
+        private static ObjectTracer fromRoots(final SqueakImageContext image, final FrameHandling frameHandling) {
             final ObjectTracer tracer = new ObjectTracer(image, image.toggleCurrentMarkingFlag());
-            tracer.addRoots(addObjectsFromFrames);
+            tracer.addRoots(frameHandling);
             return tracer;
         }
 
-        private void addRoots(final boolean addObjectsFromFrames) {
+        private void addRoots(final FrameHandling frameHandling) {
             /* Add roots, in reversed order because workStack is LIFO. */
-            if (addObjectsFromFrames) {
-                addObjectsFromFrames();
+            if (frameHandling != FrameHandling.IGNORE) {
+                addObjectsFromFrames(frameHandling);
             }
 
             /*
@@ -524,14 +550,19 @@ public final class ObjectGraphUtils {
             tracePointers(image.specialObjectsArray);
         }
 
-        private void addObjectsFromFrames() {
+        private void addObjectsFromFrames(final FrameHandling frameHandling) {
             CompilerAsserts.neverPartOfCompilation();
+            final boolean shouldScrub = frameHandling == FrameHandling.SCRUB;
+
             Truffle.getRuntime().iterateFrames(frameInstance -> {
-                final Frame current = frameInstance.getFrame(FrameInstance.FrameAccess.READ_ONLY);
-                if (FrameAccess.isTruffleSqueakFrame(current)) {
+                final Frame readOnlyFrame = frameInstance.getFrame(FrameInstance.FrameAccess.READ_ONLY);
+
+                if (FrameAccess.isTruffleSqueakFrame(readOnlyFrame)) {
+                    final Frame current = shouldScrub ?
+                            frameInstance.getFrame(FrameInstance.FrameAccess.READ_WRITE) : readOnlyFrame;
                     addAllIfUnmarked(current.getArguments());
                     addIfUnmarked(FrameAccess.getContext(current));
-                    FrameAccess.iterateStackObjects(current, false, this::addIfUnmarked);
+                    FrameAccess.iterateStackObjects(current, shouldScrub, this::addIfUnmarked);
                 }
                 return null; // continue
             });
