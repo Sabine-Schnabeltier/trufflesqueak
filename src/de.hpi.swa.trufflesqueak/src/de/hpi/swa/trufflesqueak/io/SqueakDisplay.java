@@ -478,10 +478,10 @@ public final class SqueakDisplay {
         checkSdlError(SDL_RenderPresent(renderer));
     }
 
-    public void render(final boolean force) {
+    private void requestRender() {
         synchronized (this) {
             // Strictly synchronized bounds check
-            if (!force && (deferUpdates || dirtyTop >= dirtyBottom || dirtyLeft >= dirtyRight)) {
+            if (dirtyTop >= dirtyBottom || dirtyLeft >= dirtyRight) {
                 return;
             }
 
@@ -500,10 +500,6 @@ public final class SqueakDisplay {
     @TruffleBoundary
     public void showDisplayRect(final int left, final int top, final int right, final int bottom) {
         assert left <= right && top <= bottom;
-
-        if (deferUpdates) {
-            return;
-        }
 
         synchronized (this) {
             final int currentWidth = width;
@@ -549,7 +545,7 @@ public final class SqueakDisplay {
             recordDamage(safeLeft, safeTop, safeRight, safeBottom);
         }
 
-        render(false);
+        requestRender();
     }
 
     private void recordDamage(final int left, final int top, final int right, final int bottom) {
@@ -567,9 +563,17 @@ public final class SqueakDisplay {
     }
 
     private void fullDamage() {
-        synchronized (this) { // Explicit block instead of method modifier
+        synchronized (this) {
             recordDamage(0, 0, width, height);
         }
+    }
+
+    private void clampDamageToBounds() {
+        // Ensure damage is within the current bounds.
+        dirtyLeft = Math.clamp(dirtyLeft, 0, width);
+        dirtyTop = Math.clamp(dirtyTop, 0, height);
+        dirtyRight = Math.clamp(dirtyRight, 0, width);
+        dirtyBottom = Math.clamp(dirtyBottom, 0, height);
     }
 
     @TruffleBoundary
@@ -617,6 +621,8 @@ public final class SqueakDisplay {
             width = newWidth;
             height = newHeight;
         }
+
+        clampDamageToBounds();
 
         if (window == MemorySegment.NULL) {
             final String imageFileName = new File(image.getImagePath()).getName();
@@ -715,6 +721,8 @@ public final class SqueakDisplay {
             width = newWidth;
             height = newHeight;
         }
+
+        clampDamageToBounds();
 
         final int targetLogicalWidth = (int) Math.ceil(newWidth / getDisplayScale());
         final int targetLogicalHeight = (int) Math.ceil(newHeight / getDisplayScale());
@@ -819,7 +827,7 @@ public final class SqueakDisplay {
             case SDL_EVENT_WINDOW_EXPOSED:
                 addWindowEvent(WINDOW.PAINT);
                 fullDamage();
-                render(true);
+                requestRender();
                 break;
             case SDL_EVENT_WINDOW_MINIMIZED:
                 addWindowEvent(WINDOW.ICONISE);
@@ -835,11 +843,11 @@ public final class SqueakDisplay {
                 osWindowHeight = SDL_WindowEvent.data2(event);
                 addWindowEvent(WINDOW.METRIC_CHANGE);
                 fullDamage();
-                render(true);
+                requestRender();
                 break;
             case SDL_EVENT_RENDER_TARGETS_RESET, SDL_EVENT_RENDER_DEVICE_RESET:
                 fullDamage();
-                render(true);
+                requestRender();
                 break;
         }
     }
@@ -1093,8 +1101,16 @@ public final class SqueakDisplay {
     }
 
     public void setDeferUpdates(final boolean flag) {
-        // ToDo: It appears that deferUpdates is never set to true.
+        // When set to true, the image will use the primitive associated with showDisplayRect()
+        // to force the screen update. This is used in old version of Cuis (~7.3).
+        final boolean oldDeferUpdates = deferUpdates;
         deferUpdates = flag;
+
+        // If we were deferring updates and are no longer, force the screen to redraw.
+        if (oldDeferUpdates && !deferUpdates) {
+            fullDamage();
+            requestRender();
+        }
     }
 
     public boolean getDeferUpdates() {
