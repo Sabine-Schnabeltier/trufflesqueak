@@ -810,22 +810,18 @@ public final class ControlPrimitives extends AbstractPrimitiveFactoryHolder {
 
         @TruffleBoundary
         private static Object doGC(final SqueakImageContext image) {
-            /*
-             * We need to do two things: remove forwarding pointers, and remove spurious references
-             * from the stacks of dead frames. Any tracing of the object graph will remove the
-             * spurious references, so if an unfollow is needed to remove the forwarding pointers,
-             * we're done. Otherwise, we ask for all instances of an unknown class.
-             */
-            if (image.objectGraphUtils.isUnfollowNeeded()) {
-                image.objectGraphUtils.unfollow();
-            } else {
-                image.objectGraphUtils.allInstancesOf(null);
-            }
+            image.objectGraphUtils.flushDeadReferences();
             if (TruffleOptions.AOT) {
                 /* System.gc() triggers full GC by default in SVM (see https://git.io/JvY7g). */
                 MiscUtils.systemGC();
             } else {
                 forceFullGC();
+            }
+            // Yield to let the JVM ReferenceHandler thread populate weakPointersQueue
+            try {
+                Thread.sleep(20);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
             }
             final boolean hasPendingFinalizations = LogUtils.GC_IS_LOGGABLE_FINE ? hasPendingFinalizationsWithLogging(image) : hasPendingFinalizations(image);
             final boolean hasPendingEphemerons = image.containsEphemerons && image.objectGraphUtils.checkEphemerons();
