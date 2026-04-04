@@ -14,6 +14,7 @@ import com.oracle.truffle.api.dsl.GenerateNodeFactory;
 import com.oracle.truffle.api.dsl.ImportStatic;
 import com.oracle.truffle.api.dsl.NodeFactory;
 import com.oracle.truffle.api.dsl.Specialization;
+import com.oracle.truffle.api.frame.MaterializedFrame;
 import com.oracle.truffle.api.nodes.Node;
 
 import de.hpi.swa.trufflesqueak.model.AbstractSqueakObject;
@@ -28,6 +29,7 @@ import de.hpi.swa.trufflesqueak.nodes.primitives.Primitive.Primitive0WithFallbac
 import de.hpi.swa.trufflesqueak.nodes.primitives.Primitive.Primitive1WithFallback;
 import de.hpi.swa.trufflesqueak.nodes.primitives.Primitive.Primitive2WithFallback;
 import de.hpi.swa.trufflesqueak.nodes.primitives.SqueakPrimitive;
+import de.hpi.swa.trufflesqueak.util.FrameAccess;
 
 public class ContextPrimitives extends AbstractPrimitiveFactoryHolder {
 
@@ -35,13 +37,27 @@ public class ContextPrimitives extends AbstractPrimitiveFactoryHolder {
     @GenerateNodeFactory
     @SqueakPrimitive(indices = 76)
     protected abstract static class PrimStoreStackPointerNode extends AbstractPrimitiveNode implements Primitive1WithFallback {
-        @Specialization(guards = {"0 <= newStackPointer", "newStackPointer <= receiver.size()"})
-        protected static final ContextObject store(final ContextObject receiver, final long newStackPointer) {
+        @Specialization(guards = {"0 <= newStackPointerLong", "newStackPointerLong <= receiver.size()"})
+        protected static final ContextObject store(final ContextObject receiver, final long newStackPointerLong) {
             /*
-             * Not need to "nil any newly accessible cells" as cells are always nil-initialized and
-             * their values are cleared (overwritten with nil) on stack pop.
+             * Nil any newly accessible or newly hidden stack slots.
              */
-            receiver.setStackPointer((int) newStackPointer);
+            final int oldStackPointer = receiver.getStackPointer();
+            final int newStackPointer = (int) newStackPointerLong;
+            receiver.setStackPointer(newStackPointer);
+
+            final MaterializedFrame frame = receiver.getTruffleFrame();
+            if (newStackPointer > oldStackPointer) {
+                // Growing: nil newly exposed
+                for (int i = oldStackPointer; i < newStackPointer; i++) {
+                    FrameAccess.setStackValue(frame, i, null);
+                }
+            } else if (newStackPointer < oldStackPointer) {
+                // Shrinking: nil newly hidden
+                for (int i = newStackPointer; i < oldStackPointer; i++) {
+                    FrameAccess.setStackValue(frame, i, null);
+                }
+            }
             return receiver;
         }
     }
@@ -149,7 +165,7 @@ public class ContextPrimitives extends AbstractPrimitiveFactoryHolder {
     @GenerateNodeFactory
     @SqueakPrimitive(indices = 210)
     protected abstract static class PrimContextAtNode extends AbstractPrimitiveNode implements Primitive1WithFallback {
-        @Specialization(guards = {"index <= receiver.getStackPointer()"})
+        @Specialization(guards = {"1 <= index", "index <= receiver.getStackPointer()"})
         protected static final Object doContextObject(final ContextObject receiver, final long index,
                         @Bind final Node node,
                         @Cached final ContextObjectReadNode readNode) {
@@ -160,7 +176,7 @@ public class ContextPrimitives extends AbstractPrimitiveFactoryHolder {
     @GenerateNodeFactory
     @SqueakPrimitive(indices = 211)
     protected abstract static class PrimContextAtPutNode extends AbstractPrimitiveNode implements Primitive2WithFallback {
-        @Specialization(guards = "index <= receiver.getStackPointer()")
+        @Specialization(guards = {"1 <= index", "index <= receiver.getStackPointer()"})
         protected static final Object doContextObject(final ContextObject receiver, final long index, final Object value,
                         @Bind final Node node,
                         @Cached final ContextObjectWriteNode writeNode) {
@@ -172,10 +188,11 @@ public class ContextPrimitives extends AbstractPrimitiveFactoryHolder {
     @GenerateNodeFactory
     @SqueakPrimitive(indices = 212)
     protected abstract static class PrimContextSizeNode extends AbstractPrimitiveNode implements Primitive0WithFallback {
-        /* Note that it is impossible to determine the real object size of a Context except by asking for
-         * the frameSize of its method. Any fields above the stack pointer (stackp) are truly invisible
-         * even (and especially!) to the garbage collector. Any store into stackp other than by the primitive
-         *  method stackp: is potentially fatal.
+        /*
+         * "Note that it is impossible to determine the real object size of a Context except by
+         * asking for the frameSize of its method. Any fields above the stack pointer (stackp) are
+         * truly invisible even (and especially!) to the garbage collector. Any store into stackp
+         * other than by the primitive method stackp: is potentially fatal."
          */
         @Specialization(guards = "receiver.hasTruffleFrame()")
         protected static final long doSize(final ContextObject receiver) {
