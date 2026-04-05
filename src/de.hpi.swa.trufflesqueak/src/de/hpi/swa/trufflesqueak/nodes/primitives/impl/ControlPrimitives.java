@@ -867,8 +867,20 @@ public final class ControlPrimitives extends AbstractPrimitiveFactoryHolder {
     public static final class PrimIncrementalGCNode extends AbstractSingletonPrimitiveNode implements Primitive0 {
         @Override
         public Object execute(final VirtualFrame frame, final Object receiver) {
+            final SqueakImageContext image = getContext();
+            return doGC(image);
+        }
+
+        @TruffleBoundary
+        private static Object doGC(final SqueakImageContext image) {
             /* Cannot force incremental GC in Java, suggesting a normal GC instead. */
+            image.objectGraphUtils.flushDeadReferences();
             MiscUtils.systemGC();
+            final boolean hasPendingFinalizations = image.weakPointersQueue.poll() != null;
+            final boolean hasPendingEphemerons = image.containsEphemerons && image.objectGraphUtils.checkEphemerons();
+            if (hasPendingFinalizations || hasPendingEphemerons) {
+                image.interrupt.setPendingFinalizations();
+            }
             return MiscUtils.runtimeFreeMemory();
         }
     }
