@@ -311,8 +311,12 @@ public final class FrameAccess {
                 clearStackSlots(frame);
             }
         } else {
+            /* Iterate defined stack slots only. */
+            final int sp = getStackPointer(frame);
             final FrameDescriptor frameDescriptor = frame.getFrameDescriptor();
-            for (int slotIndex = SlotIndices.STACK_START; slotIndex < frameDescriptor.getNumberOfSlots(); slotIndex++) {
+            final int slotCount = frameDescriptor.getNumberOfSlots();
+            final int slotLimit = Integer.min(SlotIndices.STACK_START + sp, slotCount);
+            for (int slotIndex = SlotIndices.STACK_START; slotIndex < slotLimit; slotIndex++) {
                 final Object replacement = action.apply(frame.getObjectStatic(slotIndex));
                 if (replacement != null) {
                     frame.setObjectStatic(slotIndex, replacement);

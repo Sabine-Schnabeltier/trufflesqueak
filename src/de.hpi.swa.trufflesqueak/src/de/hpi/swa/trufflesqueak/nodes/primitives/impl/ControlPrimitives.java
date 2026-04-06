@@ -781,9 +781,7 @@ public final class ControlPrimitives extends AbstractPrimitiveFactoryHolder {
         }
     }
 
-    @DenyReplace
-    @SqueakPrimitive(indices = 130)
-    public static final class PrimFullGCNode extends AbstractSingletonPrimitiveNode implements Primitive0 {
+    private static final class GCHelper {
         private static final MBeanServer SERVER = TruffleOptions.AOT ? null : ManagementFactory.getPlatformMBeanServer();
         private static final String OPERATION_NAME = "gcRun";
         private static final Object[] PARAMS = {null};
@@ -802,27 +800,18 @@ public final class ControlPrimitives extends AbstractPrimitiveFactoryHolder {
             }
         }
 
-        @Override
-        public Object execute(final VirtualFrame frame, final Object receiver) {
-            final SqueakImageContext image = getContext();
-            return doGC(image);
-        }
-
         @TruffleBoundary
-        private static Object doGC(final SqueakImageContext image) {
+        static Object doGC(final SqueakImageContext image, final boolean isFull) {
+            // Eliminate forwarding pointers and dead objects in stack frames.
             image.objectGraphUtils.flushDeadReferences();
-            if (TruffleOptions.AOT) {
+
+            if (TruffleOptions.AOT && isFull) {
                 /* System.gc() triggers full GC by default in SVM (see https://git.io/JvY7g). */
                 MiscUtils.systemGC();
             } else {
                 forceFullGC();
             }
-            // Yield to let the JVM ReferenceHandler thread populate weakPointersQueue
-            try {
-                Thread.sleep(20);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
+
             final boolean hasPendingFinalizations = LogUtils.GC_IS_LOGGABLE_FINE ? hasPendingFinalizationsWithLogging(image) : hasPendingFinalizations(image);
             final boolean hasPendingEphemerons = image.containsEphemerons && image.objectGraphUtils.checkEphemerons();
             if (hasPendingFinalizations || hasPendingEphemerons) {
@@ -863,25 +852,20 @@ public final class ControlPrimitives extends AbstractPrimitiveFactoryHolder {
     }
 
     @DenyReplace
+    @SqueakPrimitive(indices = 130)
+    public static final class PrimFullGCNode extends AbstractSingletonPrimitiveNode implements Primitive0 {
+        @Override
+        public Object execute(final VirtualFrame frame, final Object receiver) {
+            return GCHelper.doGC(getContext(), true);
+        }
+    }
+
+    @DenyReplace
     @SqueakPrimitive(indices = 131)
     public static final class PrimIncrementalGCNode extends AbstractSingletonPrimitiveNode implements Primitive0 {
         @Override
         public Object execute(final VirtualFrame frame, final Object receiver) {
-            final SqueakImageContext image = getContext();
-            return doGC(image);
-        }
-
-        @TruffleBoundary
-        private static Object doGC(final SqueakImageContext image) {
-            /* Cannot force incremental GC in Java, suggesting a normal GC instead. */
-            image.objectGraphUtils.flushDeadReferences();
-            MiscUtils.systemGC();
-            final boolean hasPendingFinalizations = image.weakPointersQueue.poll() != null;
-            final boolean hasPendingEphemerons = image.containsEphemerons && image.objectGraphUtils.checkEphemerons();
-            if (hasPendingFinalizations || hasPendingEphemerons) {
-                image.interrupt.setPendingFinalizations();
-            }
-            return MiscUtils.runtimeFreeMemory();
+            return GCHelper.doGC(getContext(), false);
         }
     }
 
