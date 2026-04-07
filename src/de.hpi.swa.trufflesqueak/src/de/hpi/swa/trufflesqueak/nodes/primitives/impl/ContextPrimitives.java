@@ -49,7 +49,8 @@ public class ContextPrimitives extends AbstractPrimitiveFactoryHolder {
             }
 
             receiver.setStackPointer(newStackPointer);
-            return receiver;        }
+            return receiver;
+        }
     }
 
     @GenerateNodeFactory
