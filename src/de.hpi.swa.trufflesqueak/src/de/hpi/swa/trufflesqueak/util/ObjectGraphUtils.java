@@ -558,8 +558,7 @@ public final class ObjectGraphUtils {
                 final Frame readOnlyFrame = frameInstance.getFrame(FrameInstance.FrameAccess.READ_ONLY);
 
                 if (FrameAccess.isTruffleSqueakFrame(readOnlyFrame)) {
-                    final Frame current = shouldScrub ?
-                            frameInstance.getFrame(FrameInstance.FrameAccess.READ_WRITE) : readOnlyFrame;
+                    final Frame current = shouldScrub ? frameInstance.getFrame(FrameInstance.FrameAccess.READ_WRITE) : readOnlyFrame;
                     addAllIfUnmarked(current.getArguments());
                     addIfUnmarked(FrameAccess.getContext(current));
                     FrameAccess.iterateStackObjects(current, shouldScrub, this::addIfUnmarked);

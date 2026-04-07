@@ -415,6 +415,16 @@ public final class ContextObject extends AbstractSqueakObjectWithHash {
         FrameAccess.setReceiver(getOrCreateTruffleFrame(), value);
     }
 
+    /**
+     * Accesses a temporary variable or stack value at the given 0-based index.
+     * <p>
+     * If the index falls within the range of the initial arguments/copied values,
+     * it is retrieved from the frame arguments. Otherwise, it is fetched from
+     * the actual stack slots.
+     *
+     * @param index the 0-based index of the temporary variable to retrieve.
+     * @return the object at the specified index, or {@link NilObject#SINGLETON} if null.
+     */
     @TruffleBoundary
     public Object atTemp(final int index) {
         final MaterializedFrame frame = getTruffleFrame();
@@ -426,6 +436,17 @@ public final class ContextObject extends AbstractSqueakObjectWithHash {
         }
     }
 
+    /**
+     * Sets a temporary variable or stack value at the given 0-based index.
+     * <p>
+     * This method performs a dual-write if the index falls within the range of
+     * initial arguments or copied values. It updates the value in the
+     * {@code frame.getArguments()} array and consistently updates the
+     * corresponding indexed stack slot in the Truffle frame.
+     *
+     * @param index the 0-based index of the temporary variable or stack slot to update.
+     * @param value the object to store at the specified index.
+     */
     @TruffleBoundary
     public void atTempPut(final int index, final Object value) {
         final MaterializedFrame frame = getOrCreateTruffleFrame();

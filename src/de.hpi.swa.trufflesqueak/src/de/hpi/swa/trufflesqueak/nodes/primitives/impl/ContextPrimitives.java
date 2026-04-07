@@ -14,7 +14,6 @@ import com.oracle.truffle.api.dsl.GenerateNodeFactory;
 import com.oracle.truffle.api.dsl.ImportStatic;
 import com.oracle.truffle.api.dsl.NodeFactory;
 import com.oracle.truffle.api.dsl.Specialization;
-import com.oracle.truffle.api.frame.MaterializedFrame;
 import com.oracle.truffle.api.nodes.Node;
 
 import de.hpi.swa.trufflesqueak.model.AbstractSqueakObject;
@@ -46,16 +45,15 @@ public class ContextPrimitives extends AbstractPrimitiveFactoryHolder {
             final int newStackPointer = (int) newStackPointerLong;
             receiver.setStackPointer(newStackPointer);
 
-            final MaterializedFrame frame = receiver.getTruffleFrame();
             if (newStackPointer > oldStackPointer) {
                 // Growing: nil newly exposed
-                for (int i = oldStackPointer; i < newStackPointer; i++) {
-                    FrameAccess.setStackValue(frame, i, null);
+                for (int i = oldStackPointer + 1; i <= newStackPointer; i++) {
+                    receiver.atTempPut(i, null);
                 }
             } else if (newStackPointer < oldStackPointer) {
                 // Shrinking: nil newly hidden
-                for (int i = newStackPointer; i < oldStackPointer; i++) {
-                    FrameAccess.setStackValue(frame, i, null);
+                for (int i = newStackPointer + 1; i <= oldStackPointer; i++) {
+                    receiver.atTempPut(i, null);
                 }
             }
             return receiver;
