@@ -28,7 +28,6 @@ import de.hpi.swa.trufflesqueak.nodes.primitives.Primitive.Primitive0WithFallbac
 import de.hpi.swa.trufflesqueak.nodes.primitives.Primitive.Primitive1WithFallback;
 import de.hpi.swa.trufflesqueak.nodes.primitives.Primitive.Primitive2WithFallback;
 import de.hpi.swa.trufflesqueak.nodes.primitives.SqueakPrimitive;
-import de.hpi.swa.trufflesqueak.util.FrameAccess;
 
 public class ContextPrimitives extends AbstractPrimitiveFactoryHolder {
 
@@ -38,26 +37,19 @@ public class ContextPrimitives extends AbstractPrimitiveFactoryHolder {
     protected abstract static class PrimStoreStackPointerNode extends AbstractPrimitiveNode implements Primitive1WithFallback {
         @Specialization(guards = {"0 <= newStackPointerLong", "newStackPointerLong <= receiver.size()"})
         protected static final ContextObject store(final ContextObject receiver, final long newStackPointerLong) {
-            /*
-             * Nil any newly accessible or newly hidden stack slots.
-             */
             final int oldStackPointer = receiver.getStackPointer();
             final int newStackPointer = (int) newStackPointerLong;
-            receiver.setStackPointer(newStackPointer);
 
-            if (newStackPointer > oldStackPointer) {
-                // Growing: nil newly exposed
-                for (int i = oldStackPointer + 1; i <= newStackPointer; i++) {
-                    receiver.atTempPut(i, null);
-                }
-            } else if (newStackPointer < oldStackPointer) {
-                // Shrinking: nil newly hidden
-                for (int i = newStackPointer + 1; i <= oldStackPointer; i++) {
-                    receiver.atTempPut(i, null);
-                }
+            /* Nil any newly accessible or newly hidden stack slots */
+            final int start = Math.min(oldStackPointer, newStackPointer);
+            final int end = Math.max(oldStackPointer, newStackPointer);
+
+            for (int i = start; i < end; i++) {
+                receiver.atTempPut(i, NilObject.SINGLETON);
             }
-            return receiver;
-        }
+
+            receiver.setStackPointer(newStackPointer);
+            return receiver;        }
     }
 
     @GenerateNodeFactory
