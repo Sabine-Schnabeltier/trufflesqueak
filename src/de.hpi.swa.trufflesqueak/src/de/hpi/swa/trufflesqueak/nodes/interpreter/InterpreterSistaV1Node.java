@@ -661,7 +661,31 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
                         pc = internalizePC(frame, pc);
                         break;
                     }
-                    case BC.BYTECODE_PRIM_MULTIPLY, BC.BYTECODE_PRIM_DIVIDE, BC.BYTECODE_PRIM_MOD, BC.BYTECODE_PRIM_MAKE_POINT, BC.BYTECODE_PRIM_BIT_SHIFT, //
+                    case BC.BYTECODE_PRIM_MOD: {
+                        final Object arg = pop(frame, --sp);
+                        final Object receiver = popReceiver(frame, --sp);
+                        final byte state = profiles[currentPC];
+                        final Object result;
+
+                        if (receiver instanceof final Long lhs && arg instanceof final Long rhs && rhs != 0) {
+                            enter(currentPC, state, BRANCH2);
+                            final long r = lhs % rhs;
+                            // Smalltalk modulo: adjust if signs differ and remainder is non-zero
+                            if ((lhs ^ rhs) < 0 && r != 0) {
+                                result = r + rhs;
+                            } else {
+                                result = r;
+                            }
+                        } else {
+                            enter(currentPC, state, BRANCH1);
+                            externalizePCAndSP(frame, pc, sp);
+                            result = send(frame, currentPC, receiver, arg);
+                            pc = internalizePC(frame, pc);
+                        }
+                        push(frame, sp++, result);
+                        break;
+                    }
+                    case BC.BYTECODE_PRIM_MULTIPLY, BC.BYTECODE_PRIM_DIVIDE, BC.BYTECODE_PRIM_MAKE_POINT, BC.BYTECODE_PRIM_BIT_SHIFT, //
                         BC.BYTECODE_PRIM_DIV, BC.BYTECODE_PRIM_AT, BC.BYTECODE_PRIM_NEXT_PUT, BC.BYTECODE_PRIM_VALUE_WITH_ARG, BC.BYTECODE_PRIM_DO, BC.BYTECODE_PRIM_NEW_WITH_ARG, //
                         BC.SEND_LIT_SEL1_0, BC.SEND_LIT_SEL1_1, BC.SEND_LIT_SEL1_2, BC.SEND_LIT_SEL1_3, BC.SEND_LIT_SEL1_4, BC.SEND_LIT_SEL1_5, BC.SEND_LIT_SEL1_6, BC.SEND_LIT_SEL1_7, //
                         BC.SEND_LIT_SEL1_8, BC.SEND_LIT_SEL1_9, BC.SEND_LIT_SEL1_A, BC.SEND_LIT_SEL1_B, BC.SEND_LIT_SEL1_C, BC.SEND_LIT_SEL1_D, BC.SEND_LIT_SEL1_E, BC.SEND_LIT_SEL1_F: {
