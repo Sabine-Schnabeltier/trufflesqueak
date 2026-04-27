@@ -34,6 +34,7 @@ import de.hpi.swa.trufflesqueak.shared.SqueakLanguageOptions;
 public final class TruffleSqueakLauncher extends AbstractLanguageLauncher {
     private static final String ENGINE_MODE_OPTION = "engine.Mode";
     private static final String ENGINE_MODE_LATENCY = "latency";
+    private static final String ENGINE_DYNAMIC_COMPILATION_THRESHOLDS_OPTION = "engine.DynamicCompilationThresholds";
 
     private static final String[] EMPTY_STRING_ARRAY = new String[0];
 
@@ -44,7 +45,8 @@ public final class TruffleSqueakLauncher extends AbstractLanguageLauncher {
     private String imagePath;
     private String sourceCode;
     private boolean enableTranscriptForwarding;
-    private boolean useEngineModeLatency = true;
+    private boolean addEnableEngineModeLatency = true;
+    private boolean addDisableDynamicCompilationThresholds = true;
 
     public static void main(final String[] arguments) throws RuntimeException {
         new TruffleSqueakLauncher().launch(arguments);
@@ -83,8 +85,11 @@ public final class TruffleSqueakLauncher extends AbstractLanguageLauncher {
             } else if (SqueakLanguageOptions.TRANSCRIPT_FORWARDING_FLAG.equals(arg)) {
                 enableTranscriptForwarding = true;
             } else {
+                // Check for options explicitly set by user
                 if (arg.contains(ENGINE_MODE_OPTION)) {
-                    useEngineModeLatency = false; // engine.Mode set explicitly
+                    addEnableEngineModeLatency = false;
+                } else if (arg.contains(ENGINE_DYNAMIC_COMPILATION_THRESHOLDS_OPTION)) {
+                    addDisableDynamicCompilationThresholds = false;
                 }
                 unrecognized.add(arg);
             }
@@ -111,15 +116,19 @@ public final class TruffleSqueakLauncher extends AbstractLanguageLauncher {
             println(imagePath);
             return 0;
         }
-        final String runtimeName = getRuntimeName();
-        // only ever use latency on Graal
-        useEngineModeLatency = useEngineModeLatency && runtimeName.contains("Graal");
         contextBuilder.option(SqueakLanguageConfig.ID + "." + SqueakLanguageOptions.IMAGE_PATH, imagePath);
         contextBuilder.option(SqueakLanguageConfig.ID + "." + SqueakLanguageOptions.HEADLESS, Boolean.toString(headless));
         contextBuilder.option(SqueakLanguageConfig.ID + "." + SqueakLanguageOptions.QUIET, Boolean.toString(quiet));
         contextBuilder.arguments(getLanguageId(), imageArguments);
-        if (useEngineModeLatency) {
+        final String runtimeName = getRuntimeName();
+        final boolean hasGraalCompiler = runtimeName.contains("Graal");
+        addEnableEngineModeLatency = addEnableEngineModeLatency && hasGraalCompiler;
+        if (addEnableEngineModeLatency) {
             contextBuilder.option(ENGINE_MODE_OPTION, ENGINE_MODE_LATENCY);
+        }
+        addDisableDynamicCompilationThresholds = addDisableDynamicCompilationThresholds && hasGraalCompiler;
+        if (addDisableDynamicCompilationThresholds) {
+            contextBuilder.option(ENGINE_DYNAMIC_COMPILATION_THRESHOLDS_OPTION, Boolean.toString(false));
         }
         contextBuilder.allowAllAccess(true);
         final SqueakTranscriptForwarder out;
@@ -135,7 +144,7 @@ public final class TruffleSqueakLauncher extends AbstractLanguageLauncher {
         }
         try (Context context = contextBuilder.build()) {
             if (!quiet) {
-                final String engineModeSuffix = useEngineModeLatency ? " (" + ENGINE_MODE_LATENCY + " mode)" : "";
+                final String engineModeSuffix = addEnableEngineModeLatency ? " (" + ENGINE_MODE_LATENCY + " mode)" : "";
                 println(String.format("[trufflesqueak] Running %s on %s%s...", new File(imagePath).getName(), runtimeName, engineModeSuffix));
             }
             if (sourceCode != null) {
