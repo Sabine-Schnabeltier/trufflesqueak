@@ -18,6 +18,8 @@ import de.hpi.swa.trufflesqueak.model.CompiledCodeObject;
 import de.hpi.swa.trufflesqueak.model.FloatObject;
 import de.hpi.swa.trufflesqueak.model.NilObject;
 import de.hpi.swa.trufflesqueak.model.layout.ObjectLayouts.CONTEXT;
+import de.hpi.swa.trufflesqueak.nodes.interpreter.AbstractDecoder.ShadowBlockParams;
+import de.hpi.swa.trufflesqueak.nodes.interpreter.DecoderSistaV1;
 import de.hpi.swa.trufflesqueak.nodes.interpreter.DecoderV3PlusClosures;
 import de.hpi.swa.trufflesqueak.util.UnsafeUtils;
 
@@ -185,5 +187,30 @@ public final class SqueakMiscellaneousTest extends AbstractSqueakTestCaseWithDum
         );
         chunk.setSqueakClass(image.floatClass);
         return chunk;
+    }
+
+    @Test
+    public void testSistaV1ExtendedBlockSizeDecoder() {
+        /*
+         * EXT_B sequence for 0x8765 (34661): 225, 0, 225, 135, 225, 101. Followed by
+         * EXT_PUSH_CLOSURE (250) with byteA=192 and byteB=42. byteA=192 (11000000 in binary)
+         * encodes that there are 3 extensions (192 >> 6 == 3), 0 args, and 0 copied values.
+         */
+        final Object[] literals = {NilObject.SINGLETON, NilObject.SINGLETON};
+        final long header = makeHeaderWord(0, 0, 2, false, true);
+
+        final CompiledCodeObject code = makeMethod(header, literals,
+                        225, 0, 225, 135, 225, 101, 250, 192, 42);
+
+        // shadowBlockIndex is the index immediately following the closure creation bytecode
+        final int shadowBlockIndex = 9;
+
+        final ShadowBlockParams params = DecoderSistaV1.SINGLETON.decodeShadowBlock(code, shadowBlockIndex);
+
+        // Expected block size: (34661 << 8) | 42 = 8873258
+        // If the leading zero bug is present, this would incorrectly yield -7903958
+        assertEquals(8873258, params.blockSize());
+        assertEquals(0, params.numArgs());
+        assertEquals(0, params.numCopied());
     }
 }
