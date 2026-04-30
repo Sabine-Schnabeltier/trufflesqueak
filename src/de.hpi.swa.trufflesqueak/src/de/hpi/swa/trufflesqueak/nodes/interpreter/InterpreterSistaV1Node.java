@@ -83,6 +83,39 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
         super(original);
     }
 
+    @EarlyInline
+    static long computeExtA(final long currentExtBA, final int bytecode) {
+        final int newExtA = ((int) currentExtBA << 8) | bytecode;
+        return (currentExtBA >>> 32 << 32) | Integer.toUnsignedLong(newExtA);
+    }
+
+    @EarlyInline
+    static long computeExtB(final long currentExtBA, final int bytecode) {
+        /*
+         * OSVM maintains a counter (numExtB) to determine whether an EXT_B byte code is the first
+         * in a series. Here, we use extB == 0 to indicate that the byte code is the first. At the
+         * moment, Squeak only emits single EXT_B byte codes, so this method will always work.
+         * However, when the image starts using sequences of EXT_B byte codes and the value being
+         * encoded is a positive integer with positions 7, 15 or 23 as the highest set bit, the
+         * decoded value will be interpreted as a negative integer. For example, the emitted
+         * sequence for the value 0x8765 would be 0x00, 0x87, 0x65. If we assume that the encoder
+         * will never try to encode the value 0 (since that is the default value without any emitted
+         * byte codes), we can detect the case of the leading zero byte by setting the upper byte of
+         * extB and relying on the next byte to shift that byte out of the extB register.
+         */
+        final int extB = (int) (currentExtBA >> 32);
+        final int newExtB;
+        if (extB == 0) {
+            /* leading byte is signed */
+            /* make sure newExtB is non-zero for next byte processing */
+            newExtB = bytecode == 0 ? 0x80000000 : (byte) bytecode;
+        } else {
+            /* subsequent bytes are unsigned */
+            newExtB = (extB << 8) | bytecode;
+        }
+        return ((long) newExtB << 32) | Integer.toUnsignedLong((int) currentExtBA);
+    }
+
     @ValueType
     private static final class VirtualState {
         int sp;
@@ -105,36 +138,12 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
 
         @EarlyInline
         void updateExtA(final int bytecode) {
-            final int newExtA = ((int) extBA << 8) | bytecode;
-            extBA = (extBA >>> 32 << 32) | Integer.toUnsignedLong(newExtA);
+            extBA = computeExtA(extBA, bytecode);
         }
 
         @EarlyInline
         void updateExtB(final int bytecode) {
-            /*
-             * OSVM maintains a counter (numExtB) to determine whether an EXT_B byte code is the
-             * first in a series. Here, we use extB == 0 to indicate that the byte code is the
-             * first. At the moment, Squeak only emits single EXT_B byte codes, so this method will
-             * always work. However, when the image starts using sequences of EXT_B byte codes and
-             * the value being encoded is a positive integer with positions 7, 15 or 23 as the
-             * highest set bit, the decoded value will be interpreted as a negative integer. For
-             * example, the emitted sequence for the value 0x8765 would be 0x00, 0x87, 0x65. If we
-             * assume that the encoder will never try to encode the value 0 (since that is the
-             * default value without any emitted byte codes), we can detect the case of the leading
-             * zero byte by setting the upper byte of extB and relying on the next byte to shift
-             * that byte out of the extB register.
-             */
-            final int extB = (int) (extBA >> 32);
-            final int newExtB;
-            if (extB == 0) {
-                /* leading byte is signed */
-                /* make sure newExtB is non-zero for next byte processing */
-                newExtB = bytecode == 0 ? 0x80000000 : (byte) bytecode;
-            } else {
-                /* subsequent bytes are unsigned */
-                newExtB = (extB << 8) | bytecode;
-            }
-            extBA = ((long) newExtB << 32) | Integer.toUnsignedLong((int) extBA);
+            extBA = computeExtB(extBA, bytecode);
         }
 
         @EarlyInline

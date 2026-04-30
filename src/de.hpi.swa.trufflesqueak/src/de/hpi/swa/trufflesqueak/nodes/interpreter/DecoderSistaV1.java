@@ -201,19 +201,22 @@ public final class DecoderSistaV1 extends AbstractDecoder {
     private static DecodedExtension decodeExtension(final byte[] bc, final int index) {
         int b = Byte.toUnsignedInt(bc[index]);
         int offset = 0;
-        int extA = 0;
-        int extB = 0;
+
+        // Track unified state
+        long extBA = 0;
+
         while (b == 0xE0 || b == 0xE1) {
             final int byteValue = Byte.toUnsignedInt(bc[index + offset + 1]);
             if (b == 0xE0) {
-                extA = (extA << 8) | byteValue;
+                extBA = InterpreterSistaV1Node.computeExtA(extBA, byteValue);
             } else {
-                extB = (extB == 0 && byteValue > 127) ? byteValue - 256 : (extB << 8) | byteValue;
+                extBA = InterpreterSistaV1Node.computeExtB(extBA, byteValue);
             }
             offset += 2;
             b = Byte.toUnsignedInt(bc[index + offset]);
         }
-        return new DecodedExtension(offset, extA, extB);
+
+        return new DecodedExtension(offset, (int) extBA, (int) (extBA >> 32));
     }
 
     private static int decodeNextPCDelta(final CompiledCodeObject code, final int index, final DecodedExtension extension, final boolean skipOverBlocks) {
