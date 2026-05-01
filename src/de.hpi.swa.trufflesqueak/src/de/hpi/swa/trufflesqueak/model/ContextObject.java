@@ -546,7 +546,8 @@ public final class ContextObject extends AbstractSqueakObjectWithHash {
 
     public Object[] getReceiverAndNArguments() {
         CompilerAsserts.neverPartOfCompilation("For debugging purposes only");
-        return getReceiverAndNArguments(getCodeObject().getNumArgs());
+        final int numArgs = hasClosure() ? getClosure().getNumArgs() : getCodeObject().getNumArgs();
+        return getReceiverAndNArguments(numArgs);
     }
 
     private Object[] getReceiverAndNArguments(final int numArgs) {
