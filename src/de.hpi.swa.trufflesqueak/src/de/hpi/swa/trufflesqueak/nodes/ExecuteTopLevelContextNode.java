@@ -32,6 +32,7 @@ import de.hpi.swa.trufflesqueak.model.ContextObject;
 import de.hpi.swa.trufflesqueak.model.NilObject;
 import de.hpi.swa.trufflesqueak.nodes.dispatch.DispatchSelector1Node.Dispatch1Node;
 import de.hpi.swa.trufflesqueak.nodes.dispatch.DispatchSelector1NodeFactory.Dispatch1NodeGen;
+import de.hpi.swa.trufflesqueak.nodes.interpreter.InterpreterSistaV1Node;
 import de.hpi.swa.trufflesqueak.nodes.process.GetNextActiveContextNode;
 import de.hpi.swa.trufflesqueak.nodes.process.WakeHighestPriorityNode;
 import de.hpi.swa.trufflesqueak.shared.SqueakLanguageConfig;

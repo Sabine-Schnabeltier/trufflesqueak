@@ -351,7 +351,7 @@ public abstract class AbstractInterpreterNode extends AbstractInterpreterInstrum
     /*
      * Handling of forwarding pointers
      */
-    private Object followForwarded(final int currentPC, final Object value) {
+    protected final Object followForwarded(final int currentPC, final Object value) {
         final byte profile = getProfile(currentPC);
         if (value instanceof final AbstractSqueakObjectWithClassAndHash object) {
             enter(currentPC, profile, BRANCH6);

@@ -8,6 +8,8 @@ package de.hpi.swa.trufflesqueak.model;
 
 import java.util.Arrays;
 
+import com.oracle.truffle.api.frame.Frame;
+import com.oracle.truffle.api.frame.FrameInstance;
 import org.graalvm.collections.UnmodifiableEconomicMap;
 
 import com.oracle.truffle.api.CallTarget;
@@ -77,6 +79,8 @@ public final class ContextObject extends AbstractSqueakObjectWithHash {
         super(original);
         // Copy modified sender flag and the marked code flags.
         setAllBooleanBits(original.getAllBooleanBits());
+        // The copy cannot be suspended.
+        clearNativeSuspended();
         // Create shallow copy of Truffle frame
         final FrameDescriptor frameDescriptor = FrameAccess.getCodeObject(original.getTruffleFrame()).getFrameDescriptor();
         senderOrFrameOrSize = Truffle.getRuntime().createMaterializedFrame(original.getTruffleFrame().getArguments().clone(), frameDescriptor);
@@ -268,6 +272,21 @@ public final class ContextObject extends AbstractSqueakObjectWithHash {
     }
 
     /**
+     * Returns <code>true</code> if this Context has been suspended by a scheduling primitive.
+     */
+    public boolean isNativeSuspended() {
+        return isBooleanDSet();
+    }
+
+    public void markAsNativeSuspended() {
+        setBooleanDBit();
+    }
+
+    public void clearNativeSuspended() {
+        clearBooleanDBit();
+    }
+
+    /**
      * Sets the sender of a ContextObject.
      */
     public void setSender(final AbstractSqueakObject value) {
@@ -370,6 +389,24 @@ public final class ContextObject extends AbstractSqueakObjectWithHash {
         FrameAccess.setInstructionPointer(truffleFrame, instructionPointer);
         FrameAccess.setStackPointer(truffleFrame, stackPointer);
         return truffleFrame;
+    }
+
+    @TruffleBoundary
+    public boolean isActiveOnTruffleStack() {
+        // No Truffle frame means the receiver is not yet executing.
+        if (!hasTruffleFrame()) {
+            return false;
+        }
+        final Object result = Truffle.getRuntime().iterateFrames(frameInstance -> {
+            final Frame current = frameInstance.getFrame(FrameInstance.FrameAccess.READ_ONLY);
+            if (FrameAccess.isTruffleSqueakFrame(current)) {
+                if (this == FrameAccess.getContext(current)) {
+                    return current;
+                }
+            }
+            return null;
+        });
+        return result != null;
     }
 
     public BlockClosureObject getClosure() {
@@ -580,7 +617,9 @@ public final class ContextObject extends AbstractSqueakObjectWithHash {
 
     // The context represents primitive call which needs to be skipped when unwinding call stack.
     public boolean isPrimitiveContext() {
-        return !hasClosure() && getCodeObject().hasPrimitive() && getInstructionPointerForBytecodeLoop() == 0;
+        return getInstructionPointerForBytecodeLoop() == 0 && //
+                !hasClosure() && !isUnwindMarked() && !isExceptionHandlerMarked() && //
+                getCodeObject().hasPrimitive();
     }
 
     @TruffleBoundary

@@ -220,6 +220,7 @@ public final class FrameAccess {
         final int framePC = getInstructionPointer(frame);
         if (pc != framePC) {
             CompilerDirectives.transferToInterpreter();
+            System.out.println("FrameAccess.internalizePC: pc=" + pc + ", framePC=" + framePC);
             return framePC;
         } else {
             return pc;
