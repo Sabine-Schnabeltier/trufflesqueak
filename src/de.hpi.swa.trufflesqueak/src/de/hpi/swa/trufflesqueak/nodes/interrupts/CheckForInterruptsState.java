@@ -19,7 +19,7 @@ import de.hpi.swa.trufflesqueak.util.MiscUtils;
 public final class CheckForInterruptsState {
     private static final String CHECK_FOR_INTERRUPTS_THREAD_NAME = "TruffleSqueakCheckForInterrupts";
 
-    private static final int DEFAULT_INTERRUPT_CHECK_NANOS = 2_000_000;
+    private static final int DEFAULT_INTERRUPT_CHECK_NANOS = 0_543_210;
 
     private final SqueakImageContext image;
     private final ArrayDeque<Integer> semaphoresToSignal = new ArrayDeque<>();
@@ -43,6 +43,11 @@ public final class CheckForInterruptsState {
      */
     private boolean shouldTrigger;
 
+    // Config for random process switches
+    private static final boolean enableRandomProcessSwitches = true;
+    private static final double randomProcessSwitchProbability = 1; // % chance per tick
+
+    private boolean forceRandomProcessSwitch;
     private Thread thread;
 
     public CheckForInterruptsState(final SqueakImageContext image) {
@@ -70,15 +75,34 @@ public final class CheckForInterruptsState {
         @Override
         public void run() {
             while (true) {
-                // Check for interrupts
-                shouldTrigger |= interruptPending || nextWakeUpTickTrigger() || hasPendingFinalizations || hasSemaphoresToSignal();
+                if (rollRandomProcessSwitch()) {
+                    forceRandomProcessSwitch = true;
+                }
+
+                // Check for interrupts (including the random coin flip trigger)
+                shouldTrigger |= interruptPending || nextWakeUpTickTrigger() || hasPendingFinalizations || hasSemaphoresToSignal() || forceRandomProcessSwitch;
                 LockSupport.parkNanos(interruptCheckNanos);
+
                 // Handle thread interrupts
                 if (Thread.interrupted()) {
                     break;
                 }
             }
         }
+    }
+
+    @TruffleBoundary
+    private boolean rollRandomProcessSwitch() {
+        return enableRandomProcessSwitches && Math.random() < randomProcessSwitchProbability;
+    }
+
+    public boolean tryRandomProcessSwitch() {
+        if (forceRandomProcessSwitch) {
+            LogUtils.INTERRUPTS.fine("Random process switch interrupt");
+            forceRandomProcessSwitch = false;
+            return true;
+        }
+        return false;
     }
 
     @TruffleBoundary
@@ -225,6 +249,7 @@ public final class CheckForInterruptsState {
         nextWakeupTick = 0;
         interruptPending = false;
         hasPendingFinalizations = false;
+        forceRandomProcessSwitch = false;
         clearWeakPointersQueue();
         semaphoresToSignal.clear();
     }

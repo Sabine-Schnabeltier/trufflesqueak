@@ -15,8 +15,12 @@ import com.oracle.truffle.api.nodes.Node;
 import de.hpi.swa.trufflesqueak.exceptions.ProcessSwitch;
 import de.hpi.swa.trufflesqueak.image.SqueakImageContext;
 import de.hpi.swa.trufflesqueak.model.ArrayObject;
+import de.hpi.swa.trufflesqueak.model.ContextObject;
+import de.hpi.swa.trufflesqueak.model.layout.ObjectLayouts.PROCESS;
 import de.hpi.swa.trufflesqueak.model.layout.ObjectLayouts.SPECIAL_OBJECT;
 import de.hpi.swa.trufflesqueak.nodes.AbstractNode;
+import de.hpi.swa.trufflesqueak.nodes.accessing.AbstractPointersObjectNodes.AbstractPointersObjectWriteNode;
+import de.hpi.swa.trufflesqueak.nodes.context.GetOrCreateContextWithFrameNode;
 import de.hpi.swa.trufflesqueak.nodes.dispatch.AbstractDispatchNode;
 import de.hpi.swa.trufflesqueak.nodes.process.SignalSemaphoreNode;
 import de.hpi.swa.trufflesqueak.util.FrameAccess;
@@ -83,6 +87,12 @@ public final class CheckForInterruptsInLoopNode extends AbstractNode {
          * wake-up-tick handler from getting executed (finalizations, for example).
          */
         if (switchToNewProcess) {
+            throw ProcessSwitch.SINGLETON;
+        } else if (istate.tryRandomProcessSwitch()) {
+            CompilerDirectives.transferToInterpreter();
+            // Suspend current context and throw ProcessSwitch to unwind Java stack and resume
+            final ContextObject activeContext = GetOrCreateContextWithFrameNode.executeUncached(frame);
+            AbstractPointersObjectWriteNode.executeUncached(image.getActiveProcessSlow(), PROCESS.SUSPENDED_CONTEXT, activeContext);
             throw ProcessSwitch.SINGLETON;
         }
     }

@@ -16,8 +16,12 @@ import de.hpi.swa.trufflesqueak.exceptions.ProcessSwitch;
 import de.hpi.swa.trufflesqueak.image.SqueakImageContext;
 import de.hpi.swa.trufflesqueak.model.ArrayObject;
 import de.hpi.swa.trufflesqueak.model.CompiledCodeObject;
+import de.hpi.swa.trufflesqueak.model.ContextObject;
+import de.hpi.swa.trufflesqueak.model.layout.ObjectLayouts.PROCESS;
 import de.hpi.swa.trufflesqueak.model.layout.ObjectLayouts.SPECIAL_OBJECT;
 import de.hpi.swa.trufflesqueak.nodes.AbstractNode;
+import de.hpi.swa.trufflesqueak.nodes.accessing.AbstractPointersObjectNodes.AbstractPointersObjectWriteNode;
+import de.hpi.swa.trufflesqueak.nodes.context.GetOrCreateContextWithFrameNode;
 import de.hpi.swa.trufflesqueak.nodes.process.SignalSemaphoreNode;
 
 public abstract class CheckForInterruptsQuickNode extends AbstractNode {
@@ -31,7 +35,7 @@ public abstract class CheckForInterruptsQuickNode extends AbstractNode {
          */
 
         if (SqueakImageContext.getSlow().interruptHandlerDisabled() || code.hasPrimitive() || //
-                        code.getBytes().length < MIN_NUMBER_OF_BYTECODE_FOR_INTERRUPT_CHECKS || //
+                        //code.getBytes().length < MIN_NUMBER_OF_BYTECODE_FOR_INTERRUPT_CHECKS || //
                         /* FullBlockClosure or normal closure */
                         code.isCompiledBlock() || code.isShadowBlock()) {
             return NoCheckForInterruptsNode.SINGLETON;
@@ -115,6 +119,12 @@ public abstract class CheckForInterruptsQuickNode extends AbstractNode {
              * the wake-up-tick handler from getting executed (finalizations, for example).
              */
             if (switchToNewProcess) {
+                throw ProcessSwitch.SINGLETON;
+            } else if (istate.tryRandomProcessSwitch()) {
+                CompilerDirectives.transferToInterpreter();
+                // Suspend current context and throw ProcessSwitch to unwind Java stack and resume
+                final ContextObject activeContext = GetOrCreateContextWithFrameNode.executeUncached(frame);
+                AbstractPointersObjectWriteNode.executeUncached(image.getActiveProcessSlow(), PROCESS.SUSPENDED_CONTEXT, activeContext);
                 throw ProcessSwitch.SINGLETON;
             }
         }

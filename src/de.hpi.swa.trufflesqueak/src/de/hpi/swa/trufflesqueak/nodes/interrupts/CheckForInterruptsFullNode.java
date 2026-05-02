@@ -6,6 +6,7 @@
  */
 package de.hpi.swa.trufflesqueak.nodes.interrupts;
 
+import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.dsl.NeverDefault;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.nodes.Node;
@@ -13,16 +14,22 @@ import com.oracle.truffle.api.nodes.Node;
 import de.hpi.swa.trufflesqueak.exceptions.ProcessSwitch;
 import de.hpi.swa.trufflesqueak.image.SqueakImageContext;
 import de.hpi.swa.trufflesqueak.model.ArrayObject;
+import de.hpi.swa.trufflesqueak.model.ContextObject;
+import de.hpi.swa.trufflesqueak.model.layout.ObjectLayouts.PROCESS;
 import de.hpi.swa.trufflesqueak.model.layout.ObjectLayouts.SPECIAL_OBJECT;
+import de.hpi.swa.trufflesqueak.nodes.accessing.AbstractPointersObjectNodes.AbstractPointersObjectWriteNode;
+import de.hpi.swa.trufflesqueak.nodes.context.GetOrCreateContextWithFrameNode;
 import de.hpi.swa.trufflesqueak.nodes.process.SignalSemaphoreNode;
 
 public final class CheckForInterruptsFullNode extends Node {
     @Child private SignalSemaphoreNode signalSemaporeNode;
 
+    private final SqueakImageContext image;
     private final Object[] specialObjects;
     private final CheckForInterruptsState istate;
 
     private CheckForInterruptsFullNode(final SqueakImageContext image) {
+        this.image = image;
         specialObjects = image.specialObjectsArray.getObjectStorage();
         istate = image.interrupt;
         signalSemaporeNode = SignalSemaphoreNode.create();
@@ -63,6 +70,12 @@ public final class CheckForInterruptsFullNode extends Node {
          * wake-up-tick handler from getting executed (finalizations, for example).
          */
         if (switchToNewProcess) {
+            throw ProcessSwitch.SINGLETON;
+        } else if (istate.tryRandomProcessSwitch()) {
+            CompilerDirectives.transferToInterpreter();
+            // Suspend current context and throw ProcessSwitch to unwind Java stack and resume
+            final ContextObject activeContext = GetOrCreateContextWithFrameNode.executeUncached(frame);
+            AbstractPointersObjectWriteNode.executeUncached(image.getActiveProcessSlow(), PROCESS.SUSPENDED_CONTEXT, activeContext);
             throw ProcessSwitch.SINGLETON;
         }
     }
