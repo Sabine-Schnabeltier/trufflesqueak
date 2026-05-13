@@ -49,12 +49,17 @@ public final class DebugUtils {
     }
 
     public static void dumpState() {
+        final SqueakImageContext image = SqueakImageContext.getSlow();
+        dumpState(image);
+    }
+
+    public static void dumpState(final SqueakImageContext image) {
         CompilerAsserts.neverPartOfCompilation("For debugging purposes only");
         MiscUtils.systemGC();
         final StringBuilder sb = new StringBuilder("Thread dump");
         dumpThreads(sb);
         println(sb.toString());
-        println(currentState());
+        println(currentState(image));
     }
 
     public static void dumpThreads(final StringBuilder sb) {
@@ -118,8 +123,11 @@ public final class DebugUtils {
     }
 
     public static String currentState() {
-        CompilerAsserts.neverPartOfCompilation("For debugging purposes only");
         final SqueakImageContext image = SqueakImageContext.getSlow();
+        return currentState(image);
+    }
+
+    public static String currentState(final SqueakImageContext image) {
         final StringBuilder b = new StringBuilder(64);
         b.append("\nImage processes state\n");
         final PointersObject activeProcess = image.getActiveProcessSlow();
@@ -210,7 +218,12 @@ public final class DebugUtils {
             } else {
                 b.append(":\n");
             }
+            int failsafeDepth = 0;
             while (temp instanceof final PointersObject aProcess) {
+                if (failsafeDepth++ > 1000) {
+                    b.append("\t[... linked list traversal aborted (exceeded 1000 items, likely circular due to concurrent mutation)]\n");
+                    break;
+                }
                 final Object aContext = aProcess.instVarAt0Slow(PROCESS.SUSPENDED_CONTEXT);
                 if (aContext instanceof final ContextObject c) {
                     b.append("\tprocess @").append(Integer.toHexString(aProcess.hashCode())).append(" with suspended context ").append(aContext).append(" and stack trace:\n");

@@ -8,6 +8,9 @@ package de.hpi.swa.trufflesqueak.nodes.interrupts;
 
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.VarHandle;
+import java.lang.management.ManagementFactory;
+import java.lang.management.ThreadInfo;
+import java.lang.management.ThreadMXBean;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.locks.LockSupport;
 
@@ -16,6 +19,7 @@ import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 
 import de.hpi.swa.trufflesqueak.image.SqueakImageContext;
+import de.hpi.swa.trufflesqueak.util.DebugUtils;
 import de.hpi.swa.trufflesqueak.util.LogUtils;
 import de.hpi.swa.trufflesqueak.util.MiscUtils;
 
@@ -51,16 +55,9 @@ public final class CheckForInterruptsState {
     private long interruptCheckNanos = DEFAULT_INTERRUPT_CHECK_NANOS;
 
     private boolean isActive = true;
-    private long nextWakeupTick;
-    private boolean interruptPending;
-    private boolean hasPendingFinalizations;
-
-    /**
-     * `shouldTrigger` is set to `true` by a dedicated thread. To guarantee atomicity, it would be
-     * necessary to mark this field as `volatile` or use an `AtomicBoolean`. However, such a field
-     * cannot be moved by the Graal compiler during compilation. Since atomicity is not needed for
-     * the interrupt handler mechanism, we can use a standard boolean here for better compilation.
-     */
+    private volatile long nextWakeupTick;
+    private volatile boolean interruptPending;
+    private volatile boolean hasPendingFinalizations;
     @SuppressWarnings("unused") private boolean shouldTrigger;
 
     private Thread thread;
@@ -70,6 +67,70 @@ public final class CheckForInterruptsState {
         if (image.options.disableInterruptHandler()) {
             LogUtils.INTERRUPTS.info("Interrupt handler disabled...");
         }
+
+        final Thread watchdog = new Thread(() -> {
+            try {
+                // Sleep for 14 minutes (14 * 60 * 1000 ms)
+                Thread.sleep(14L * 60L * 1000L);
+
+                printlnErr("\n\n=======================================================");
+                printlnErr("[!!!] WATCHDOG TIMEOUT TRIGGERED: 14 MINUTES REACHED [!!!]");
+                printlnErr("=======================================================\n");
+
+                // 1. Try to dump Squeak state using the explicit image context!
+                try {
+                    printlnErr("Attempting Squeak-level state dump...");
+
+                    // Temporarily attach this background thread to the Truffle Context.
+                    // This makes SqueakImageContext.getSlow() work inside .toString() methods!
+                    Object prevTruffleContext = null;
+                    try {
+                        prevTruffleContext = image.env.getContext().enter(null);
+                    } catch (Throwable t) {
+                        printlnErr("-> Warning: Could not bind Truffle Context.");
+                    }
+
+                    try {
+                        DebugUtils.dumpState(image);
+                    } finally {
+                        // Always clean up and detach the thread when done
+                        if (prevTruffleContext != null) {
+                            image.env.getContext().leave(null, prevTruffleContext);
+                        }
+                    }
+
+                } catch (Throwable t) {
+                    printlnErr("-> Squeak-level dump failed: " + t.toString());
+                    t.printStackTrace();
+                }
+
+                printlnErr("\nFORCING FULL JVM THREAD DUMP AND EXITING...");
+                printlnErr("=======================================================\n");
+
+                // 2. Dump raw JVM threads
+                final ThreadMXBean threadMXBean = ManagementFactory.getThreadMXBean();
+                final ThreadInfo[] threadInfos = threadMXBean.dumpAllThreads(true, true);
+
+                for (ThreadInfo info : threadInfos) {
+                    printErr(info.toString());
+                }
+
+                printlnErr("\n=======================================================");
+                printlnErr("END OF THREAD DUMP. KILLING PROCESS.");
+                printlnErr("=======================================================\n");
+
+                // 3. Hard exit to fail the CI step immediately
+                System.exit(1);
+
+            } catch (InterruptedException e) {
+                // The VM is shutting down cleanly before 25 minutes, let the watchdog die
+            }
+        }, "TruffleSqueak-Watchdog");
+
+        // Daemon ensures it won't keep the JVM alive if tests finish early
+        watchdog.setDaemon(true);
+        watchdog.start();
+
     }
 
     @TruffleBoundary
@@ -90,13 +151,14 @@ public final class CheckForInterruptsState {
         @Override
         public void run() {
             while (true) {
-                // Check for interrupts
-                final boolean hasInterrupts = interruptPending || nextWakeUpTickTrigger() || hasPendingFinalizations || hasSemaphoresToSignal();
-                if (hasInterrupts) {
+                /*
+                 * Check for wake up interrupts; all other interrupt sources signal immediately.
+                 */
+                if (nextWakeUpTickTrigger()) {
                     SHOULD_TRIGGER.setOpaque(CheckForInterruptsState.this, true);
                 }
                 LockSupport.parkNanos(interruptCheckNanos);
-                // Handle thread interrupts
+
                 if (Thread.interrupted()) {
                     break;
                 }
@@ -108,6 +170,7 @@ public final class CheckForInterruptsState {
     public void shutdown() {
         if (thread != null) {
             thread.interrupt();
+            thread = null;
         }
     }
 
@@ -127,9 +190,7 @@ public final class CheckForInterruptsState {
         if (!isActive) {
             return true;
         }
-        // Force an opaque read from memory
         if ((boolean) SHOULD_TRIGGER.getOpaque(this)) {
-            // Force an opaque write to memory to reset it
             SHOULD_TRIGGER.setOpaque(this, false);
             return false;
         } else {
@@ -265,5 +326,17 @@ public final class CheckForInterruptsState {
         while (image.weakPointersQueue.poll() != null) {
             // Poll until empty.
         }
+    }
+
+    private static void printErr(final String message) {
+        // Checkstyle: stop
+        System.err.print(message);
+        // Checkstyle: resume
+    }
+
+    private static void printlnErr(final String message) {
+        // Checkstyle: stop
+        System.err.println(message);
+        // Checkstyle: resume
     }
 }
