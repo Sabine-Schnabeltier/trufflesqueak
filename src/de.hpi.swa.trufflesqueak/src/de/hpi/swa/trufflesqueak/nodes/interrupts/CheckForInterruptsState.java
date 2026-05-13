@@ -24,23 +24,6 @@ public final class CheckForInterruptsState {
 
     private static final int DEFAULT_INTERRUPT_CHECK_NANOS = 2_000_000;
 
-    /**
-     * Support for safely accessing the `shouldTrigger` flag across threads. We use a VarHandle with
-     * opaque access (rather than a standard `volatile` boolean) to guarantee memory visibility
-     * between the background interrupt thread and the main interpreter thread. This prevents the
-     * Graal compiler from improperly loop-hoisting the read during JIT compilation, while
-     * explicitly avoiding the performance penalty of full hardware memory barriers on weakly
-     * ordered architectures like ARM64.
-     */
-    private static final VarHandle SHOULD_TRIGGER;
-    static {
-        try {
-            SHOULD_TRIGGER = MethodHandles.lookup().findVarHandle(CheckForInterruptsState.class, "shouldTrigger", boolean.class);
-        } catch (NoSuchFieldException | IllegalAccessException e) {
-            throw CompilerDirectives.shouldNotReachHere("Unable to find a VarHandle for shouldTrigger", e);
-        }
-    }
-
     private final SqueakImageContext image;
     private final ConcurrentLinkedDeque<Integer> semaphoresToSignal = new ConcurrentLinkedDeque<>();
 
@@ -61,7 +44,7 @@ public final class CheckForInterruptsState {
      * cannot be moved by the Graal compiler during compilation. Since atomicity is not needed for
      * the interrupt handler mechanism, we can use a standard boolean here for better compilation.
      */
-    @SuppressWarnings("unused") private boolean shouldTrigger;
+    private boolean shouldTrigger;
 
     private Thread thread;
 
@@ -93,7 +76,7 @@ public final class CheckForInterruptsState {
                 // Check for interrupts
                 final boolean hasInterrupts = interruptPending || nextWakeUpTickTrigger() || hasPendingFinalizations || hasSemaphoresToSignal();
                 if (hasInterrupts) {
-                    SHOULD_TRIGGER.setOpaque(CheckForInterruptsState.this, true);
+                    shouldTrigger = true;
                 }
                 LockSupport.parkNanos(interruptCheckNanos);
                 // Handle thread interrupts
@@ -127,10 +110,8 @@ public final class CheckForInterruptsState {
         if (!isActive) {
             return true;
         }
-        // Force an opaque read from memory
-        if ((boolean) SHOULD_TRIGGER.getOpaque(this)) {
-            // Force an opaque write to memory to reset it
-            SHOULD_TRIGGER.setOpaque(this, false);
+        if (shouldTrigger) {
+            shouldTrigger = false;
             return false;
         } else {
             return true;
@@ -163,7 +144,7 @@ public final class CheckForInterruptsState {
 
     public void setInterruptPending() {
         interruptPending = true;
-        SHOULD_TRIGGER.setOpaque(this, true);
+        shouldTrigger = true;
     }
 
     /* Timer interrupt */
@@ -214,7 +195,7 @@ public final class CheckForInterruptsState {
 
     public void setPendingFinalizations() {
         hasPendingFinalizations = true;
-        SHOULD_TRIGGER.setOpaque(this, true);
+        shouldTrigger = true;
     }
 
     /* Semaphore interrupts */
@@ -239,7 +220,7 @@ public final class CheckForInterruptsState {
     @TruffleBoundary
     public void signalSemaphoreWithIndex(final int index) {
         semaphoresToSignal.addLast(index);
-        SHOULD_TRIGGER.setOpaque(this, true);
+        shouldTrigger = true;
     }
 
     /*
