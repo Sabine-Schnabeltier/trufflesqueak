@@ -427,7 +427,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: |
-          gh run view ${{ github.run_id }} --log | grep "::TEST_TIME_METRIC::" > extracted_times.txt || true
+          gh run view ${{ github.run_id }} --repo ${{ github.repository }} --log | grep "::TEST_TIME_METRIC::" > extracted_times.txt || true
           
           echo "### ⏱️ Test Durations Summary" >> $GITHUB_STEP_SUMMARY
           FOOTNOTE_REQUIRED=false
