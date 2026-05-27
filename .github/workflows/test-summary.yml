@@ -1,0 +1,112 @@
+name: Generate Master Test Summary
+
+on:
+  # This listens for the completion of your main workflow
+  workflow_run:
+    workflows: ["Test TruffleSqueak"]
+    types:
+      - completed
+
+# Explicitly grant permission to write comments to Pull Requests
+permissions:
+  pull-requests: write
+
+jobs:
+  post-summary-to-pr:
+    name: Parse Logs and Comment
+    runs-on: ubuntu-22.04
+    # Run this whether the main CI passed or failed
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event.workflow_run.conclusion == 'failure' }}
+
+    steps:
+      - name: Download GraalVM Compiler Dumps (if any)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Pull the dumps from the triggering workflow run to check for warning daggers
+          gh run download ${{ github.event.workflow_run.id }} --repo ${{ github.repository }} --pattern 'graal_dumps-*' --dir all-times || true
+
+      - name: Extract Logs, Build Table, and Post to PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          # Download logs from the triggering run
+          gh run view ${{ github.event.workflow_run.id }} --repo ${{ github.repository }} --log | grep "::TEST_TIME_METRIC::" > extracted_times.txt || true
+          
+          # Build the Markdown file
+          echo "### ⏱️ Test Durations Summary" > summary.md
+          FOOTNOTE_REQUIRED=false
+          
+          get_time() {
+            local type=$1
+            local os=$2
+            local test_type=$3
+            val=$(grep "::TEST_TIME_METRIC::${type}::${os}::${test_type}::" extracted_times.txt | head -n 1 | awk -F'::' '{print $6}')
+            echo "${val:-—}"
+          }
+          
+          has_warnings() {
+            local type=$1
+            local os=$2
+            if [ -d "all-times/graal_dumps-${type}-${os}" ] && [ "$(ls -A all-times/graal_dumps-${type}-${os} 2>/dev/null)" ]; then
+              echo "true"
+            else
+              echo "false"
+            fi
+          }
+          
+          for type in jvm native; do
+            if [ "$type" == "jvm" ]; then
+              echo "#### JVM Standalone" >> summary.md
+            else
+              echo "#### Native Standalone (AOT)" >> summary.md
+            fi
+          
+            h_u22="Ubuntu 22.04"
+            h_arm="Ubuntu ARM"
+            h_mac="macOS 14"
+            h_win="Windows 2022"
+          
+            if [ "$(has_warnings "$type" "ubuntu-22.04")" == "true" ]; then h_u22="${h_u22} †"; FOOTNOTE_REQUIRED=true; fi
+            if [ "$(has_warnings "$type" "ubuntu-22.04-arm")" == "true" ]; then h_arm="${h_arm} †"; FOOTNOTE_REQUIRED=true; fi
+            if [ "$(has_warnings "$type" "macos-14")" == "true" ]; then h_mac="${h_mac} †"; FOOTNOTE_REQUIRED=true; fi
+            if [ "$(has_warnings "$type" "windows-2022")" == "true" ]; then h_win="${h_win} †"; FOOTNOTE_REQUIRED=true; fi
+          
+            echo "| Test Suite | ${h_u22} | ${h_arm} | ${h_mac} | ${h_win} |" >> summary.md
+            echo "| :--- | :---: | :---: | :---: | :---: |" >> summary.md
+          
+            for test in SQUEAK CUIS_73 CUIS_75; do
+              case $test in
+                SQUEAK) name="**Squeak / Smalltalk**" ;;
+                CUIS_73) name="**Cuis 7.3**" ;;
+                CUIS_75) name="**Cuis 7.5**" ;;
+              esac
+          
+              u22=$(get_time "$type" "ubuntu-22.04" "$test")
+              u22arm=$(get_time "$type" "ubuntu-22.04-arm" "$test")
+              mac=$(get_time "$type" "macos-14" "$test")
+              win=$(get_time "$type" "windows-2022" "$test")
+          
+              echo "| ${name} | $u22 | $u22arm | $mac | $win |" >> summary.md
+            done
+            echo "" >> summary.md
+          done
+          
+          if [ "$FOOTNOTE_REQUIRED" = true ]; then
+            echo "*† Indicates that GraalVM compilation warnings or failure diagnostics were generated on this platform environment during the run.*" >> summary.md
+          fi
+          
+          # Echo to step summary for logging visibility
+          cat summary.md >> $GITHUB_STEP_SUMMARY
+          
+          # Find the commit SHA that triggered the original run
+          COMMIT_SHA=${{ github.event.workflow_run.head_sha }}
+          
+          # Post the summary directly as a commit comment
+          echo "Posting summary directly to commit $COMMIT_SHA..."
+          gh api \
+          --method POST \
+          -H "Accept: application/vnd.github+json" \
+          repos/${{ github.repository }}/commits/$COMMIT_SHA/comments \
+          -f body="$(cat summary.md)"
