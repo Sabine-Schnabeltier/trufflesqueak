@@ -1,40 +1,58 @@
 name: Generate Master Test Summary
 
 on:
-  # This listens for the completion of your main workflow
+  # Trigger 1: Automatically after the main CI finishes
   workflow_run:
     workflows: ["Test TruffleSqueak"]
     types:
       - completed
+  # Trigger 2: Manually via the GitHub UI or CLI
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: 'The Run ID of a completed Test TruffleSqueak workflow'
+        required: true
+        type: string
 
-# Explicitly grant permission to write comments to Pull Requests
 permissions:
-  pull-requests: write
+  contents: write # Needed to post commit comments
 
 jobs:
-  post-summary-to-pr:
+  post-summary:
     name: Parse Logs and Comment
     runs-on: ubuntu-22.04
-    # Run this whether the main CI passed or failed
-    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event.workflow_run.conclusion == 'failure' }}
+    # Run if triggered manually, OR if triggered automatically (regardless of pass/fail)
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' || github.event.workflow_run.conclusion == 'failure' }}
 
     steps:
+      - name: Determine Target Run ID and Commit SHA
+        id: target_info
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "RUN_ID=${{ inputs.run_id }}" >> $GITHUB_ENV
+            # Fetch the commit SHA from the provided run ID
+            SHA=$(gh run view ${{ inputs.run_id }} --repo ${{ github.repository }} --json headSha -q .headSha)
+            echo "COMMIT_SHA=$SHA" >> $GITHUB_ENV
+          else
+            echo "RUN_ID=${{ github.event.workflow_run.id }}" >> $GITHUB_ENV
+            echo "COMMIT_SHA=${{ github.event.workflow_run.head_sha }}" >> $GITHUB_ENV
+          fi
+
       - name: Download GraalVM Compiler Dumps (if any)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Pull the dumps from the triggering workflow run to check for warning daggers
-          gh run download ${{ github.event.workflow_run.id }} --repo ${{ github.repository }} --pattern 'graal_dumps-*' --dir all-times || true
+          gh run download ${{ env.RUN_ID }} --repo ${{ github.repository }} --pattern 'graal_dumps-*' --dir all-times || true
 
-      - name: Extract Logs, Build Table, and Post to PR
+      - name: Extract Logs, Build Table, and Post
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: |
-          # Download logs from the triggering run
-          gh run view ${{ github.event.workflow_run.id }} --repo ${{ github.repository }} --log | grep "::TEST_TIME_METRIC::" > extracted_times.txt || true
-          
-          # Build the Markdown file
+          gh run view ${{ env.RUN_ID }} --repo ${{ github.repository }} --log | grep "::TEST_TIME_METRIC::" | grep -v 'echo ' | grep -v 'Write-Host ' > extracted_times.txt || true
+  
           echo "### ⏱️ Test Durations Summary" > summary.md
           FOOTNOTE_REQUIRED=false
           
@@ -100,13 +118,9 @@ jobs:
           # Echo to step summary for logging visibility
           cat summary.md >> $GITHUB_STEP_SUMMARY
           
-          # Find the commit SHA that triggered the original run
-          COMMIT_SHA=${{ github.event.workflow_run.head_sha }}
-          
-          # Post the summary directly as a commit comment
-          echo "Posting summary directly to commit $COMMIT_SHA..."
+          echo "Posting summary directly to commit ${{ env.COMMIT_SHA }}..."
           gh api \
-          --method POST \
-          -H "Accept: application/vnd.github+json" \
-          repos/${{ github.repository }}/commits/$COMMIT_SHA/comments \
-          -f body="$(cat summary.md)"
+            --method POST \
+            -H "Accept: application/vnd.github+json" \
+            repos/${{ github.repository }}/commits/${{ env.COMMIT_SHA }}/comments \
+            -f body="$(cat summary.md)"
