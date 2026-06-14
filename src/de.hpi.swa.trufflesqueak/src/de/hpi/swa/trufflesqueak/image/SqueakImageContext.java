@@ -1090,6 +1090,34 @@ public final class SqueakImageContext {
         for (int i = 0; i < METHOD_CACHE_SIZE; i++) {
             methodCache[i].freeAndRelease();
         }
+        flushMethodCacheInClassTable();
+    }
+
+    private void flushMethodCacheInClassTable() {
+        for (final Object classTablePageOrNil : hiddenRoots.getObjectStorage()) {
+            if (classTablePageOrNil instanceof final ArrayObject page) {
+                if (page.isObjectType()) {
+                    final Object[] entries = page.getObjectStorage();
+                    for (int i = 0; i < SqueakImageConstants.CLASS_TABLE_PAGE_SIZE; i++) {
+                        final Object entry = entries[i];
+                        if (entry instanceof final ClassObject classObject) {
+                            if (!classObject.isNotForwarded()) {
+                                entries[i] = classObject.getForwardingPointer();
+                            }
+                            // Trigger the oracle and null out the local cache
+                            classObject.flushMethodCache();
+                        } else {
+                            assert entry == NilObject.SINGLETON;
+                        }
+                    }
+                } else {
+                    assert page.isEmptyType() && page.getEmptyLength() == SqueakImageConstants.CLASS_TABLE_PAGE_SIZE;
+                }
+            } else {
+                assert classTablePageOrNil == NilObject.SINGLETON;
+                break;
+            }
+        }
     }
 
     /* Clear cache entries for selector (prim 119). */

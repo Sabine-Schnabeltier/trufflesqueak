@@ -91,6 +91,10 @@ public final class SqueakGuards {
         return object instanceof ContextObject;
     }
 
+    public static boolean isDispatchFailureResult(final Object object) {
+        return object instanceof ClassObject.DispatchFailureResult;
+    }
+
     public static boolean isDouble(final Object value) {
         return value instanceof Double;
     }

@@ -47,21 +47,19 @@ public abstract class ResolveMethodNode extends AbstractNode {
     }
 
     @SuppressWarnings("unused")
-    @Specialization(guards = "lookupResult == null")
+    @Specialization
     protected static final CompiledCodeObject doDispatchFailure(final SqueakImageContext image, final int expectedNumArgs, final boolean canPrimFail,
                     final NativeObject selector,
                     final ClassObject receiverClass,
-                    final Object lookupResult) {
-        final MethodCacheEntry cacheEntry = image.findMethodCacheEntry(receiverClass, selector);
-        final ClassObject.DispatchFailureResult result = cacheEntry.getOrCreateDispatchFailureResult(expectedNumArgs);
-        final CompiledCodeObject fallbackMethod = result.fallbackMethod();
-        assert fallbackMethod.getNumArgs() == 1 || (result.convention() == ClassObject.FallbackConvention.SHORTCUT_DNU &&
+                    final ClassObject.DispatchFailureResult lookupResult) {
+        final CompiledCodeObject fallbackMethod = lookupResult.fallbackMethod();
+        assert fallbackMethod.getNumArgs() == 1 || (lookupResult.convention() == ClassObject.FallbackConvention.SHORTCUT_DNU &&
                         fallbackMethod.getNumArgs() == expectedNumArgs + 1) : "Fallback method with unexpected number of arguments";
         return fallbackMethod;
     }
 
     @SuppressWarnings("unused")
-    @Specialization(guards = {"targetObject != null", "!isCompiledCodeObject(targetObject)"})
+    @Specialization(guards = {"targetObject != null", "!isCompiledCodeObject(targetObject)", "!isDispatchFailureResult(targetObject)"})
     protected static final CompiledCodeObject doObjectAsMethod(final Node node, final SqueakImageContext image, final int expectedNumArgs, final boolean canPrimFail, final NativeObject selector,
                     final ClassObject receiverClass,
                     final Object targetObject,
@@ -81,7 +79,8 @@ public abstract class ResolveMethodNode extends AbstractNode {
              * Target object doesn't understand run:with:in: (or it resolved to another non-method
              * object), so we fall back to unified DNU.
              */
-            return doDispatchFailure(image, 3, false, image.runWithInSelector, targetObjectClass, null);
+            final ClassObject.DispatchFailureResult result = targetObjectClass.resolveDispatchFailure(image.runWithInSelector, 3);
+            return doDispatchFailure(image, 3, false, image.runWithInSelector, targetObjectClass, result);
         }
     }
 }

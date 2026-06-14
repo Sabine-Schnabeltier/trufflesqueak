@@ -616,7 +616,7 @@ public final class DispatchSelectorNaryNode extends DispatchSelectorNode {
                         @Cached final IndirectCallNode callNode) {
             CompilerAsserts.partialEvaluationConstant(canPrimFail);
             final ClassObject receiverClass = classNode.executeLookup(node, receiver);
-            final Object lookupResult = getContext(node).lookup(receiverClass, selector);
+            final Object lookupResult = receiverClass.lookupCached(selector, arguments.length);
             final CompiledCodeObject method = methodNode.execute(node, getContext(node), arguments.length, canPrimFail, selector, receiverClass, lookupResult);
 
             final Object result;
@@ -702,32 +702,32 @@ public final class DispatchSelectorNaryNode extends DispatchSelectorNode {
                 return FrameAccess.newWith(sender, null, receiver, arguments);
             }
 
-            @Specialization(guards = {"lookupResult == null", "arguments.length == cachedArity"}, limit = "1")
+            @Specialization(guards = {"arguments.length == cachedArity"}, limit = "1")
             @ExplodeLoop
             protected static final Object[] doMessageFallbackCached(final Node node, final AbstractSqueakObject sender, final Object receiver, final Object[] arguments,
                             final ClassObject receiverClass,
-                            @SuppressWarnings("unused") final Object lookupResult, final NativeObject selector,
+                            final ClassObject.DispatchFailureResult lookupResult, final NativeObject selector,
                             @Cached("arguments.length") final int cachedArity,
                             @Shared("writeNode") @Cached(inline = false) final AbstractPointersObjectWriteNode writeNode,
                             @Shared("createNode") @Cached(inline = false) final CreateMessageNode createMessageNode) {
-                return doMessageFallbackShared(node, sender, receiver, arguments, receiverClass, selector, cachedArity, writeNode, createMessageNode);
+                return doMessageFallbackShared(node, sender, receiver, arguments, receiverClass, lookupResult, selector, cachedArity, writeNode, createMessageNode);
             }
 
             @Specialization(guards = "lookupResult == null", replaces = "doMessageFallbackCached")
             protected static final Object[] doMessageFallbackGeneric(final Node node, final AbstractSqueakObject sender, final Object receiver, final Object[] arguments,
                             final ClassObject receiverClass,
-                            @SuppressWarnings("unused") final Object lookupResult, final NativeObject selector,
+                            final ClassObject.DispatchFailureResult lookupResult, final NativeObject selector,
                             @Shared("writeNode") @Cached(inline = false) final AbstractPointersObjectWriteNode writeNode,
                             @Shared("createNode") @Cached(inline = false) final CreateMessageNode createMessageNode) {
-                return doMessageFallbackShared(node, sender, receiver, arguments, receiverClass, selector, arguments.length, writeNode, createMessageNode);
+                return doMessageFallbackShared(node, sender, receiver, arguments, receiverClass, lookupResult, selector, arguments.length, writeNode, createMessageNode);
             }
 
-            private static Object[] doMessageFallbackShared(final Node node, final AbstractSqueakObject sender, final Object receiver, final Object[] arguments, final ClassObject receiverClass,
-                            final NativeObject selector, final int arity, final AbstractPointersObjectWriteNode writeNode, final CreateMessageNode createMessageNode) {
+            private static Object[] doMessageFallbackShared(final Node node, final AbstractSqueakObject sender, final Object receiver, final Object[] arguments,
+                          final ClassObject receiverClass,
+                          final ClassObject.DispatchFailureResult lookupResult, final NativeObject selector,
+                          final int arity, final AbstractPointersObjectWriteNode writeNode, final CreateMessageNode createMessageNode) {
 
-                final ClassObject.DispatchFailureResult result = getContext(node).findMethodCacheEntry(receiverClass, selector).getOrCreateDispatchFailureResult(arity);
-
-                if (result.convention() == ClassObject.FallbackConvention.SHORTCUT_DNU) {
+                if (lookupResult.convention() == ClassObject.FallbackConvention.SHORTCUT_DNU) {
                     final Object[] shortcutArgs = new Object[arity + 1];
                     if (CompilerDirectives.isPartialEvaluationConstant(arity)) {
                         copyExploded(arguments, shortcutArgs, arity);
@@ -739,8 +739,8 @@ public final class DispatchSelectorNaryNode extends DispatchSelectorNode {
                 }
 
                 final PointersObject message;
-                if (result.convention() == ClassObject.FallbackConvention.CANNOT_INTERPRET) {
-                    message = DispatchUtils.buildNestedMessage(createMessageNode, selector, result.fallbackSelector(), receiver, arguments, result.fallbackDepth());
+                if (lookupResult.convention() == ClassObject.FallbackConvention.CANNOT_INTERPRET) {
+                    message = DispatchUtils.buildNestedMessage(createMessageNode, selector, lookupResult.fallbackSelector(), receiver, arguments, lookupResult.fallbackDepth());
                 } else {
                     message = getContext(node).newMessage(writeNode, selector, receiverClass, arguments);
                 }
@@ -754,7 +754,7 @@ public final class DispatchSelectorNaryNode extends DispatchSelectorNode {
                 }
             }
 
-            @Specialization(guards = {"targetObject != null", "!isCompiledCodeObject(targetObject)"})
+            @Specialization(guards = {"targetObject != null", "!isCompiledCodeObject(targetObject)", "!isDispatchFailureResult(targetObject)"})
             protected static final Object[] doObjectAsMethod(final Node node, final AbstractSqueakObject sender, final Object receiver, final Object[] arguments,
                             @SuppressWarnings("unused") final ClassObject receiverClass, final Object targetObject, final NativeObject selector) {
                 return FrameAccess.newOAMWith(sender, targetObject, selector, getContext(node).asArrayOfObjects(arguments), receiver);
