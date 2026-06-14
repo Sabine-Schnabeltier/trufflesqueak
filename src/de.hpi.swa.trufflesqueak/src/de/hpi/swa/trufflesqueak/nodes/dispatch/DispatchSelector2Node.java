@@ -322,7 +322,7 @@ public final class DispatchSelector2Node extends DispatchSelectorNode {
                         @Cached final IndirectCallNode callNode) {
             CompilerAsserts.partialEvaluationConstant(canPrimFail);
             final ClassObject receiverClass = classNode.executeLookup(node, receiver);
-            final Object lookupResult = getContext(node).lookup(receiverClass, selector);
+            final Object lookupResult = receiverClass.lookupCached(selector, 2);
             final CompiledCodeObject method = methodNode.execute(node, getContext(node), 2, canPrimFail, selector, receiverClass, lookupResult);
 
             final Object result;
@@ -402,28 +402,28 @@ public final class DispatchSelector2Node extends DispatchSelectorNode {
                 return FrameAccess.newWith(sender, null, receiver, arg1, arg2);
             }
 
-            @Specialization(guards = "lookupResult == null")
+            @Specialization
             protected static final Object[] doMessageFallback(final Node node, final AbstractSqueakObject sender, final Object receiver, final Object arg1, final Object arg2,
                             final ClassObject receiverClass,
-                            @SuppressWarnings("unused") final Object lookupResult, final NativeObject selector,
+                            final ClassObject.DispatchFailureResult lookupResult, final NativeObject selector,
                             @Cached(inline = false) final AbstractPointersObjectWriteNode writeNode,
                             @Cached(inline = false) final CreateMessageNode createMessageNode) {
-                final ClassObject.DispatchFailureResult result = getContext(node).findMethodCacheEntry(receiverClass, selector).getOrCreateDispatchFailureResult(2);
-                if (result.convention() == ClassObject.FallbackConvention.SHORTCUT_DNU) {
+
+                if (lookupResult.convention() == ClassObject.FallbackConvention.SHORTCUT_DNU) {
                     return FrameAccess.newWith(sender, null, receiver, arg1, arg2, selector);
                 }
 
                 final Object[] arguments = new Object[]{arg1, arg2};
                 final PointersObject message;
-                if (result.convention() == ClassObject.FallbackConvention.CANNOT_INTERPRET) {
-                    message = DispatchUtils.buildNestedMessage(createMessageNode, selector, result.fallbackSelector(), receiver, arguments, result.fallbackDepth());
+                if (lookupResult.convention() == ClassObject.FallbackConvention.CANNOT_INTERPRET) {
+                    message = DispatchUtils.buildNestedMessage(createMessageNode, selector, lookupResult.fallbackSelector(), receiver, arguments, lookupResult.fallbackDepth());
                 } else {
                     message = getContext(node).newMessage(writeNode, selector, receiverClass, arguments);
                 }
                 return FrameAccess.newMessageFallbackWith(sender, receiver, message);
             }
 
-            @Specialization(guards = {"targetObject != null", "!isCompiledCodeObject(targetObject)"})
+            @Specialization(guards = {"targetObject != null", "!isCompiledCodeObject(targetObject)", "!isDispatchFailureResult(targetObject)"})
             protected static final Object[] doObjectAsMethod(final Node node, final AbstractSqueakObject sender, final Object receiver, final Object arg1, final Object arg2,
                             @SuppressWarnings("unused") final ClassObject receiverClass, final Object targetObject, final NativeObject selector) {
                 final Object[] arguments = new Object[]{arg1, arg2};

@@ -6,6 +6,7 @@
  */
 package de.hpi.swa.trufflesqueak.model;
 
+import com.oracle.truffle.api.nodes.ExplodeLoop;
 import de.hpi.swa.trufflesqueak.util.LogUtils;
 import org.graalvm.collections.UnmodifiableEconomicMap;
 
@@ -32,11 +33,25 @@ import de.hpi.swa.trufflesqueak.nodes.accessing.AbstractPointersObjectNodes.Abst
 import de.hpi.swa.trufflesqueak.util.ArrayUtils;
 import de.hpi.swa.trufflesqueak.util.ObjectGraphUtils.ObjectTracer;
 
+import java.util.Arrays;
+
 /*
  * Represents all subclasses of ClassDescription (Class, Metaclass, TraitBehavior, ...).
  */
 @SuppressWarnings("static-method")
 public final class ClassObject extends AbstractSqueakObjectWithClassAndHash {
+    // Megamorphic Cache configuration
+    private static final int GOLDEN_RATIO_32 = 0x9E3779B9;
+
+    private static final int ENTRY_STEP = 2; // [Selector, Result]
+    private static final int CACHE_WAYS = 4;
+    private static final int BUCKET_STRIDE = CACHE_WAYS * ENTRY_STEP;
+
+    private static final int EVICTION_COUNT_FOR_GROW = 16;
+
+    private static final int INITIAL_MEGAMORPHIC_CACHE_SIZE = 32;
+    private static final int MAX_MEGAMORPHIC_CACHE_SIZE = 512;
+
     public enum FallbackConvention {
         CANNOT_INTERPRET, // Use #cannotInterpret: and build nested Message objects
         STANDARD_DNU,     // Use #doesNotUnderstand: and build a Message object
@@ -64,6 +79,11 @@ public final class ClassObject extends AbstractSqueakObjectWithClassAndHash {
     private Object[] pointers;
 
     @CompilationFinal private ObjectLayout layout;
+
+    private Object[] megamorphicMethodCache;
+    private int megamorphicCacheSize;
+    private int activeMegamorphicCacheEntries = 0;
+    private int megamorphicCacheEvictions = 0;
 
     public ClassObject(final SqueakImageContext image) {
         super();
@@ -574,9 +594,197 @@ public final class ClassObject extends AbstractSqueakObjectWithClassAndHash {
                 if (lookupResult instanceof final CompiledCodeObject codeObject) {
                     codeObject.flushCacheBySelector();
                 }
-                return;
+                break;
             }
         }
+
+        if (megamorphicMethodCache != null) {
+            final int bucketBaseIndex = megamorphicMethodCacheIndexFor(selector, megamorphicMethodCache.length);
+            final int hitResultIndex = scanBucketForSelector(megamorphicMethodCache, bucketBaseIndex, selector);
+
+            if (hitResultIndex != -1) {
+                megamorphicMethodCache[hitResultIndex - 1] = null; // Clear the selector
+                megamorphicMethodCache[hitResultIndex] = null;     // Clear the method
+                --activeMegamorphicCacheEntries;
+            }
+        }
+    }
+
+    public void flushMethodCache() {
+        if (megamorphicMethodCache == null) {
+            return;
+        }
+
+        Arrays.fill(megamorphicMethodCache, null);
+        megamorphicCacheEvictions = 0;
+        activeMegamorphicCacheEntries = 0;
+    }
+
+    /**
+     * High-speed, inlinable entry point for megamorphic dispatch.
+     * Checks a localized O(1) flat array before falling back to a heavy lookup.
+     */
+    public Object lookupCached(final NativeObject selector, final int expectedNumArgs) {
+        final Object[] currentCache = megamorphicMethodCache;
+
+        if (currentCache == null) {
+            return lookupAndRecordCacheMiss(null, selector, expectedNumArgs, -1);
+        }
+
+        final int bucketBaseIndex = megamorphicMethodCacheIndexFor(selector, currentCache.length);
+        final int hitResultIndex = scanBucketForSelector(currentCache, bucketBaseIndex, selector);
+        if (hitResultIndex != -1) {
+            return currentCache[hitResultIndex];
+        }
+
+        return lookupAndRecordCacheMiss(currentCache, selector, expectedNumArgs, bucketBaseIndex);
+    }
+
+    @TruffleBoundary
+    private Object lookupAndRecordCacheMiss(final Object[] passedCacheArray, final NativeObject selector, final int expectedNumArgs, final int oldBucketBase) {
+        final Object[] activeCache = megamorphicMethodCache;
+
+        // --- CASE 1: STALE HOISTED POINTER ---
+        // Handles multiple sends in a compiled loop where an earlier send resized or initialized the cache.
+        if (passedCacheArray != activeCache) {
+            return checkActiveCacheOrLookup(activeCache, selector, expectedNumArgs);
+        }
+
+        // --- CASE 2: INITIALIZATION ---
+        // If we reach here, passedCacheArray == activeCache. If it's null, we are the first to initialize.
+        if (activeCache == null) {
+            megamorphicCacheSize = INITIAL_MEGAMORPHIC_CACHE_SIZE;
+            final Object[] newCache = new Object[megamorphicCacheSize];
+
+            final Object result = lookupSlow(selector, expectedNumArgs);
+
+            final int base = megamorphicMethodCacheIndexFor(selector, megamorphicCacheSize);
+            newCache[base] = selector;
+            newCache[base + 1] = result;
+
+            megamorphicMethodCache = newCache;
+            activeMegamorphicCacheEntries++;
+            return result;
+        }
+
+        // --- CASE 3: STABLE GROWTH CONDITIONS ---
+        if (megamorphicCacheEvictions > EVICTION_COUNT_FOR_GROW && megamorphicCacheSize < MAX_MEGAMORPHIC_CACHE_SIZE) {
+            // System.out.println(this + " grow cache to " + (2 * megamorphicCacheSize) + " current occupancy " + ((activeMegamorphicCacheEntries * 200) / megamorphicCacheSize) + "%");
+            megamorphicCacheSize *= 2;
+            final Object[] newCache = new Object[megamorphicCacheSize];
+
+            // Re-hash and preserve all existing warm entries into the new geometry
+            activeMegamorphicCacheEntries = 0;
+            for (int i = 0; i < activeCache.length; i += ENTRY_STEP) {
+                final NativeObject oldSelector = (NativeObject) activeCache[i];
+                if (oldSelector != null) {
+                    final Object oldResult = activeCache[i + 1];
+                    final int rehashBase = megamorphicMethodCacheIndexFor(oldSelector, megamorphicCacheSize);
+                    if (!writeToFirstAvailableOrEvict(newCache, rehashBase, oldSelector, oldResult)) {
+                        activeMegamorphicCacheEntries++;
+                    }
+                }
+            }
+
+            // Now handle the current miss that triggered the growth
+            final Object result = lookupSlow(selector, expectedNumArgs);
+            final int newBase = megamorphicMethodCacheIndexFor(selector, megamorphicCacheSize);
+            if (!writeToFirstAvailableOrEvict(newCache, newBase, selector, result)) {
+                activeMegamorphicCacheEntries++;
+            }
+
+            // Seed the old array so the currently hoisted loop catches up immediately
+            writeToFirstAvailableOrEvict(activeCache, oldBucketBase, selector, result);
+
+            megamorphicMethodCache = newCache;
+            megamorphicCacheEvictions = 0;
+            return result;
+        }
+
+        // --- CASE 4: STANDARD WRITE BACK (No Resizing) ---
+        final Object result = lookupSlow(selector, expectedNumArgs);
+        if (writeToFirstAvailableOrEvict(activeCache, oldBucketBase, selector, result)) {
+            megamorphicCacheEvictions++; // Only increment on true evictions
+        } else {
+            activeMegamorphicCacheEntries++;
+        }
+        return result;
+    }
+
+    /**
+     * Lazy execution handler for the VM's class dictionary dispatch lookup.
+     */
+    private Object lookupSlow(final NativeObject selector, final int expectedNumArgs) {
+        Object result = image.lookup(this, selector);
+        if (result == null) {
+            result = resolveDispatchFailure(selector, expectedNumArgs);
+        }
+        return result;
+    }
+
+    /**
+     * Checks the fresh active cache for an out-of-band hit before performing a lazy lookup.
+     */
+    private Object checkActiveCacheOrLookup(final Object[] activeCache, final NativeObject selector, final int expectedNumArgs) {
+        final int activeBase = megamorphicMethodCacheIndexFor(selector, activeCache.length);
+        final int hitIndex = scanBucketForSelector(activeCache, activeBase, selector);
+
+        if (hitIndex != -1) {
+            return activeCache[hitIndex];
+        }
+
+        // Missed everywhere. Run the slow lookup and populate the active array.
+        final Object result = lookupSlow(selector, expectedNumArgs);
+        if (writeToFirstAvailableOrEvict(activeCache, activeBase, selector, result)) {
+            megamorphicCacheEvictions++;
+        } else {
+            activeMegamorphicCacheEntries++;
+        }
+        return result;
+    }
+
+    /**
+     * Iterates through the ways of a bucket to find an empty slot.
+     * Returns true if a collision occurred and an existing entry was evicted.
+     */
+    private boolean writeToFirstAvailableOrEvict(final Object[] cache, final int bucketBase, final NativeObject selector, final Object result) {
+        // Look for an empty slot anywhere in this bucket stride
+        for (int way = 0; way < CACHE_WAYS; way++) {
+            final int targetIndex = bucketBase + (way * ENTRY_STEP);
+            if (cache[targetIndex] == null) {
+                cache[targetIndex] = selector;
+                cache[targetIndex + 1] = result;
+                return false;
+            }
+        }
+
+        // Bucket is totally full. Pseudo-random eviction via low-bit hash pick
+        final int chosenWay = (System.identityHashCode(selector) & Integer.MAX_VALUE) % CACHE_WAYS;
+        final int evictIdx = bucketBase + (chosenWay * ENTRY_STEP);
+        cache[evictIdx] = selector;
+        cache[evictIdx + 1] = result;
+        return true;
+    }
+
+    /**
+     * Scans a specific bucket stride looking for a matching selector.
+     * Returns the index of the matching result slot, or -1 if it misses.
+     */
+    @ExplodeLoop
+    private static int scanBucketForSelector(final Object[] cache, final int bucketBaseIndex, final NativeObject selector) {
+        for (int way = 0; way < CACHE_WAYS; way++) {
+            final int currentIndex = bucketBaseIndex + (way * ENTRY_STEP);
+            if (cache[currentIndex] == selector) {
+                return currentIndex + 1; // Return the index of the Result
+            }
+        }
+        return -1;
+    }
+
+    private int megamorphicMethodCacheIndexFor(final NativeObject selector, final int cacheLength) {
+        final int mixed = System.identityHashCode(selector) * GOLDEN_RATIO_32;
+        final int totalBuckets = cacheLength / BUCKET_STRIDE;
+        return (mixed & (totalBuckets - 1)) * BUCKET_STRIDE;
     }
 
     public int getBasicInstanceSize() {
