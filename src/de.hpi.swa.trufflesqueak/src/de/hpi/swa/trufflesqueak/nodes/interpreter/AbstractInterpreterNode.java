@@ -47,9 +47,9 @@ import de.hpi.swa.trufflesqueak.nodes.accessing.AbstractPointersObjectNodes.Abst
 import de.hpi.swa.trufflesqueak.nodes.accessing.SqueakObjectAt0NodeGen;
 import de.hpi.swa.trufflesqueak.nodes.context.GetOrCreateContextWithFrameNode;
 import de.hpi.swa.trufflesqueak.nodes.dispatch.AbstractDispatchNode;
-import de.hpi.swa.trufflesqueak.nodes.dispatch.DispatchSelector0NodeFactory.Dispatch0NodeGen;
-import de.hpi.swa.trufflesqueak.nodes.dispatch.DispatchSelector1NodeFactory.Dispatch1NodeGen;
-import de.hpi.swa.trufflesqueak.nodes.dispatch.DispatchSelector2NodeFactory.Dispatch2NodeGen;
+import de.hpi.swa.trufflesqueak.nodes.dispatch.Dis0Node;
+import de.hpi.swa.trufflesqueak.nodes.dispatch.Dis1Node;
+import de.hpi.swa.trufflesqueak.nodes.dispatch.Dis2Node;
 import de.hpi.swa.trufflesqueak.nodes.dispatch.DispatchSelectorNaryNodeFactory.DispatchNaryNodeGen;
 import de.hpi.swa.trufflesqueak.nodes.dispatch.DispatchValueNodeGen;
 import de.hpi.swa.trufflesqueak.nodes.dispatch.DispatchValueWithArgNodeGen;
@@ -141,7 +141,7 @@ public abstract class AbstractInterpreterNode extends AbstractInterpreterInstrum
 
     private Object dispatch(final VirtualFrame frame, final int currentPC, final Object receiver) {
         try {
-            return ACCESS.uncheckedCast(getData(currentPC), Dispatch0NodeGen.class).execute(frame, receiver);
+            return ACCESS.uncheckedCast(getData(currentPC), Dis0Node.class).execute(frame, receiver);
         } catch (final AbstractStandardSendReturn r) {
             return handleReturnException(frame, currentPC, r);
         }
@@ -153,7 +153,7 @@ public abstract class AbstractInterpreterNode extends AbstractInterpreterInstrum
 
     private Object dispatch(final VirtualFrame frame, final int currentPC, final Object receiver, final Object arg) {
         try {
-            return ACCESS.uncheckedCast(getData(currentPC), Dispatch1NodeGen.class).execute(frame, receiver, arg);
+            return ACCESS.uncheckedCast(getData(currentPC), Dis1Node.class).execute(frame, receiver, arg);
         } catch (final AbstractStandardSendReturn r) {
             return handleReturnException(frame, currentPC, r);
         }
@@ -165,7 +165,7 @@ public abstract class AbstractInterpreterNode extends AbstractInterpreterInstrum
 
     private Object dispatch(final VirtualFrame frame, final int currentPC, final Object receiver, final Object arg1, final Object arg2) {
         try {
-            return ACCESS.uncheckedCast(getData(currentPC), Dispatch2NodeGen.class).execute(frame, receiver, arg1, arg2);
+            return ACCESS.uncheckedCast(getData(currentPC), Dis2Node.class).execute(frame, receiver, arg1, arg2);
         } catch (final AbstractStandardSendReturn r) {
             return handleReturnException(frame, currentPC, r);
         }
@@ -353,9 +353,9 @@ public abstract class AbstractInterpreterNode extends AbstractInterpreterInstrum
                 FrameAccess.externalizePCAndSP(frame, pc, sp);
                 if (getData(currentPC) == null) {
                     CompilerDirectives.transferToInterpreterAndInvalidate();
-                    setData(currentPC, insert(Dispatch2NodeGen.create(getContext().aboutToReturnSelector)));
+                    setData(currentPC, insert(Dis2Node.create(getContext().aboutToReturnSelector)));
                 }
-                ((Dispatch2NodeGen) getData(currentPC)).execute(frame, getOrCreateContext(frame, currentPC), result, firstMarkedContext);
+                ((Dis2Node) getData(currentPC)).execute(frame, getOrCreateContext(frame, currentPC), result, firstMarkedContext);
             }
         }
         throw cannotReturn(frame, pc, sp, result);
