@@ -67,10 +67,10 @@ jobs:
         type: [jvm]
     outputs:
       # Squeak timings
-      squeak_ubuntu_22_04: ${{ steps.timer_squeak.outputs.squeak_ubuntu_22_04 }}
-      squeak_ubuntu_22_04_arm: ${{ steps.timer_squeak.outputs.squeak_ubuntu_22_04_arm }}
-      squeak_macos_14: ${{ steps.timer_squeak.outputs.squeak_macos_14 }}
-      squeak_windows_2022: ${{ steps.timer_squeak.outputs.squeak_windows_2022 }}
+      squeak_ubuntu_22_04: ${{ steps.timer_squeak_linux.outputs.squeak_ubuntu_22_04 }}
+      squeak_ubuntu_22_04_arm: ${{ steps.timer_squeak_linux.outputs.squeak_ubuntu_22_04_arm }}
+      squeak_macos_14: ${{ steps.timer_squeak_linux.outputs.squeak_macos_14 }}
+      squeak_windows_2022: ${{ steps.timer_squeak_windows.outputs.squeak_windows_2022 }}
 
       # Cuis 7.3 timings
       cuis73_ubuntu_22_04: ${{ steps.timer_cuis73.outputs.cuis73_ubuntu_22_04 }}
@@ -187,7 +187,7 @@ jobs:
       if: ${{ matrix.os == 'ubuntu-22.04' }}
     - &run_squeak_tests_windows
       name: Run Squeak/Smalltalk tests on TruffleSqueak standalone on Windows
-      id: timer_squeak
+      id: timer_squeak_windows
       run: |
         $sw = [System.Diagnostics.Stopwatch]::StartNew()
         trufflesqueak ${{ env.VM_ARGS }} images\test-64bit.image ..\src\image-tests\runSqueakTests.st
@@ -199,7 +199,7 @@ jobs:
       if: ${{ matrix.os == 'windows-2022' }}
     - &run_squeak_tests_unix
       name: Run Squeak/Smalltalk tests on TruffleSqueak standalone
-      id: timer_squeak
+      id: timer_squeak_linux
       shell: bash
       run: |
         START_TIME=$SECONDS
@@ -280,10 +280,10 @@ jobs:
         type: [native]
     outputs:
       # Squeak timings
-      squeak_ubuntu_22_04: ${{ steps.timer_squeak.outputs.squeak_ubuntu_22_04 }}
-      squeak_ubuntu_22_04_arm: ${{ steps.timer_squeak.outputs.squeak_ubuntu_22_04_arm }}
-      squeak_macos_14: ${{ steps.timer_squeak.outputs.squeak_macos_14 }}
-      squeak_windows_2022: ${{ steps.timer_squeak.outputs.squeak_windows_2022 }}
+      squeak_ubuntu_22_04: ${{ steps.timer_squeak_linux.outputs.squeak_ubuntu_22_04 }}
+      squeak_ubuntu_22_04_arm: ${{ steps.timer_squeak_linux.outputs.squeak_ubuntu_22_04_arm }}
+      squeak_macos_14: ${{ steps.timer_squeak_linux.outputs.squeak_macos_14 }}
+      squeak_windows_2022: ${{ steps.timer_squeak_windows.outputs.squeak_windows_2022 }}
 
       # Cuis 7.3 timings
       cuis73_ubuntu_22_04: ${{ steps.timer_cuis73.outputs.cuis73_ubuntu_22_04 }}
