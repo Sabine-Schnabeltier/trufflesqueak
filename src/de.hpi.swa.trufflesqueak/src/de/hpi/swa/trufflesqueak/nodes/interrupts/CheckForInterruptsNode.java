@@ -80,9 +80,13 @@ public abstract class CheckForInterruptsNode extends AbstractNode {
 
     @DenyReplace
     public static final class CheckForInterruptsInLoopNode extends CheckForInterruptsNode {
-        private static final CheckForInterruptsInLoopNode SINGLETON = new CheckForInterruptsInLoopNode();
+        private static final int INTERRUPT_CHECK_STRIDE = 1024;
+        private static final double CHECK_PROBABILITY = 1.0D / INTERRUPT_CHECK_STRIDE;
+
+        private int counter;
 
         private CheckForInterruptsInLoopNode() {
+            this.counter = INTERRUPT_CHECK_STRIDE;
         }
 
         public static CheckForInterruptsInLoopNode createForLoop() {
@@ -90,36 +94,26 @@ public abstract class CheckForInterruptsNode extends AbstractNode {
             if (SqueakImageContext.getSlow().interruptHandlerDisabled()) {
                 return null;
             }
-            return SINGLETON;
+            return new CheckForInterruptsInLoopNode();
         }
 
         public void execute(final VirtualFrame frame, final int pc, final int sp) {
-            final SqueakImageContext image = getContext();
-            if (image.interrupt.shouldSkip()) {
-                return;
+            if (CompilerDirectives.injectBranchProbability(CHECK_PROBABILITY, --counter <= 0)) {
+                counter = INTERRUPT_CHECK_STRIDE;
+
+                final SqueakImageContext image = getContext();
+                if (image.interrupt.shouldSkip()) {
+                    return;
+                }
+
+                /* Exclude interrupts case from compilation. */
+                CompilerDirectives.transferToInterpreter();
+                FrameAccess.externalizePCAndSP(frame, pc, sp);
+                final Object[] specialObjects = image.specialObjectsArray.getObjectStorage();
+                if (signalSemaphoresUncached(frame, image, image.interrupt, specialObjects)) {
+                    throw ProcessSwitch.SINGLETON;
+                }
             }
-            /* Exclude interrupts case from compilation. */
-            CompilerDirectives.transferToInterpreter();
-            FrameAccess.externalizePCAndSP(frame, pc, sp);
-            final Object[] specialObjects = image.specialObjectsArray.getObjectStorage();
-            if (signalSemaphoresUncached(frame, image, image.interrupt, specialObjects)) {
-                throw ProcessSwitch.SINGLETON;
-            }
-        }
-
-        @Override
-        public boolean isAdoptable() {
-            return false;
-        }
-
-        @Override
-        public Node copy() {
-            return SINGLETON;
-        }
-
-        @Override
-        public Node deepCopy() {
-            return copy();
         }
     }
 
