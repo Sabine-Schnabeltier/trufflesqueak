@@ -1035,10 +1035,9 @@ public final class InterpreterV3PlusClosuresNode extends AbstractInterpreterNode
     @Override
     protected boolean isFastPathedMessageSend(final int bytecode) {
         return switch (bytecode) {
-            case BC.BYTECODE_PRIM_ADD, BC.BYTECODE_PRIM_SUBTRACT, BC.BYTECODE_PRIM_LESS_THAN,
-                 BC.BYTECODE_PRIM_GREATER_THAN, BC.BYTECODE_PRIM_LESS_OR_EQUAL, BC.BYTECODE_PRIM_GREATER_OR_EQUAL,
-                 BC.BYTECODE_PRIM_EQUAL, BC.BYTECODE_PRIM_NOT_EQUAL, BC.BYTECODE_PRIM_BIT_AND,
-                 BC.BYTECODE_PRIM_BIT_OR -> true;
+            case BC.BYTECODE_PRIM_ADD, BC.BYTECODE_PRIM_SUBTRACT, BC.BYTECODE_PRIM_LESS_THAN, BC.BYTECODE_PRIM_GREATER_THAN, //
+                BC.BYTECODE_PRIM_LESS_OR_EQUAL, BC.BYTECODE_PRIM_GREATER_OR_EQUAL, BC.BYTECODE_PRIM_EQUAL, BC.BYTECODE_PRIM_NOT_EQUAL, //
+                BC.BYTECODE_PRIM_BIT_AND, BC.BYTECODE_PRIM_BIT_OR -> true;
             default -> false;
         };
     }
