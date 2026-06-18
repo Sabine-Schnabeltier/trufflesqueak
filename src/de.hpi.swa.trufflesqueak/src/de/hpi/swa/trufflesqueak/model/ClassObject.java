@@ -715,7 +715,7 @@ public final class ClassObject extends AbstractSqueakObjectWithClassAndHash {
      * Lazy execution handler for the VM's class dictionary dispatch lookup.
      */
     private Object lookupSlow(final NativeObject selector, final int expectedNumArgs) {
-        Object result = image.lookup(this, selector);
+        Object result = lookupInMethodDictSlow(selector);
         if (result == null) {
             result = resolveDispatchFailure(selector, expectedNumArgs);
         }
