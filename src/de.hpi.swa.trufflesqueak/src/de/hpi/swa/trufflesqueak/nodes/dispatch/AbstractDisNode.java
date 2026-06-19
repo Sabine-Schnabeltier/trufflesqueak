@@ -77,7 +77,7 @@ public class AbstractDisNode {
                             previousFast.next = currentFast.next;
                         }
 
-                        MegaDispatchDataNode<T> newMega = new MegaDispatchDataNode<>(targetMethod, currentFast.dispatchDirectNode);
+                        final MegaDispatchDataNode<T> newMega = new MegaDispatchDataNode<>(targetMethod, currentFast.dispatchDirectNode);
                         newMega.next = headMegamorphic;
                         headMegamorphic = insert(newMega);
 

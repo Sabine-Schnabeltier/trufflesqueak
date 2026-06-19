@@ -218,8 +218,8 @@ public final class Dis2Node extends AbstractDispatchNode {
             final NativeObject selector = ((Dis2Node) getParent()).selector;
             final LookupResult result = resolveTargetMethod(this, receiver, selector);
 
-            Dispatch2Node aritySpecificNode = Dispatch2Node.create(result);
-            Dispatch2Node executor = cache.specialize(receiver, result, aritySpecificNode);
+            final Dispatch2Node aritySpecificNode = Dispatch2Node.create(result);
+            final Dispatch2Node executor = cache.specialize(receiver, result, aritySpecificNode);
             if (executor != null) {
                 return executor.execute(frame, receiver, arg1, arg2);
             } else {

@@ -215,8 +215,8 @@ public final class Dis1Node extends AbstractDispatchNode {
             final NativeObject selector = ((Dis1Node) getParent()).selector;
             final LookupResult result = resolveTargetMethod(this, receiver, selector);
 
-            Dispatch1Node aritySpecificNode = Dispatch1Node.create(result);
-            Dispatch1Node executor = cache.specialize(receiver, result, aritySpecificNode);
+            final Dispatch1Node aritySpecificNode = Dispatch1Node.create(result);
+            final Dispatch1Node executor = cache.specialize(receiver, result, aritySpecificNode);
             if (executor != null) {
                 return executor.execute(frame, receiver, arg1);
             } else {
