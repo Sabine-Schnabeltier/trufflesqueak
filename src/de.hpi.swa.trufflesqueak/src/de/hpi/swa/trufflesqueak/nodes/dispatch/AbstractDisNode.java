@@ -9,9 +9,7 @@ package de.hpi.swa.trufflesqueak.nodes.dispatch;
 import com.oracle.truffle.api.Assumption;
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.CompilerDirectives.CompilationFinal;
-import com.oracle.truffle.api.dsl.Bind;
-import com.oracle.truffle.api.dsl.Cached;
-import com.oracle.truffle.api.dsl.Specialization;
+import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.nodes.ExplodeLoop;
 import com.oracle.truffle.api.nodes.Node;
 
@@ -20,13 +18,115 @@ import de.hpi.swa.trufflesqueak.model.ClassObject;
 import de.hpi.swa.trufflesqueak.model.CompiledCodeObject;
 import de.hpi.swa.trufflesqueak.model.NativeObject;
 import de.hpi.swa.trufflesqueak.nodes.AbstractNode;
+import de.hpi.swa.trufflesqueak.nodes.LookupMethodNode;
 import de.hpi.swa.trufflesqueak.nodes.accessing.SqueakObjectClassNode;
 
 public class AbstractDisNode {
     private static final int LOOKUP_CACHE_SIZE = 8;
     protected static final int DISPATCH_CACHE_SIZE = 4;
 
-    abstract static class AbstractGuardNode extends AbstractNode {
+    public static final class FastDispatchDataNode<T extends Node> extends Node {
+        public final CompiledCodeObject method;
+        public final Assumption assumption;
+        @Child public AbstractGuardNode guardChainNode;
+        @Child public T dispatchDirectNode;
+        @Child public FastDispatchDataNode<T> next;
+
+        public FastDispatchDataNode(final Object receiver, final LookupResult result, final T dispatchNode) {
+            this.guardChainNode = new GuardChainNode(receiver, result);
+            this.method = result.method();
+            this.assumption = method.getCallTargetStable();
+            this.dispatchDirectNode = dispatchNode;
+        }
+    }
+
+    public static final class MegaDispatchDataNode<T extends Node> extends Node {
+        public final CompiledCodeObject method;
+        @Child public T dispatchDirectNode;
+        @Child public MegaDispatchDataNode<T> next; // <-- FIXED: @Child added
+
+        public MegaDispatchDataNode(final CompiledCodeObject method, final T dispatchNode) {
+            this.method = method;
+            this.dispatchDirectNode = dispatchNode;
+        }
+    }
+
+    public static final class DispatchCacheManager<T extends Node> extends Node {
+        @Child public FastDispatchDataNode<T> headFast;
+        @Child public MegaDispatchDataNode<T> headMegamorphic;
+
+        // Returns the executor directly so the caller doesn't have to navigate nodes
+        @TruffleBoundary
+        protected T specialize(final Object receiver, final LookupResult result, final T newDispatchNode) {
+            final CompiledCodeObject targetMethod = result.method();
+            int totalMethodCount = 0;
+
+            FastDispatchDataNode<T> previousFast = null;
+            FastDispatchDataNode<T> currentFast = headFast;
+
+            // 1. Scan Fast Chain
+            while (currentFast != null) {
+                totalMethodCount++;
+                if (currentFast.method == targetMethod) {
+                    if (currentFast.guardChainNode.append(receiver, result)) {
+                        return currentFast.dispatchDirectNode;
+                    } else {
+                        if (previousFast == null) {
+                            headFast = currentFast.next;
+                        } else {
+                            previousFast.next = currentFast.next;
+                        }
+
+                        MegaDispatchDataNode<T> newMega = new MegaDispatchDataNode<>(targetMethod, currentFast.dispatchDirectNode);
+                        newMega.next = headMegamorphic;
+                        headMegamorphic = insert(newMega);
+
+                        return newMega.dispatchDirectNode;
+                    }
+                }
+                previousFast = currentFast;
+                currentFast = currentFast.next;
+            }
+
+            // 2. Count Megamorphic Chain
+            MegaDispatchDataNode<T> currentMega = headMegamorphic;
+            while (currentMega != null) {
+                totalMethodCount++;
+                currentMega = currentMega.next;
+            }
+
+            // 3. Global Budget Check
+            if (totalMethodCount < DISPATCH_CACHE_SIZE) {
+                final FastDispatchDataNode<T> newNext = new FastDispatchDataNode<>(receiver, result, newDispatchNode);
+                if (previousFast == null) {
+                    headFast = insert(newNext);
+                } else {
+                    previousFast.next = previousFast.insert(newNext);
+                }
+                return newNext.dispatchDirectNode;
+            }
+            return null; // Signals absolute megamorphic cliff
+        }
+
+        protected void removeFastNode(final FastDispatchDataNode<T> target) {
+            FastDispatchDataNode<T> previous = null;
+            FastDispatchDataNode<T> current = headFast;
+            while (current != null) {
+                if (current == target) {
+                    if (previous == null) {
+                        headFast = current.next;
+                    } else {
+                        previous.next = current.next;
+                    }
+                    return;
+                }
+                previous = current;
+                current = current.next;
+            }
+        }
+    }
+
+    public abstract static class AbstractGuardNode extends AbstractNode {
         abstract boolean execute(Object receiver);
 
         abstract boolean append(Object receiver, LookupResult result);
@@ -80,7 +180,7 @@ public class AbstractDisNode {
                 return true;
             }
             GuardChainDataNode current = head;
-            int count = 0;
+            int count = 1;
             while (current.next != null) {
                 current = current.next;
                 count++;
@@ -106,32 +206,25 @@ public class AbstractDisNode {
         }
     }
 
-    protected abstract static class GenericGuardNode extends AbstractGuardNode {
-        final NativeObject selector;
-        final CompiledCodeObject method;
-        final int expectNumArgs;
+    public static LookupResult resolveTargetMethod(final AbstractNode contextNode, final Object receiver, final NativeObject selector) {
+        final ClassObject receiverClass = SqueakObjectClassNode.executeUncached(receiver);
+        final SqueakImageContext image = contextNode.getContext();
 
-        GenericGuardNode(final NativeObject selector, final CompiledCodeObject method, final int expectNumArgs) {
-            this.selector = selector;
-            this.method = method;
-            this.expectNumArgs = expectNumArgs;
-        }
+        final Object lookupResult = image.lookup(receiverClass, selector);
 
-        @Specialization
-        boolean doGeneric(final Object receiver,
-                        @Bind final Node node,
-                        @Bind final SqueakImageContext image,
-                        @Cached(inline = true) final SqueakObjectClassNode classNode,
-                        @Cached final ResolveMethodNode methodNode) {
-            final ClassObject receiverClass = classNode.executeLookup(node, receiver);
-            final Object lookupResult = image.lookup(receiverClass, selector);
-            final CompiledCodeObject targetMethod = methodNode.execute(node, image, expectNumArgs, false, selector, receiverClass, lookupResult);
-            return method == targetMethod;
-        }
+        if (lookupResult instanceof final CompiledCodeObject lookupMethod) {
+            return new LookupResult(selector, receiverClass, lookupResult, lookupMethod, LookupKind.STANDARD_METHOD, null);
+        } else if (lookupResult == null) {
+            return new LookupResult(selector, receiverClass, lookupResult, receiverClass.resolveDispatchFailure(selector), LookupKind.DOES_NOT_UNDERSTAND, null);
+        } else {
+            final ClassObject lookupResultClass = SqueakObjectClassNode.executeUncached(lookupResult);
+            final Object runWithInLookupResult = LookupMethodNode.executeUncached(lookupResultClass, image.runWithInSelector);
 
-        @Override
-        boolean append(final Object receiver, final LookupResult result) {
-            return true; /* Always successful */
+            if (runWithInLookupResult instanceof final CompiledCodeObject runWithInMethod) {
+                return new LookupResult(selector, receiverClass, lookupResult, runWithInMethod, LookupKind.OBJECT_AS_METHOD, lookupResult);
+            } else {
+                return new LookupResult(selector, receiverClass, lookupResult, lookupResultClass.resolveDispatchFailure(selector), LookupKind.DOES_NOT_UNDERSTAND, null);
+            }
         }
     }
 

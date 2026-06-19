@@ -6,8 +6,6 @@
  */
 package de.hpi.swa.trufflesqueak.nodes.dispatch;
 
-import static de.hpi.swa.trufflesqueak.nodes.dispatch.AbstractDisNode.DISPATCH_CACHE_SIZE;
-
 import com.oracle.truffle.api.Assumption;
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.dsl.Bind;
@@ -29,13 +27,15 @@ import de.hpi.swa.trufflesqueak.model.NativeObject;
 import de.hpi.swa.trufflesqueak.model.PointersObject;
 import de.hpi.swa.trufflesqueak.nodes.AbstractNode;
 import de.hpi.swa.trufflesqueak.nodes.LookupMethodNode;
+import de.hpi.swa.trufflesqueak.nodes.LookupMethodNodeGen;
 import de.hpi.swa.trufflesqueak.nodes.accessing.SqueakObjectClassNode;
+import de.hpi.swa.trufflesqueak.nodes.accessing.SqueakObjectClassNodeGen;
 import de.hpi.swa.trufflesqueak.nodes.context.GetOrCreateContextWithoutFrameNode;
-import de.hpi.swa.trufflesqueak.nodes.dispatch.AbstractDisNode.AbstractGuardNode;
-import de.hpi.swa.trufflesqueak.nodes.dispatch.AbstractDisNode.GuardChainNode;
+import de.hpi.swa.trufflesqueak.nodes.dispatch.AbstractDisNode.DispatchCacheManager;
+import de.hpi.swa.trufflesqueak.nodes.dispatch.AbstractDisNode.FastDispatchDataNode;
 import de.hpi.swa.trufflesqueak.nodes.dispatch.AbstractDisNode.LookupKind;
 import de.hpi.swa.trufflesqueak.nodes.dispatch.AbstractDisNode.LookupResult;
-import de.hpi.swa.trufflesqueak.nodes.dispatch.AbstractDisNodeFactory.GenericGuardNodeGen;
+import de.hpi.swa.trufflesqueak.nodes.dispatch.AbstractDisNode.MegaDispatchDataNode;
 import de.hpi.swa.trufflesqueak.nodes.dispatch.Dis2NodeFactory.IndirectDis2NodeGen;
 import de.hpi.swa.trufflesqueak.nodes.dispatch.DispatchSelector2Node.DispatchDirectPrimitiveFallback2Node;
 import de.hpi.swa.trufflesqueak.nodes.dispatch.DispatchSelector2Node.DispatchIndirect2Node.CreateFrameArgumentsForIndirectCall2Node;
@@ -45,6 +45,8 @@ import de.hpi.swa.trufflesqueak.nodes.primitives.AbstractPrimitiveNode;
 import de.hpi.swa.trufflesqueak.nodes.primitives.Primitive.Primitive2;
 import de.hpi.swa.trufflesqueak.nodes.primitives.PrimitiveNodeFactory;
 import de.hpi.swa.trufflesqueak.util.FrameAccess;
+
+import static de.hpi.swa.trufflesqueak.nodes.dispatch.AbstractDisNode.resolveTargetMethod;
 
 public final class Dis2Node extends AbstractDispatchNode {
 
@@ -68,22 +70,6 @@ public final class Dis2Node extends AbstractDispatchNode {
     }
 
     abstract static class AbstractDis2Node extends AbstractNode {
-    }
-
-    static class DirectDisData2Node extends AbstractNode {
-        private final CompiledCodeObject method;
-        private final Assumption assumption;
-
-        @Child AbstractGuardNode guardChainNode;
-        @Child Dispatch2Node dispatchDirectNode;
-        @Child DirectDisData2Node next;
-
-        DirectDisData2Node(final Object receiver, final LookupResult result) {
-            guardChainNode = new GuardChainNode(receiver, result);
-            method = result.method();
-            assumption = method.getCallTargetStable();
-            dispatchDirectNode = Dispatch2Node.create(result);
-        }
     }
 
     public abstract static class Dispatch2Node extends AbstractNode {
@@ -180,92 +166,65 @@ public final class Dis2Node extends AbstractDispatchNode {
     }
 
     static class DirectDis2Node extends AbstractDis2Node {
-        @Child DirectDisData2Node head;
+        @Child private DispatchCacheManager<Dispatch2Node> cache;
+
+        DirectDis2Node() {
+            // Must be instantiated in constructor since selector is from parent
+        }
 
         @ExplodeLoop
         Object execute(final VirtualFrame frame, final Object receiver, final Object arg1, final Object arg2) {
-            DirectDisData2Node current = head;
-            while (current != null) {
-                if (!Assumption.isValidAssumption(current.assumption)) {
+            // Lazy initialization of the cache manager
+            if (cache == null) {
+                CompilerDirectives.transferToInterpreterAndInvalidate();
+                cache = insert(new DispatchCacheManager<>());
+            }
+
+            // TIER 1: Lean Fast Path
+            FastDispatchDataNode<Dispatch2Node> currentFast = cache.headFast;
+            while (currentFast != null) {
+                if (!Assumption.isValidAssumption(currentFast.assumption)) {
                     CompilerDirectives.transferToInterpreterAndInvalidate();
-                    remove(current);
+                    cache.removeFastNode(currentFast);
                     return executeAndSpecialize(frame, receiver, arg1, arg2);
                 }
-                if (current.guardChainNode.execute(receiver)) {
-                    return current.dispatchDirectNode.execute(frame, receiver, arg1, arg2);
+                if (currentFast.guardChainNode.execute(receiver)) {
+                    return currentFast.dispatchDirectNode.execute(frame, receiver, arg1, arg2);
                 }
-                current = current.next;
+                currentFast = currentFast.next;
             }
+
+            // TIER 2 & 3: Megamorphic Execution (PROTECTED BY NULL CHECK!)
+            if (cache.headMegamorphic != null) {
+                // We only do the heavy lookup if we ACTUALLY have megamorphic methods to check!
+                final NativeObject selector = ((Dis2Node) getParent()).selector;
+                final LookupResult result = resolveTargetMethod(this, receiver, selector);
+
+                MegaDispatchDataNode<Dispatch2Node> currentMega = cache.headMegamorphic;
+                while (currentMega != null) {
+                    if (currentMega.method == result.method()) {
+                        return currentMega.dispatchDirectNode.execute(frame, receiver, arg1, arg2);
+                    }
+                    currentMega = currentMega.next;
+                }
+            }
+
+            // TIER 4: Delegate Cache Miss to Centralized Manager
             CompilerDirectives.transferToInterpreterAndInvalidate();
             return executeAndSpecialize(frame, receiver, arg1, arg2);
         }
 
         Object executeAndSpecialize(final VirtualFrame frame, final Object receiver, final Object arg1, final Object arg2) {
             final NativeObject selector = ((Dis2Node) getParent()).selector;
-            final LookupResult result = resolveTargetMethod(receiver, selector);
+            final LookupResult result = resolveTargetMethod(this, receiver, selector);
 
-            DirectDisData2Node previous = null;
-            DirectDisData2Node current = head;
-            int count = 0;
-            while (current != null) {
-                if (current.method == result.method()) {
-                    if (!current.guardChainNode.append(receiver, result)) {
-                        current.guardChainNode = current.insert(GenericGuardNodeGen.create(selector, current.method, 2));
-                    }
-                    return current.dispatchDirectNode.execute(frame, receiver, arg1, arg2);
-                }
-                previous = current;
-                current = current.next;
-                count++;
-            }
-            if (count < DISPATCH_CACHE_SIZE) {
-                final DirectDisData2Node newNext = new DirectDisData2Node(receiver, result);
-                if (previous == null) {
-                    head = insert(newNext);
-                } else {
-                    previous.next = previous.insert(newNext);
-                }
-                return newNext.dispatchDirectNode.execute(frame, receiver, arg1, arg2);
+            Dispatch2Node aritySpecificNode = Dispatch2Node.create(result);
+            Dispatch2Node executor = cache.specialize(receiver, result, aritySpecificNode);
+            if (executor != null) {
+                return executor.execute(frame, receiver, arg1, arg2);
             } else {
                 this.reportPolymorphicSpecialize();
                 return replace(IndirectDis2NodeGen.create()).execute(frame, selector, receiver, arg1, arg2);
-            }
-        }
-
-        LookupResult resolveTargetMethod(final Object receiver, final NativeObject selector) {
-            final ClassObject receiverClass = SqueakObjectClassNode.executeUncached(receiver);
-            final Object lookupResult = receiverClass.lookupInMethodDictSlow(selector);
-            if (lookupResult instanceof final CompiledCodeObject lookupMethod) {
-                return new LookupResult(selector, receiverClass, lookupResult, lookupMethod, LookupKind.STANDARD_METHOD, null);
-            } else if (lookupResult == null) {
-                return new LookupResult(selector, receiverClass, lookupResult, receiverClass.resolveDispatchFailure(selector), LookupKind.DOES_NOT_UNDERSTAND, null);
-            } else {
-                final ClassObject lookupResultClass = SqueakObjectClassNode.executeUncached(lookupResult);
-                final Object runWithInLookupResult = LookupMethodNode.executeUncached(lookupResultClass, SqueakImageContext.getSlow().runWithInSelector);
-                if (runWithInLookupResult instanceof final CompiledCodeObject runWithInMethod) {
-                    return new LookupResult(selector, receiverClass, lookupResult, runWithInMethod, LookupKind.OBJECT_AS_METHOD, lookupResult);
-                } else {
-                    assert runWithInLookupResult == null;
-                    return new LookupResult(selector, receiverClass, lookupResult, lookupResultClass.resolveDispatchFailure(selector), LookupKind.DOES_NOT_UNDERSTAND, null);
-                }
-            }
-        }
-
-        void remove(final DirectDisData2Node target) {
-            assert head != null;
-            DirectDisData2Node previous = null;
-            DirectDisData2Node current = head;
-            while (current != null) {
-                if (current == target) {
-                    if (previous == null) {
-                        head = current.next;
-                    } else {
-                        previous.next = current.next;
-                    }
-                    return;
-                }
-                previous = current;
-                current = current.next;
             }
         }
     }
