@@ -28,7 +28,7 @@ public final class SelectorMegamorphicCache {
 
     private static final int EVICTION_COUNT_FOR_GROW = 16;
 
-    private static final int INITIAL_MEGAMORPHIC_CACHE_SIZE = 32;
+    private static final int INITIAL_MEGAMORPHIC_CACHE_SIZE = 4 * BUCKET_STRIDE;
     private static final int MAX_MEGAMORPHIC_CACHE_SIZE = 512;
 
     private final NativeObject selector;
@@ -49,7 +49,6 @@ public final class SelectorMegamorphicCache {
 
     /**
      * High-speed, inlinable entry point for megamorphic dispatch.
-     * Node is now the first argument!
      */
     public LookupResult lookupCached(final AbstractNode contextNode, final ClassObject receiverClass) {
         final Object[] currentCache = cacheArray;
@@ -85,11 +84,9 @@ public final class SelectorMegamorphicCache {
                 }
             }
 
-            // Calls the new delegate method!
             final LookupResult result = resolveTargetMethodByClass(contextNode, receiverClass, selector);
             final int newBase = cacheIndexFor(receiverClass, cacheSize);
             writeToFirstAvailableOrEvict(newCache, newBase, receiverClass, result);
-
             writeToFirstAvailableOrEvict(activeCache, oldBucketBase, receiverClass, result);
 
             cacheArray = newCache;
@@ -119,7 +116,7 @@ public final class SelectorMegamorphicCache {
         return result;
     }
     
-    private boolean writeToFirstAvailableOrEvict(final Object[] cache, final int bucketBase, final ClassObject receiverClass, final LookupResult result) {
+    private static boolean writeToFirstAvailableOrEvict(final Object[] cache, final int bucketBase, final ClassObject receiverClass, final LookupResult result) {
         for (int way = 0; way < CACHE_WAYS; way++) {
             final int targetIndex = bucketBase + (way * ENTRY_STEP);
             if (cache[targetIndex] == null) {
@@ -129,7 +126,7 @@ public final class SelectorMegamorphicCache {
             }
         }
 
-        final int chosenWay = (receiverClass.getSqueakHashInt() & Integer.MAX_VALUE) % CACHE_WAYS;
+        final int chosenWay = (System.identityHashCode(receiverClass) & Integer.MAX_VALUE) % CACHE_WAYS;
         final int evictIdx = bucketBase + (chosenWay * ENTRY_STEP);
         cache[evictIdx] = receiverClass;
         cache[evictIdx + 1] = result;
@@ -148,7 +145,7 @@ public final class SelectorMegamorphicCache {
     }
 
     private static int cacheIndexFor(final ClassObject receiverClass, final int cacheLength) {
-        final int mixed = receiverClass.getSqueakHashInt() * GOLDEN_RATIO_32;
+        final int mixed = System.identityHashCode(receiverClass) * GOLDEN_RATIO_32;
         final int totalBuckets = cacheLength / BUCKET_STRIDE;
         return (mixed & (totalBuckets - 1)) * BUCKET_STRIDE;
     }
