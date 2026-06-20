@@ -1041,9 +1041,7 @@ public final class SqueakImageContext {
         for (int i = 0; i < METHOD_CACHE_SIZE; i++) {
             methodCache[i].freeAndRelease();
         }
-        for (final SelectorMegamorphicCache cache : selectorCaches.values()) {
-            cache.flush();
-        }
+        flushSelectorCache();
     }
 
     /* Clear cache entries for selector (prim 119). */
@@ -1057,10 +1055,7 @@ public final class SqueakImageContext {
                 methodCache[i].freeAndRelease();
             }
         }
-        final SelectorMegamorphicCache cache = selectorCaches.get(selector);
-        if (cache != null) {
-            cache.flush();
-        }
+        flushSelectorCache(selector);
     }
 
     /* Clear cache entries for method (prim 116). */
@@ -1070,9 +1065,7 @@ public final class SqueakImageContext {
                 methodCache[i].freeAndRelease();
             }
         }
-        for (final SelectorMegamorphicCache cache : selectorCaches.values()) {
-            cache.flushForMethod(method);
-        }
+        flushSelectorCache();
     }
 
     public void flushMethodCacheAfterBecome() {
@@ -1082,7 +1075,27 @@ public final class SqueakImageContext {
 
     @TruffleBoundary
     public SelectorMegamorphicCache getSelectorCache(final NativeObject selector) {
-        return selectorCaches.computeIfAbsent(selector, SelectorMegamorphicCache::new);
+        SelectorMegamorphicCache cache = selectorCaches.get(selector);
+        if (cache == null) {
+            cache = new SelectorMegamorphicCache(selector);
+            selectorCaches.put(selector, cache);
+        }
+        return cache;
+    }
+
+    @TruffleBoundary
+    public void flushSelectorCache() {
+        for (final SelectorMegamorphicCache cache : selectorCaches.values()) {
+            cache.flush();
+        }
+    }
+
+    @TruffleBoundary
+    private void flushSelectorCache(final NativeObject selector) {
+        final SelectorMegamorphicCache cache = selectorCaches.get(selector);
+        if (cache != null) {
+            cache.flush();
+        }
     }
 
     /*

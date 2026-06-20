@@ -115,7 +115,7 @@ public final class SelectorMegamorphicCache {
         }
         return result;
     }
-    
+
     private static boolean writeToFirstAvailableOrEvict(final Object[] cache, final int bucketBase, final ClassObject receiverClass, final LookupResult result) {
         for (int way = 0; way < CACHE_WAYS; way++) {
             final int targetIndex = bucketBase + (way * ENTRY_STEP);
