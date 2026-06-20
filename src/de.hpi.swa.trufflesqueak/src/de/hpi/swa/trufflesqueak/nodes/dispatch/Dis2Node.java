@@ -8,6 +8,7 @@ package de.hpi.swa.trufflesqueak.nodes.dispatch;
 
 import com.oracle.truffle.api.Assumption;
 import com.oracle.truffle.api.CompilerDirectives;
+import com.oracle.truffle.api.CompilerDirectives.CompilationFinal;
 import com.oracle.truffle.api.dsl.Bind;
 import com.oracle.truffle.api.dsl.Cached;
 import com.oracle.truffle.api.dsl.GenerateInline;
@@ -26,14 +27,10 @@ import de.hpi.swa.trufflesqueak.model.CompiledCodeObject;
 import de.hpi.swa.trufflesqueak.model.NativeObject;
 import de.hpi.swa.trufflesqueak.model.PointersObject;
 import de.hpi.swa.trufflesqueak.nodes.AbstractNode;
-import de.hpi.swa.trufflesqueak.nodes.LookupMethodNode;
-import de.hpi.swa.trufflesqueak.nodes.LookupMethodNodeGen;
 import de.hpi.swa.trufflesqueak.nodes.accessing.SqueakObjectClassNode;
-import de.hpi.swa.trufflesqueak.nodes.accessing.SqueakObjectClassNodeGen;
 import de.hpi.swa.trufflesqueak.nodes.context.GetOrCreateContextWithoutFrameNode;
 import de.hpi.swa.trufflesqueak.nodes.dispatch.AbstractDisNode.DispatchCacheManager;
 import de.hpi.swa.trufflesqueak.nodes.dispatch.AbstractDisNode.FastDispatchDataNode;
-import de.hpi.swa.trufflesqueak.nodes.dispatch.AbstractDisNode.LookupKind;
 import de.hpi.swa.trufflesqueak.nodes.dispatch.AbstractDisNode.LookupResult;
 import de.hpi.swa.trufflesqueak.nodes.dispatch.AbstractDisNode.MegaDispatchDataNode;
 import de.hpi.swa.trufflesqueak.nodes.dispatch.Dis2NodeFactory.IndirectDis2NodeGen;
@@ -167,6 +164,7 @@ public final class Dis2Node extends AbstractDispatchNode {
 
     static class DirectDis2Node extends AbstractDis2Node {
         @Child private DispatchCacheManager<Dispatch2Node> cache;
+        @CompilationFinal private SelectorMegamorphicCache selectorCache;
 
         DirectDis2Node() {
             // Must be instantiated in constructor since selector is from parent
@@ -174,10 +172,12 @@ public final class Dis2Node extends AbstractDispatchNode {
 
         @ExplodeLoop
         Object execute(final VirtualFrame frame, final Object receiver, final Object arg1, final Object arg2) {
-            // Lazy initialization of the cache manager
+            // Lazy initialization of the cache manager and the selector cache
             if (cache == null) {
                 CompilerDirectives.transferToInterpreterAndInvalidate();
                 cache = insert(new DispatchCacheManager<>());
+                final NativeObject selector = ((Dis2Node) getParent()).selector;
+                selectorCache = getContext().getSelectorCache(selector);
             }
 
             // TIER 1: Lean Fast Path
@@ -197,8 +197,8 @@ public final class Dis2Node extends AbstractDispatchNode {
             // TIER 2 & 3: Megamorphic Execution (PROTECTED BY NULL CHECK!)
             if (cache.headMegamorphic != null) {
                 // We only do the heavy lookup if we ACTUALLY have megamorphic methods to check!
-                final NativeObject selector = ((Dis2Node) getParent()).selector;
-                final LookupResult result = resolveTargetMethod(this, receiver, selector);
+                final ClassObject receiverClass = SqueakObjectClassNode.executeUncached(receiver);
+                final LookupResult result = selectorCache.lookupCached(this, receiverClass);
 
                 MegaDispatchDataNode<Dispatch2Node> currentMega = cache.headMegamorphic;
                 while (currentMega != null) {
@@ -215,8 +215,8 @@ public final class Dis2Node extends AbstractDispatchNode {
         }
 
         Object executeAndSpecialize(final VirtualFrame frame, final Object receiver, final Object arg1, final Object arg2) {
-            final NativeObject selector = ((Dis2Node) getParent()).selector;
-            final LookupResult result = resolveTargetMethod(this, receiver, selector);
+            final ClassObject receiverClass = SqueakObjectClassNode.executeUncached(receiver);
+            final LookupResult result = selectorCache.lookupCached(this, receiverClass);
 
             final Dispatch2Node aritySpecificNode = Dispatch2Node.create(result);
             final Dispatch2Node executor = cache.specialize(receiver, result, aritySpecificNode);
@@ -224,7 +224,7 @@ public final class Dis2Node extends AbstractDispatchNode {
                 return executor.execute(frame, receiver, arg1, arg2);
             } else {
                 this.reportPolymorphicSpecialize();
-                return replace(IndirectDis2NodeGen.create()).execute(frame, selector, receiver, arg1, arg2);
+                return replace(IndirectDis2NodeGen.create()).execute(frame, selectorCache.getSelector(), receiver, arg1, arg2);
             }
         }
     }
@@ -236,21 +236,22 @@ public final class Dis2Node extends AbstractDispatchNode {
         @Specialization
         protected static final Object doIndirect(final VirtualFrame frame, final NativeObject selector, final Object receiver, final Object arg1, final Object arg2,
                         @Bind final Node node,
-                        @Bind final SqueakImageContext image,
+                        @SuppressWarnings("unused") @Bind final SqueakImageContext image,
                         @Cached(inline = true) final SqueakObjectClassNode classNode,
-                        @Cached final ResolveMethodNode methodNode,
+                        @Cached(value = "image.getSelectorCache(selector)", neverDefault = true) final SelectorMegamorphicCache selectorCache,
                         @Cached final TryPrimitive2Node tryPrimitiveNode,
                         @Cached(inline = true) final GetOrCreateContextWithoutFrameNode senderNode,
                         @Cached final CreateFrameArgumentsForIndirectCall2Node argumentsNode,
                         @Cached final IndirectCallNode callNode) {
             final ClassObject receiverClass = classNode.executeLookup(node, receiver);
-            final Object lookupResult = image.lookup(receiverClass, selector);
-            final CompiledCodeObject method = methodNode.execute(node, image, 2, false, selector, receiverClass, lookupResult);
+            final LookupResult lookupResult = selectorCache.lookupCached((AbstractNode) node, receiverClass);
+            final CompiledCodeObject method = lookupResult.method();
+
             final Object result = tryPrimitiveNode.execute(frame, method, receiver, arg1, arg2);
             if (result != null) {
                 return result;
             } else {
-                return callNode.call(method.getCallTarget(), argumentsNode.execute(node, senderNode.execute(frame, node), receiver, arg1, arg2, receiverClass, lookupResult, selector));
+                return callNode.call(method.getCallTarget(), argumentsNode.execute(node, senderNode.execute(frame, node), receiver, arg1, arg2, receiverClass, lookupResult.lookupResult(), selector));
             }
         }
     }

@@ -69,6 +69,7 @@ import de.hpi.swa.trufflesqueak.nodes.SqueakGuards;
 import de.hpi.swa.trufflesqueak.nodes.accessing.AbstractPointersObjectNodes.AbstractPointersObjectReadNode;
 import de.hpi.swa.trufflesqueak.nodes.accessing.AbstractPointersObjectNodes.AbstractPointersObjectWriteNode;
 import de.hpi.swa.trufflesqueak.nodes.accessing.SqueakObjectClassNode;
+import de.hpi.swa.trufflesqueak.nodes.dispatch.SelectorMegamorphicCache;
 import de.hpi.swa.trufflesqueak.nodes.interrupts.CheckForInterruptsState;
 import de.hpi.swa.trufflesqueak.nodes.plugins.B2D;
 import de.hpi.swa.trufflesqueak.nodes.plugins.BitBlt;
@@ -154,6 +155,8 @@ public final class SqueakImageContext {
     private static final int METHOD_CACHE_REPROBES = 4;
     private int methodCacheRandomish;
     @CompilationFinal(dimensions = 1) private final MethodCacheEntry[] methodCache = new MethodCacheEntry[METHOD_CACHE_SIZE];
+
+    private final HashMap<NativeObject, SelectorMegamorphicCache> selectorCaches = new HashMap<>();
 
     /* Interpreter state */
     private int primFailCode = -1;
@@ -1038,6 +1041,9 @@ public final class SqueakImageContext {
         for (int i = 0; i < METHOD_CACHE_SIZE; i++) {
             methodCache[i].freeAndRelease();
         }
+        for (final SelectorMegamorphicCache cache : selectorCaches.values()) {
+            cache.flush();
+        }
     }
 
     /* Clear cache entries for selector (prim 119). */
@@ -1051,6 +1057,10 @@ public final class SqueakImageContext {
                 methodCache[i].freeAndRelease();
             }
         }
+        final SelectorMegamorphicCache cache = selectorCaches.get(selector);
+        if (cache != null) {
+            cache.flush();
+        }
     }
 
     /* Clear cache entries for method (prim 116). */
@@ -1060,11 +1070,19 @@ public final class SqueakImageContext {
                 methodCache[i].freeAndRelease();
             }
         }
+        for (final SelectorMegamorphicCache cache : selectorCaches.values()) {
+            cache.flushForMethod(method);
+        }
     }
 
     public void flushMethodCacheAfterBecome() {
         /* TODO: Could be selective by checking class, selector, and method against mutations. */
         flushMethodCache();
+    }
+
+    @TruffleBoundary
+    public SelectorMegamorphicCache getSelectorCache(final NativeObject selector) {
+        return selectorCaches.computeIfAbsent(selector, SelectorMegamorphicCache::new);
     }
 
     /*

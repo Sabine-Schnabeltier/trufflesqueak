@@ -206,10 +206,11 @@ public class AbstractDisNode {
         }
     }
 
-    public static LookupResult resolveTargetMethod(final AbstractNode contextNode, final Object receiver, final NativeObject selector) {
-        final ClassObject receiverClass = SqueakObjectClassNode.executeUncached(receiver);
+    /**
+     * Resolves target method using the pre-extracted ClassObject of the receiver.
+     */
+    public static LookupResult resolveTargetMethodByClass(final AbstractNode contextNode, final ClassObject receiverClass, final NativeObject selector) {
         final SqueakImageContext image = contextNode.getContext();
-
         final Object lookupResult = image.lookup(receiverClass, selector);
 
         if (lookupResult instanceof final CompiledCodeObject lookupMethod) {
@@ -226,6 +227,14 @@ public class AbstractDisNode {
                 return new LookupResult(selector, receiverClass, lookupResult, lookupResultClass.resolveDispatchFailure(selector), LookupKind.DOES_NOT_UNDERSTAND, null);
             }
         }
+    }
+
+    /**
+     * Resolves target method by extracting the Squeak class from the raw receiver object first.
+     */
+    public static LookupResult resolveTargetMethod(final AbstractNode contextNode, final Object receiver, final NativeObject selector) {
+        final ClassObject receiverClass = SqueakObjectClassNode.executeUncached(receiver);
+        return resolveTargetMethodByClass(contextNode, receiverClass, selector);
     }
 
     protected record LookupResult(NativeObject selector, ClassObject receiverClass, Object lookupResult, CompiledCodeObject method, LookupKind kind, Object targetObject) {
