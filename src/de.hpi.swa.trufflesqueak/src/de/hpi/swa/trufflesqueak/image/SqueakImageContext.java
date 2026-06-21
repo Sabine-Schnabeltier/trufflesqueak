@@ -161,6 +161,8 @@ public final class SqueakImageContext {
     @CompilationFinal(dimensions = 1) private final MethodCacheEntry[] methodCache = new MethodCacheEntry[METHOD_CACHE_SIZE];
 
     private final HashMap<NativeObject, SelectorMegamorphicCache> selectorCaches = new HashMap<>();
+    private int largestTopologicalID = 0;
+    private int nextOrphanID = Integer.MAX_VALUE;
 
     /* Interpreter state */
     private int primFailCode = -1;
@@ -255,7 +257,7 @@ public final class SqueakImageContext {
         if (squeakImage == null) {
             // Load image.
             SqueakImageReader.load(this);
-            computeClassIntervals();
+            assignTopologicalIDs();
             if (options.disableStartup()) {
                 LogUtils.IMAGE.info("Skipping startup routine...");
                 return;
@@ -542,7 +544,8 @@ public final class SqueakImageContext {
                     page.setObject(i, clazz);
                     clazz.setSqueakHash(classTableIndex);
                     assert lookupClassIndex(classTableIndex) == clazz;
-                    computeClassIntervals();
+                    // Append the class to the end of the ID space.
+                    clazz.setTopologicalID(++largestTopologicalID);
                     return;
                 }
             }
@@ -606,7 +609,7 @@ public final class SqueakImageContext {
         }
         assert classTableIndex >= SqueakImageConstants.CLASS_TABLE_PAGE_SIZE : "classTableIndex must never index the first page, which is reserved for classes known to the VM";
         if (atLeastOneClassDeleted) {
-            computeClassIntervals();
+            assignTopologicalIDs();
         }
     }
 
@@ -658,10 +661,16 @@ public final class SqueakImageContext {
      * CLASS INTERVALS
      */
 
+    /**
+     * Performs a depth-first traversal to assign sequential IDs to the class hierarchy.
+     * @see ClassObject#topologicalID
+     */
     @TruffleBoundary
-    public void computeClassIntervals() {
+    public void assignTopologicalIDs() {
         final Map<ClassObject, List<ClassObject>> subclassMap = new HashMap<>();
         final List<ClassObject> roots = new ArrayList<>();
+
+        printSelectorCacheStats();
 
         for (int majorIndex = 0; majorIndex < numClassTablePages; majorIndex++) {
             final Object pageOrNil = hiddenRoots.getObject(majorIndex);
@@ -672,6 +681,9 @@ public final class SqueakImageContext {
                         if (!classObject.isNotForwarded()) {
                             classObject = (ClassObject) classObject.getForwardingPointer();
                         }
+
+                        // If the DFS skips this class, avoid colliding.
+                        classObject.setTopologicalID(getNextOrphanID());
 
                         ClassObject superclass = classObject.getSuperclassOrNull();
                         if (superclass != null && !superclass.isNotForwarded()) {
@@ -688,33 +700,34 @@ public final class SqueakImageContext {
             }
         }
 
-        // Execute the depth-first "timeline" traversal
-        final int[] timelineCounter = new int[]{0};
+        // Reset the universe counter for a full topological sort
+        largestTopologicalID = 0;
         final Set<ClassObject> dfsVisited = new HashSet<>();
 
         for (final ClassObject root : roots) {
-            assignIntervalsDFS(root, subclassMap, timelineCounter, dfsVisited);
+            assignTopologicalIDsDFS(root, subclassMap, dfsVisited);
         }
 
         flushSelectorCache();
     }
 
-    private void assignIntervalsDFS(final ClassObject classObject, final Map<ClassObject, List<ClassObject>> subclassMap, final int[] counter, final Set<ClassObject> visited) {
+    private void assignTopologicalIDsDFS(final ClassObject classObject, final Map<ClassObject, List<ClassObject>> subclassMap, final Set<ClassObject> visited) {
         if (!visited.add(classObject)) {
             return;
         }
 
-        final int start = ++counter[0];
-
+        classObject.setTopologicalID(++largestTopologicalID);
         final List<ClassObject> subclasses = subclassMap.get(classObject);
         if (subclasses != null) {
             for (final ClassObject child : subclasses) {
-                assignIntervalsDFS(child, subclassMap, counter, visited);
+                assignTopologicalIDsDFS(child, subclassMap, visited);
             }
         }
+    }
 
-        final int length = counter[0] - start;
-        classObject.setInterval(start, length);    }
+    public int getNextOrphanID() {
+        return nextOrphanID--;
+    }
 
     /*
      * ACCESSING
@@ -1043,6 +1056,7 @@ public final class SqueakImageContext {
     public void finalizeContext() {
         if (options.printResourceSummary()) {
             MiscUtils.printResourceSummary();
+            printSelectorCacheStats();
         }
     }
 
@@ -1173,6 +1187,80 @@ public final class SqueakImageContext {
         if (cache != null) {
             cache.flush();
         }
+    }
+
+    public void printSelectorCacheStats() {
+        CompilerAsserts.neverPartOfCompilation("For debugging purposes only");
+        if (true) {
+            return;
+        }
+
+        int totalCaches = 0;
+        int activeCaches = 0;
+        int flushedCaches = 0;
+        int totalSize = 0;
+        int totalCoveredClasses = 0;
+        int totalCapacity = 0;
+        int flushedCapacity = 0;
+        int totalValid = 0;
+        int maxCacheSize = 0;
+        NativeObject largestSelector = null;
+
+        for (final SelectorMegamorphicCache cache : selectorCaches.values()) {
+            totalCaches++;
+            final int size = cache.getSize();
+            final int capacity = cache.getCapacity();
+
+            totalCapacity += capacity;
+
+            if (size == 0) {
+                flushedCaches++;
+                flushedCapacity += capacity;
+                continue;
+            }
+
+            activeCaches++;
+            totalSize += size;
+            totalValid += cache.getValidResultsCount();
+            totalCoveredClasses += cache.getCoveredIdSpan();
+
+            if (size > maxCacheSize) {
+                maxCacheSize = size;
+                largestSelector = cache.getSelector();
+            }
+        }
+
+        final StringBuilder sb = new StringBuilder();
+        sb.append("=== SelectorMegamorphicCache Statistics ===\n");
+        sb.append("Total Caches Tracked: ").append(totalCaches).append('\n');
+        sb.append("  -> Active: ").append(activeCaches).append('\n');
+        sb.append("  -> Flushed/Empty: ").append(flushedCaches).append('\n');
+        sb.append("Unique Classes Cached (Topological Span): ").append(totalCoveredClasses).append('\n');
+        sb.append("Total Boundaries (Size): ").append(totalSize).append('\n');
+
+        if (totalSize > 0) {
+            final double compression = (double) totalCoveredClasses / totalSize;
+            // Using Locale.US or similar format string to ensure consistent decimal separators
+            sb.append(String.format("Estimated Compression Ratio: %.2fx\n", compression));
+        }
+
+        sb.append("Total Allocated (Capacity): ").append(totalCapacity).append('\n');
+        if (flushedCaches > 0) {
+            sb.append("  -> Capacity retained by flushed caches: ").append(flushedCapacity).append('\n');
+        }
+
+        final int hitPercentage = totalSize > 0 ? (totalValid * 100 / totalSize) : 0;
+        sb.append("Valid Results (Non-Holes): ").append(totalValid).append(" (").append(hitPercentage).append("%)\n");
+
+        if (largestSelector != null) {
+            sb.append("Largest Cache: ").append(largestSelector.asStringUnsafe())
+                    .append(" (Size: ").append(maxCacheSize).append(")\n");
+        }
+        sb.append("===========================================");
+
+        // Checkstyle: stop
+        System.out.println(sb.toString());
+        // Checkstyle: resume
     }
 
     /*

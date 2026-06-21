@@ -11,7 +11,6 @@ import java.util.Arrays;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 
 import de.hpi.swa.trufflesqueak.model.ClassObject;
-import de.hpi.swa.trufflesqueak.model.CompiledCodeObject;
 import de.hpi.swa.trufflesqueak.model.NativeObject;
 import de.hpi.swa.trufflesqueak.nodes.AbstractNode;
 import de.hpi.swa.trufflesqueak.nodes.dispatch.AbstractDisNode.LookupKind;
@@ -23,14 +22,12 @@ public final class SelectorMegamorphicCache {
     private final NativeObject selector;
 
     private int size = 0;
-    private int[] starts;
-    private int[] ends;
+    private int[] boundaries;
     private LookupResult[] results;
 
     public SelectorMegamorphicCache(final NativeObject selector) {
         this.selector = selector;
-        this.starts = new int[INITIAL_CAPACITY];
-        this.ends = new int[INITIAL_CAPACITY];
+        this.boundaries = new int[INITIAL_CAPACITY];
         this.results = new LookupResult[INITIAL_CAPACITY];
     }
 
@@ -38,38 +35,93 @@ public final class SelectorMegamorphicCache {
         return selector;
     }
 
-    public LookupResult lookupCached(final AbstractNode contextNode, final ClassObject receiverClass) {
-        final int id = receiverClass.getIntervalStart();
+    public int getSize() {
+        return size;
+    }
 
-        final int[] currentStarts = starts;
-        final int[] currentEnds = ends;
+    public int getCapacity() {
+        return boundaries.length;
+    }
+
+    public int getValidResultsCount() {
+        int count = 0;
+        for (int i = 0; i < size; i++) {
+            if (results[i] != null) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    public int getCoveredIdSpan() {
+        int span = 0;
+        for (int i = 0; i < size; i++) {
+            if (results[i] != null) {
+                // Because the rightmost boundary always maps to null,
+                // if we are here, (i + 1) is guaranteed to be within bounds.
+                span += (boundaries[i + 1] - boundaries[i]);
+            }
+        }
+        return span;
+    }
+
+    /**
+     * The Hot Path: O(1) Unrolled Step Function followed by O(log N) Floor Binary Search.
+     */
+    public LookupResult lookupCached(final AbstractNode contextNode, final ClassObject receiverClass) {
+        final int id = receiverClass.getTopologicalID();
+
+        final int[] bounds = boundaries;
+        final LookupResult[] res = results;
         final int currentSize = size;
 
-        // TIER 1: Manually unrolled linear scan for small caches.
-        // Because there are no loops, GraalVM perfectly unrolls this into
-        // straight-line machine code without needing @CompilationFinal.
+        // TIER 1: Unrolled Step Function Loop (Optimal L1 Cache & Instruction Pipeline)
         if (currentSize <= 4) {
-            if (currentSize > 0 && id >= currentStarts[0] && id <= currentEnds[0]) return results[0];
-            if (currentSize > 1 && id >= currentStarts[1] && id <= currentEnds[1]) return results[1];
-            if (currentSize > 2 && id >= currentStarts[2] && id <= currentEnds[2]) return results[2];
-            if (currentSize > 3 && id >= currentStarts[3] && id <= currentEnds[3]) return results[3];
+            if (currentSize == 0 || id < bounds[0]) {
+                return rebuildAndLookup(contextNode, receiverClass);
+            }
+            if (currentSize == 1) {
+                return res[0] != null ? res[0] : rebuildAndLookup(contextNode, receiverClass);
+            }
+            if (currentSize == 2) {
+                if (id < bounds[1]) return res[0] != null ? res[0] : rebuildAndLookup(contextNode, receiverClass);
+                return res[1] != null ? res[1] : rebuildAndLookup(contextNode, receiverClass);
+            }
+            if (currentSize == 3) {
+                if (id < bounds[1]) return res[0] != null ? res[0] : rebuildAndLookup(contextNode, receiverClass);
+                if (id < bounds[2]) return res[1] != null ? res[1] : rebuildAndLookup(contextNode, receiverClass);
+                return res[2] != null ? res[2] : rebuildAndLookup(contextNode, receiverClass);
+            }
+            if (currentSize == 4) {
+                if (id < bounds[1]) return res[0] != null ? res[0] : rebuildAndLookup(contextNode, receiverClass);
+                if (id < bounds[2]) return res[1] != null ? res[1] : rebuildAndLookup(contextNode, receiverClass);
+                if (id < bounds[3]) return res[2] != null ? res[2] : rebuildAndLookup(contextNode, receiverClass);
+                return res[3] != null ? res[3] : rebuildAndLookup(contextNode, receiverClass);
+            }
+        }
+
+        // TIER 2: Floor Binary Search
+        if (id < bounds[0]) {
             return rebuildAndLookup(contextNode, receiverClass);
         }
 
-        // TIER 2: Standard Binary Search for larger caches.
         int low = 0;
         int high = currentSize - 1;
+        int match = 0;
 
         while (low <= high) {
             final int mid = (low + high) >>> 1;
-
-            if (id < currentStarts[mid]) {
-                high = mid - 1;
-            } else if (id > currentEnds[mid]) {
-                low = mid + 1;
+            if (bounds[mid] <= id) {
+                match = mid;     // Valid lower bound found
+                low = mid + 1;   // Search higher for a tighter fit
             } else {
-                return results[mid];
+                high = mid - 1;  // Overshot, search lower
             }
+        }
+
+        final LookupResult result = res[match];
+        if (result != null) {
+            return result;
         }
 
         return rebuildAndLookup(contextNode, receiverClass);
@@ -79,23 +131,22 @@ public final class SelectorMegamorphicCache {
     private LookupResult rebuildAndLookup(final AbstractNode contextNode, final ClassObject receiverClass) {
         final LookupResult finalResult = AbstractDisNode.resolveTargetMethodByClass(contextNode, receiverClass, selector);
 
-        // Exceptional cases (DNU and Object-As-Method) resolve using different selectors
-        // under the hood. Upward chain-warming is mathematically unsafe for them.
+        // Do not perform upward chain-warming for exceptional routes like DNU
         if (finalResult.kind() != LookupKind.STANDARD_METHOD) {
-            final int currentId = receiverClass.getIntervalStart();
+            final int currentId = receiverClass.getTopologicalID();
             if (currentId > 0) {
-                insertOrMerge(currentId, finalResult);
+                setPoint(currentId, finalResult);
             }
             return finalResult;
         }
 
-        // Standard chain-warming for normal method lookups
+        // Standard upward chain-warming
         ClassObject current = receiverClass;
         while (current != null) {
-            final int currentId = current.getIntervalStart();
+            final int currentId = current.getTopologicalID();
 
             if (currentId > 0) {
-                insertOrMerge(currentId, finalResult);
+                setPoint(currentId, finalResult);
             }
 
             if (current.hasMethodDirectly(selector)) {
@@ -108,96 +159,121 @@ public final class SelectorMegamorphicCache {
         return finalResult;
     }
 
-    private void insertOrMerge(final int id, final LookupResult newResult) {
+    /**
+     * Splits and merges step-function intervals to set the result at a specific ID.
+     */
+    private void setPoint(final int id, final LookupResult result) {
+        final LookupResult valAtId = getVal(id);
+        if (isSameResult(valAtId, result)) {
+            return; // No change needed
+        }
+
+        // Preserve the value that should exist immediately after our insertion point
+        final LookupResult valAfter = getVal(id + 1);
+
+        // Force boundaries in reverse order so we don't clobber valAfter
+        forceBoundary(id + 1, valAfter);
+        forceBoundary(id, result);
+
+        // Clean up any redundant boundaries created by the split
+        cleanUp(floorSearch(id + 1));
+        cleanUp(floorSearch(id));
+    }
+
+    private int floorSearch(final int id) {
+        if (size == 0 || id < boundaries[0]) {
+            return -1;
+        }
         int low = 0;
         int high = size - 1;
-        int insertIndex = 0;
+        int match = 0;
 
         while (low <= high) {
             final int mid = (low + high) >>> 1;
-            if (id < starts[mid]) {
-                high = mid - 1;
-                insertIndex = mid;
-            } else if (id > ends[mid]) {
+            if (boundaries[mid] <= id) {
+                match = mid;
                 low = mid + 1;
-                insertIndex = mid + 1;
             } else {
-                results[mid] = newResult;
-                return;
+                high = mid - 1;
             }
         }
+        return match;
+    }
 
-        final CompiledCodeObject targetMethod = newResult.method();
-        boolean mergedLeft = false;
-        final int leftIndex = insertIndex - 1;
+    private LookupResult getVal(final int id) {
+        final int idx = floorSearch(id);
+        return idx >= 0 ? results[idx] : null;
+    }
 
-        if (leftIndex >= 0 && ends[leftIndex] == id - 1 && results[leftIndex].method() == targetMethod) {
-            ends[leftIndex] = id;
-            mergedLeft = true;
-        }
-
-        boolean mergedRight = false;
-        final int rightIndex = insertIndex;
-
-        if (rightIndex < size && starts[rightIndex] == id + 1 && results[rightIndex].method() == targetMethod) {
-            if (mergedLeft) {
-                ends[leftIndex] = ends[rightIndex];
-                removeIntervalAt(rightIndex);
-            } else {
-                starts[rightIndex] = id;
-            }
-            mergedRight = true;
-        }
-
-        if (!mergedLeft && !mergedRight) {
-            insertIntervalAt(insertIndex, id, id, newResult);
+    private void forceBoundary(final int x, final LookupResult val) {
+        final int idx = floorSearch(x);
+        if (idx >= 0 && boundaries[idx] == x) {
+            results[idx] = val; // Direct overwrite if boundary exactly matches
+        } else {
+            insertAt(idx + 1, x, val); // Split existing segment
         }
     }
 
-    private void removeIntervalAt(final int index) {
-        final int elementsAfter = size - index - 1;
-        if (elementsAfter > 0) {
-            System.arraycopy(starts, index + 1, starts, index, elementsAfter);
-            System.arraycopy(ends, index + 1, ends, index, elementsAfter);
-            System.arraycopy(results, index + 1, results, index, elementsAfter);
+    private void cleanUp(final int idx) {
+        if (idx < 0 || idx >= size) {
+            return;
         }
-
-        size--;
-        results[size] = null; // Prevent memory leak of the LookupResult
+        if (idx > 0 && isSameResult(results[idx], results[idx - 1])) {
+            removeAt(idx);
+        } else if (idx == 0 && results[0] == null) {
+            // Because values < boundaries[0] implicitly evaluate to null,
+            // an explicit boundary mapped to null at index 0 is redundant.
+            removeAt(0);
+        }
     }
 
-    private void insertIntervalAt(final int index, final int start, final int end, final LookupResult result) {
+    private static boolean isSameResult(final LookupResult a, final LookupResult b) {
+        if (a == b) {
+            return true;
+        }
+        if (a == null || b == null) {
+            return false;
+        }
+        return a.method() == b.method() && a.kind() == b.kind() && a.targetObject() == b.targetObject();
+    }
+
+    private void insertAt(final int index, final int x, final LookupResult val) {
         ensureCapacity();
-
         final int elementsAfter = size - index;
         if (elementsAfter > 0) {
-            System.arraycopy(starts, index, starts, index + 1, elementsAfter);
-            System.arraycopy(ends, index, ends, index + 1, elementsAfter);
+            System.arraycopy(boundaries, index, boundaries, index + 1, elementsAfter);
             System.arraycopy(results, index, results, index + 1, elementsAfter);
         }
-
-        starts[index] = start;
-        ends[index] = end;
-        results[index] = result;
+        boundaries[index] = x;
+        results[index] = val;
         size++;
     }
 
+    private void removeAt(final int index) {
+        final int elementsAfter = size - index - 1;
+        if (elementsAfter > 0) {
+            System.arraycopy(boundaries, index + 1, boundaries, index, elementsAfter);
+            System.arraycopy(results, index + 1, results, index, elementsAfter);
+        }
+        size--;
+        results[size] = null; // Prevent memory leak
+    }
+
     private void ensureCapacity() {
-        if (size == starts.length) {
-            final int newCapacity = starts.length * 2;
-            starts = Arrays.copyOf(starts, newCapacity);
-            ends = Arrays.copyOf(ends, newCapacity);
+        if (size == boundaries.length) {
+            final int newCapacity = boundaries.length * 2;
+            boundaries = Arrays.copyOf(boundaries, newCapacity);
             results = Arrays.copyOf(results, newCapacity);
         }
     }
 
     public void flush() {
-        // Clear object references to avoid memory leaks
-        Arrays.fill(results, 0, size, null);
+        boundaries = new int[INITIAL_CAPACITY];
+        results = new LookupResult[INITIAL_CAPACITY];
         size = 0;
     }
 
-    public void flushForMethod(final CompiledCodeObject method) {
+    public void flushForMethod(final de.hpi.swa.trufflesqueak.model.CompiledCodeObject method) {
         flush();
     }
 }

@@ -49,22 +49,37 @@ public final class ClassObject extends AbstractSqueakObjectWithClassAndHash {
 
     @CompilationFinal private ObjectLayout layout;
 
-    private int intervalStart = 0;
-    private int intervalLength = 0;
+    /**
+     * A dense integer ID used as the primary lookup key in the SelectorMegamorphicCache.
+     * This ID is periodically assigned via a Depth-First Search (DFS) of the class hierarchy
+     * (typically during Garbage Collection). By traversing the hierarchy topologically, a class
+     * and its subclasses are guaranteed to receive sequential, contiguous IDs.
+     * This topological grouping allows the step-function dispatch cache to coalesce identical
+     * inherited methods into compressed continuous intervals for megamorphic call sites.
+     * (e.g., squashing thousands of subclass entries down to a single array boundary).
+     * Note: When new classes are created dynamically, they are lazily appended to the end of
+     * the ID space to avoid system-wide cache invalidation. Because this temporarily
+     * fragments the topological continuity, this ID cannot be reliably used for O(1) subtype
+     * checking bounds until the next full DFS heals the tree.
+     */
+    private int topologicalID;
 
     public ClassObject(final SqueakImageContext image) {
         super();
         this.image = image;
+        this.topologicalID = image.getNextOrphanID();
     }
 
     public ClassObject(final SqueakImageChunk chunk) {
         super(chunk);
         this.image = chunk.getImage();
+        this.topologicalID = image.getNextOrphanID();
     }
 
     public ClassObject(final ClassObject original) {
         super((AbstractSqueakObjectWithClassAndHash) original);
         image = original.image;
+        this.topologicalID = image.getNextOrphanID();
         instancesAreClasses = original.instancesAreClasses;
         superclass = original.superclass;
         assert superclass == null || superclass.assertNotForwarded();
@@ -78,6 +93,7 @@ public final class ClassObject extends AbstractSqueakObjectWithClassAndHash {
     public ClassObject(final SqueakImageContext image, final ClassObject classObject, final int size) {
         super(classObject);
         this.image = image;
+        this.topologicalID = image.getNextOrphanID();
         pointers = ArrayUtils.withAll(Math.max(size - CLASS_DESCRIPTION.INLINE_POINTERS, 0), NilObject.SINGLETON);
         instancesAreClasses = image.isMetaClass(classObject);
         // `size - CLASS_DESCRIPTION.SIZE` is negative when instantiating "Behavior".
@@ -371,7 +387,7 @@ public final class ClassObject extends AbstractSqueakObjectWithClassAndHash {
         assert superclass == null || superclass.assertNotForwarded();
         invalidateClassHierarchyAndMethodDictStableAssumption("new superclass");
         this.superclass = superclass;
-        image.computeClassIntervals();
+        image.assignTopologicalIDs();
         /*
          * TODO: Instead of a full global flush, this should be refined to only flush entries in
          * image.methodCache where the entry's class is `this` class or a subclass of `this` class.
@@ -390,17 +406,12 @@ public final class ClassObject extends AbstractSqueakObjectWithClassAndHash {
         image.flushMethodCache();
     }
 
-    public void setInterval(final int start, final int length) {
-        this.intervalStart = start;
-        this.intervalLength = length;
+    public int getTopologicalID() {
+        return topologicalID;
     }
 
-    public int getIntervalStart() {
-        return intervalStart;
-    }
-
-    public int getIntervalLength() {
-        return intervalLength;
+    public void setTopologicalID(final int id) {
+        this.topologicalID = id;
     }
 
     public boolean hasMethodDirectly(final NativeObject selector) {
