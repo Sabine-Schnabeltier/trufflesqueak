@@ -8,8 +8,12 @@ package de.hpi.swa.trufflesqueak.image;
 
 import java.lang.ref.ReferenceQueue;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.logging.Level;
 
 import org.graalvm.collections.UnmodifiableEconomicMap;
@@ -251,6 +255,7 @@ public final class SqueakImageContext {
         if (squeakImage == null) {
             // Load image.
             SqueakImageReader.load(this);
+            computeClassIntervals();
             if (options.disableStartup()) {
                 LogUtils.IMAGE.info("Skipping startup routine...");
                 return;
@@ -411,16 +416,8 @@ public final class SqueakImageContext {
     }
 
     /*
-     * ACCESSING
+     * CLASS TABLE
      */
-
-    public SqueakLanguage getLanguage() {
-        return language;
-    }
-
-    public boolean toggleCurrentMarkingFlag() {
-        return currentMarkingFlag = !currentMarkingFlag;
-    }
 
     /* SpurMemoryManager>>#setHiddenRootsObj: */
     public void setHiddenRoots(final ArrayObject theHiddenRoots) {
@@ -545,6 +542,7 @@ public final class SqueakImageContext {
                     page.setObject(i, clazz);
                     clazz.setSqueakHash(classTableIndex);
                     assert lookupClassIndex(classTableIndex) == clazz;
+                    computeClassIntervals();
                     return;
                 }
             }
@@ -577,6 +575,7 @@ public final class SqueakImageContext {
     /* SpurMemoryManager>>#purgeDuplicateClassTableEntriesFor: */
     public void purgeDuplicateAndUnreachableClassTableEntriesFor(final ClassObject clazz, final UnmodifiableEconomicMap<Object, Object> becomeMap) {
         final int expectedIndex = clazz != null ? clazz.getSqueakHashInt() : -1;
+        boolean atLeastOneClassDeleted = false;
         // Must search all pages, but classTableIndex cannot be in page zero.
         for (int majorIndex = 0; majorIndex < numClassTablePages; majorIndex++) {
             // Guaranteed to be non-nil.
@@ -592,6 +591,7 @@ public final class SqueakImageContext {
                     final boolean isDuplicate = entry == clazz && currentClassTableIndex != expectedIndex && currentClassTableIndex > SqueakImageConstants.LAST_CLASS_INDEX_PUN;
                     if (isDuplicate || isUnreachable(entry)) {
                         page.setObject(minorIndex, NilObject.SINGLETON);
+                        atLeastOneClassDeleted = true;
                         if (currentClassTableIndex < classTableIndex) {
                             // Guaranteed not in page 0 since classes there can't be deleted.
                             classTableIndex = currentClassTableIndex;
@@ -605,6 +605,9 @@ public final class SqueakImageContext {
             }
         }
         assert classTableIndex >= SqueakImageConstants.CLASS_TABLE_PAGE_SIZE : "classTableIndex must never index the first page, which is reserved for classes known to the VM";
+        if (atLeastOneClassDeleted) {
+            computeClassIntervals();
+        }
     }
 
     private boolean isUnreachable(final Object object) {
@@ -649,6 +652,80 @@ public final class SqueakImageContext {
     public void flushCachesForSelector(final NativeObject selector) {
         flushCachesForSelectorInClassTable(selector);
         flushMethodCacheForSelector(selector);
+    }
+
+    /*
+     * CLASS INTERVALS
+     */
+
+    @TruffleBoundary
+    public void computeClassIntervals() {
+        final Map<ClassObject, List<ClassObject>> subclassMap = new HashMap<>();
+        final List<ClassObject> roots = new ArrayList<>();
+
+        for (int majorIndex = 0; majorIndex < numClassTablePages; majorIndex++) {
+            final Object pageOrNil = hiddenRoots.getObject(majorIndex);
+            if (pageOrNil instanceof final ArrayObject page && page.isObjectType()) {
+                for (final Object entry : page.getObjectStorage()) {
+                    if (entry instanceof ClassObject classObject) {
+
+                        if (!classObject.isNotForwarded()) {
+                            classObject = (ClassObject) classObject.getForwardingPointer();
+                        }
+
+                        ClassObject superclass = classObject.getSuperclassOrNull();
+                        if (superclass != null && !superclass.isNotForwarded()) {
+                            superclass = (ClassObject) superclass.getForwardingPointer();
+                        }
+
+                        if (superclass != null) {
+                            subclassMap.computeIfAbsent(superclass, k -> new ArrayList<>()).add(classObject);
+                        } else {
+                            roots.add(classObject);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Execute the depth-first "timeline" traversal
+        final int[] timelineCounter = new int[]{0};
+        final Set<ClassObject> dfsVisited = new HashSet<>();
+
+        for (final ClassObject root : roots) {
+            assignIntervalsDFS(root, subclassMap, timelineCounter, dfsVisited);
+        }
+
+        flushSelectorCache();
+    }
+
+    private void assignIntervalsDFS(final ClassObject classObject, final Map<ClassObject, List<ClassObject>> subclassMap, final int[] counter, final Set<ClassObject> visited) {
+        if (!visited.add(classObject)) {
+            return;
+        }
+
+        final int start = ++counter[0];
+
+        final List<ClassObject> subclasses = subclassMap.get(classObject);
+        if (subclasses != null) {
+            for (final ClassObject child : subclasses) {
+                assignIntervalsDFS(child, subclassMap, counter, visited);
+            }
+        }
+
+        final int length = counter[0] - start;
+        classObject.setInterval(start, length);    }
+
+    /*
+     * ACCESSING
+     */
+
+    public SqueakLanguage getLanguage() {
+        return language;
+    }
+
+    public boolean toggleCurrentMarkingFlag() {
+        return currentMarkingFlag = !currentMarkingFlag;
     }
 
     public TruffleFile getHomePath() {

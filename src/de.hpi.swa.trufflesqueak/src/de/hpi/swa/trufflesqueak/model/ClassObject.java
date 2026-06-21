@@ -49,6 +49,9 @@ public final class ClassObject extends AbstractSqueakObjectWithClassAndHash {
 
     @CompilationFinal private ObjectLayout layout;
 
+    private int intervalStart = 0;
+    private int intervalLength = 0;
+
     public ClassObject(final SqueakImageContext image) {
         super();
         this.image = image;
@@ -368,6 +371,7 @@ public final class ClassObject extends AbstractSqueakObjectWithClassAndHash {
         assert superclass == null || superclass.assertNotForwarded();
         invalidateClassHierarchyAndMethodDictStableAssumption("new superclass");
         this.superclass = superclass;
+        image.computeClassIntervals();
         /*
          * TODO: Instead of a full global flush, this should be refined to only flush entries in
          * image.methodCache where the entry's class is `this` class or a subclass of `this` class.
@@ -384,6 +388,32 @@ public final class ClassObject extends AbstractSqueakObjectWithClassAndHash {
          * image.methodCache where the entry's class is `this` class or a subclass of `this` class.
          */
         image.flushMethodCache();
+    }
+
+    public void setInterval(final int start, final int length) {
+        this.intervalStart = start;
+        this.intervalLength = length;
+    }
+
+    public int getIntervalStart() {
+        return intervalStart;
+    }
+
+    public int getIntervalLength() {
+        return intervalLength;
+    }
+
+    public boolean hasMethodDirectly(final NativeObject selector) {
+        final VariablePointersObject methodDictionary = getResolvedMethodDict();
+        if (methodDictionary == null) {
+            return false;
+        }
+        for (final Object dictSelector : methodDictionary.getVariablePart()) {
+            if (selector == dictSelector) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
