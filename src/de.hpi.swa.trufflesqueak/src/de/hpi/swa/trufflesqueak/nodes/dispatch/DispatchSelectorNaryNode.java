@@ -10,7 +10,7 @@ import com.oracle.truffle.api.Assumption;
 import com.oracle.truffle.api.CompilerAsserts;
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
-import com.oracle.truffle.api.HostCompilerDirectives;
+import com.oracle.truffle.api.HostCompilerDirectives.InliningCutoff;
 import com.oracle.truffle.api.dsl.Bind;
 import com.oracle.truffle.api.dsl.Cached;
 import com.oracle.truffle.api.dsl.Cached.Shared;
@@ -19,11 +19,11 @@ import com.oracle.truffle.api.dsl.GenerateInline;
 import com.oracle.truffle.api.dsl.GenerateUncached;
 import com.oracle.truffle.api.dsl.ImportStatic;
 import com.oracle.truffle.api.dsl.NeverDefault;
-import com.oracle.truffle.api.dsl.ReportPolymorphism;
 import com.oracle.truffle.api.dsl.Specialization;
 import com.oracle.truffle.api.frame.MaterializedFrame;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.nodes.DirectCallNode;
+import com.oracle.truffle.api.nodes.ExplodeLoop;
 import com.oracle.truffle.api.nodes.IndirectCallNode;
 import com.oracle.truffle.api.nodes.Node;
 import com.oracle.truffle.api.profiles.InlinedBranchProfile;
@@ -43,6 +43,7 @@ import de.hpi.swa.trufflesqueak.nodes.accessing.AbstractPointersObjectNodes.Abst
 import de.hpi.swa.trufflesqueak.nodes.accessing.SqueakObjectClassNode;
 import de.hpi.swa.trufflesqueak.nodes.context.GetOrCreateContextWithoutFrameNode;
 import de.hpi.swa.trufflesqueak.nodes.dispatch.DispatchSelectorNaryNodeFactory.DispatchDirectPrimitiveFallbackNaryNodeGen;
+import de.hpi.swa.trufflesqueak.nodes.dispatch.DispatchSelectorNaryNodeFactory.DispatchIndirectNaryNodeGen;
 import de.hpi.swa.trufflesqueak.nodes.dispatch.DispatchSelectorNaryNodeFactory.DispatchIndirectNaryNodeGen.TryPrimitiveNaryNodeGen;
 import de.hpi.swa.trufflesqueak.nodes.primitives.AbstractPrimitiveNode;
 import de.hpi.swa.trufflesqueak.nodes.primitives.Primitive.Primitive0;
@@ -58,80 +59,198 @@ import de.hpi.swa.trufflesqueak.nodes.primitives.Primitive.Primitive7;
 import de.hpi.swa.trufflesqueak.nodes.primitives.Primitive.Primitive8;
 import de.hpi.swa.trufflesqueak.nodes.primitives.Primitive.Primitive9;
 import de.hpi.swa.trufflesqueak.nodes.primitives.PrimitiveNodeFactory;
-import de.hpi.swa.trufflesqueak.util.ArrayUtils;
 import de.hpi.swa.trufflesqueak.util.FrameAccess;
 import de.hpi.swa.trufflesqueak.util.MiscUtils;
 
 public final class DispatchSelectorNaryNode extends AbstractDispatchSelectorNode {
-    protected abstract static class AbstractDispatchNaryNode extends AbstractDispatchNode {
-        AbstractDispatchNaryNode(final NativeObject selector) {
-            super(selector);
+    protected abstract static class AbstractDispatchNaryNode<T extends AbstractDispatchDirectNode> extends AbstractDispatchNode<T> {
+        AbstractDispatchNaryNode(final NativeObject selector, final boolean canPrimFail) {
+            super(selector, canPrimFail);
         }
 
         public abstract Object execute(VirtualFrame frame, Object receiver, Object[] arguments);
     }
 
-    public abstract static class DispatchNaryNode extends AbstractDispatchNaryNode {
-        DispatchNaryNode(final NativeObject selector) {
-            super(selector);
+    public static final class DispatchNaryNode extends AbstractDispatchNaryNode<DispatchDirectNaryNode> {
+        @Child private DispatchIndirectNaryNode indirectNode;
+
+        private DispatchNaryNode(final NativeObject selector) {
+            super(selector, false);
         }
 
         @NeverDefault
         public static DispatchNaryNode create(final NativeObject selector) {
-            return DispatchSelectorNaryNodeFactory.DispatchNaryNodeGen.create(selector);
+            return new DispatchNaryNode(selector);
         }
 
-        @Specialization(guards = {"guard.check(receiver)", "arguments.length == cachedArity"}, assumptions = "dispatchDirectNode.getAssumptions()", limit = "INLINE_METHOD_CACHE_LIMIT")
-        protected static final Object doDirect(final VirtualFrame frame, final Object receiver, final Object[] arguments,
-                        @SuppressWarnings("unused") @Cached("create(receiver)") final LookupClassGuard guard,
-                        @SuppressWarnings("unused") @Cached("arguments.length") final int cachedArity,
-                        @Cached("create(selector, guard, cachedArity)") final DispatchDirectNaryNode dispatchDirectNode) {
-            return dispatchDirectNode.execute(frame, receiver, arguments);
+        @Override
+        @ExplodeLoop
+        @InliningCutoff
+        public Object execute(final VirtualFrame frame, final Object receiver, final Object[] arguments) {
+            final byte currentState = state;
+
+            // TIER 0: Pure Monomorphic Fast Path
+            if ((currentState & HAS_MONO) != 0) {
+                if (Assumption.isValidAssumption(monoExecutor.getAssumptions()) && monoGuard.check(receiver)) {
+                    return monoExecutor.execute(frame, receiver, arguments);
+                }
+            }
+
+            // TIER 3: Megamorphic Fallback (Indirect Execution)
+            if ((currentState & HAS_INDIRECT) != 0) {
+                return indirectNode.execute(frame, canPrimFail(), selector, receiver, arguments);
+            }
+
+            // TIER 1: Direct Execution Fast Path
+            if ((currentState & HAS_FAST) != 0) {
+                for (final DispatchEntry<DispatchDirectNaryNode> entry : fastEntries) {
+                    if (entry.isFastCacheHit(receiver)) {
+                        return entry.executor.execute(frame, receiver, arguments);
+                    }
+                }
+            }
+
+            // TIER 2: Wide Execution (Class Polymorphism)
+            if ((currentState & HAS_WIDE) != 0) {
+                /* Local snapshot guards against stale compiled code during invalidation. */
+                final SqueakObjectClassNode node = classNode;
+                if (node != null) {
+                    final ClassObject receiverClass = node.executeLookup(this, receiver);
+                    final Object lookupResult = getContext().lookup(receiverClass, selector);
+
+                    if (lookupResult instanceof CompiledCodeObject targetMethod) {
+                        for (final DispatchEntry<DispatchDirectNaryNode> entry : wideEntries) {
+                            if (entry.isWideCacheHit(targetMethod)) {
+                                return entry.executor.execute(frame, receiver, arguments);
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Cache Miss: Delegate to superclass for Specialization
+            CompilerDirectives.transferToInterpreterAndInvalidate();
+            return executeAndSpecialize(frame, receiver, arguments);
         }
 
-        @ReportPolymorphism.Megamorphic
-        @Specialization(replaces = "doDirect")
-        @HostCompilerDirectives.InliningCutoff
-        @SuppressWarnings("truffle-static-method")
-        protected final Object doIndirect(final VirtualFrame frame, final Object receiver, final Object[] arguments,
-                        @Cached final DispatchIndirectNaryNode dispatchNode) {
-            return dispatchNode.execute(frame, false, selector, receiver, arguments);
+        private Object executeAndSpecialize(final VirtualFrame frame, final Object receiver, final Object[] arguments) {
+            /*
+             * Guard against lagging recursive frames.
+             */
+            if ((state & HAS_INDIRECT) != 0) {
+                return indirectNode.execute(frame, canPrimFail(), selector, receiver, arguments);
+            }
+
+            ensureClassNode();
+            final ClassObject receiverClass = classNode.executeLookup(this, receiver);
+            final Object lookupResult = getContext().lookup(receiverClass, selector);
+
+            final DispatchDirectNaryNode executor = specialize(receiver, receiverClass, lookupResult,
+                            () -> DispatchDirectNaryNode.create(selector, receiverClass, arguments.length));
+
+            if (executor != null) {
+                return executor.execute(frame, receiver, arguments);
+            } else {
+                reportPolymorphicSpecialize();
+                indirectNode = insert(DispatchIndirectNaryNodeGen.create());
+                convertToIndirect();
+                return indirectNode.execute(frame, canPrimFail(), selector, receiver, arguments);
+            }
         }
     }
 
-    public abstract static class DispatchPerformNaryNode extends AbstractDispatchNaryNode {
-        DispatchPerformNaryNode(final NativeObject selector) {
-            super(selector);
+    public static final class DispatchPerformNaryNode extends AbstractDispatchNaryNode<DispatchDirectNaryNode> {
+        @Child private DispatchIndirectNaryNode indirectNode;
+
+        private DispatchPerformNaryNode(final NativeObject selector) {
+            super(selector, true);
         }
 
         @NeverDefault
         public static DispatchPerformNaryNode create(final NativeObject selector) {
-            return DispatchSelectorNaryNodeFactory.DispatchPerformNaryNodeGen.create(selector);
+            return new DispatchPerformNaryNode(selector);
         }
 
-        @Specialization(guards = {"guard.check(receiver)", "arguments.length == cachedArity"}, assumptions = "dispatchDirectNode.getAssumptions()", limit = "INLINE_METHOD_CACHE_LIMIT")
-        protected static final Object doDirect(final VirtualFrame frame, final Object receiver, final Object[] arguments,
-                        @SuppressWarnings("unused") @Cached("create(receiver)") final LookupClassGuard guard,
-                        @SuppressWarnings("unused") @Cached("arguments.length") final int cachedArity,
-                        @Cached("create(selector, guard, cachedArity)") final DispatchDirectNaryNode dispatchDirectNode) {
-            return dispatchDirectNode.executeWithCheckedArguments(frame, receiver, arguments);
+        @Override
+        @ExplodeLoop
+        public Object execute(final VirtualFrame frame, final Object receiver, final Object[] arguments) {
+            final byte currentState = state;
+
+            // TIER 0: Pure Monomorphic Fast Path
+            if ((currentState & HAS_MONO) != 0) {
+                if (Assumption.isValidAssumption(monoExecutor.getAssumptions()) && monoGuard.check(receiver)) {
+                    return monoExecutor.executeWithCheckedArguments(frame, receiver, arguments);
+                }
+            }
+
+            // TIER 3: Megamorphic Fallback (Indirect Execution)
+            if ((currentState & HAS_INDIRECT) != 0) {
+                return indirectNode.execute(frame, canPrimFail(), selector, receiver, arguments);
+            }
+
+            // TIER 1: Direct Execution Fast Path
+            if ((currentState & HAS_FAST) != 0) {
+                for (final DispatchEntry<DispatchDirectNaryNode> entry : fastEntries) {
+                    if (entry.isFastCacheHit(receiver)) {
+                        return entry.executor.executeWithCheckedArguments(frame, receiver, arguments); // Checked Execution
+                    }
+                }
+            }
+
+            // TIER 2: Wide Execution (Class Polymorphism)
+            if ((currentState & HAS_WIDE) != 0) {
+                /* Local snapshot guards against stale compiled code during invalidation. */
+                final SqueakObjectClassNode node = classNode;
+                if (node != null) {
+                    final ClassObject receiverClass = node.executeLookup(this, receiver);
+                    final Object lookupResult = getContext().lookup(receiverClass, selector);
+
+                    if (lookupResult instanceof CompiledCodeObject targetMethod) {
+                        for (final DispatchEntry<DispatchDirectNaryNode> entry : wideEntries) {
+                            if (entry.isWideCacheHit(targetMethod)) {
+                                return entry.executor.executeWithCheckedArguments(frame, receiver, arguments); // Checked Execution
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Cache Miss: Delegate to superclass for Specialization
+            CompilerDirectives.transferToInterpreterAndInvalidate();
+            return executeAndSpecialize(frame, receiver, arguments);
         }
 
-        @ReportPolymorphism.Megamorphic
-        @Specialization(replaces = "doDirect")
-        @HostCompilerDirectives.InliningCutoff
-        @SuppressWarnings("truffle-static-method")
-        protected final Object doIndirect(final VirtualFrame frame, final Object receiver, final Object[] arguments,
-                        @Cached final DispatchIndirectNaryNode dispatchNode) {
-            return dispatchNode.execute(frame, true, selector, receiver, arguments);
+        private Object executeAndSpecialize(final VirtualFrame frame, final Object receiver, final Object[] arguments) {
+            /*
+             * Guard against lagging recursive frames.
+             */
+            if ((state & HAS_INDIRECT) != 0) {
+                return indirectNode.execute(frame, canPrimFail(), selector, receiver, arguments);
+            }
+
+            ensureClassNode();
+            final ClassObject receiverClass = classNode.executeLookup(this, receiver);
+            final Object lookupResult = getContext().lookup(receiverClass, selector);
+
+            final DispatchDirectNaryNode executor = specialize(receiver, receiverClass, lookupResult,
+                            () -> DispatchDirectNaryNode.create(selector, receiverClass, arguments.length));
+
+            if (executor != null) {
+                return executor.executeWithCheckedArguments(frame, receiver, arguments);
+            } else {
+                reportPolymorphicSpecialize();
+                indirectNode = insert(DispatchIndirectNaryNodeGen.create());
+                convertToIndirect();
+                return indirectNode.execute(frame, canPrimFail(), selector, receiver, arguments);
+            }
         }
     }
 
-    public abstract static class DispatchSuperNaryNode extends AbstractDispatchNaryNode {
+    public abstract static class DispatchSuperNaryNode extends AbstractDispatchNaryNode<DispatchDirectNaryNode> {
         protected final CompiledCodeObject method;
 
         DispatchSuperNaryNode(final CompiledCodeObject codeObject, final NativeObject selector) {
-            super(selector);
+            super(selector, false);
             method = codeObject.getMethod();
         }
 
@@ -143,9 +262,9 @@ public final class DispatchSelectorNaryNode extends AbstractDispatchSelectorNode
         }
     }
 
-    public abstract static class DispatchDirectedSuperNaryNode extends AbstractDispatchNode {
+    public abstract static class DispatchDirectedSuperNaryNode extends AbstractDispatchNode<DispatchDirectNaryNode> {
         DispatchDirectedSuperNaryNode(final NativeObject selector) {
-            super(selector);
+            super(selector, false);
         }
 
         public abstract Object execute(VirtualFrame frame, ClassObject lookupClass, Object receiver, Object[] arguments);
