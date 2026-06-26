@@ -73,6 +73,10 @@ public abstract class AbstractDispatchNode extends AbstractNode {
                     if (currentFast.guardChainNode.append(receiver, newDispatchNode.getAssumptions())) {
                         return currentFast.dispatchDirectNode;
                     } else {
+                        if (true) {
+                            return null;
+                        }
+
                         // Guard chain overflow: Transition directly to wide execution
                         removeFastNode(currentFast, previousFast);
 
