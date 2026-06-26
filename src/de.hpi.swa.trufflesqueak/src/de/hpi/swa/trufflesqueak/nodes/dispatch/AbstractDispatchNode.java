@@ -51,6 +51,10 @@ public abstract class AbstractDispatchNode extends AbstractNode {
         protected T specialize(final Object receiver, final Object lookupResult, final T newDispatchNode) {
             int totalMethodCount = 0;
 
+            if (true) {
+                return null;
+            }
+
             FastDispatchDataNode<T> currentFast = headFast;
             FastDispatchDataNode<T> previousFast = null;
 
