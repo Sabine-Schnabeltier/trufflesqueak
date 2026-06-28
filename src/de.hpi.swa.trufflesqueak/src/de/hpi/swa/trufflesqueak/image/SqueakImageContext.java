@@ -166,7 +166,8 @@ public final class SqueakImageContext {
     // The maximum message arity that supports DNU shortcuts.
     public static final int MAX_DNU_SHORTCUT_ARITY = 3;
 
-    @CompilationFinal(dimensions = 1) private NativeObject[] dnuShortcutSelectors = new NativeObject[0];
+    private final Assumption dnuShortcutsAbsent = Truffle.getRuntime().createAssumption("DNU shortcuts");
+    @CompilationFinal(dimensions = 1) private NativeObject[] dnuShortcutSelectors = null;
 
     /* Method Cache */
     private static final int METHOD_CACHE_SIZE = 2 << 12;
@@ -478,16 +479,32 @@ public final class SqueakImageContext {
         return null;
     }
 
+    public boolean hasDNUShortcut(final int arity) {
+        return hasDNUShortcuts() && arity < MAX_DNU_SHORTCUT_ARITY;
+    }
+
+    public boolean hasDNUShortcuts() {
+        assert (dnuShortcutSelectors == null) == dnuShortcutsAbsent.isValid() : "DNU shortcuts assumption out of sync";
+        return dnuShortcutSelectors != null;
+    }
+
+    public Assumption getDnuShortcutsAbsent() {
+        return dnuShortcutsAbsent;
+    }
+
     public void setDNUShortcutSelectors(final NativeObject[] newSelectors) {
         CompilerDirectives.transferToInterpreterAndInvalidate();
+        dnuShortcutsAbsent.invalidate("DNU shortcuts set");
         dnuShortcutSelectors = newSelectors;
         flushMethodCache();
     }
 
     private boolean isDNUShortcutSelector(final NativeObject selector) {
-        for (final NativeObject shortcutSelector : dnuShortcutSelectors) {
-            if (selector == shortcutSelector) {
-                return true;
+        if (hasDNUShortcuts()) {
+            for (final NativeObject shortcutSelector : dnuShortcutSelectors) {
+                if (selector == shortcutSelector) {
+                    return true;
+                }
             }
         }
         return false;
