@@ -6,13 +6,13 @@
  */
 package de.hpi.swa.trufflesqueak.image;
 
+import java.lang.foreign.SymbolLookup;
 import java.lang.ref.ReferenceQueue;
 import java.util.ArrayDeque;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.logging.Level;
 
-import de.hpi.swa.trufflesqueak.util.DebugUtils;
 import org.graalvm.collections.UnmodifiableEconomicMap;
 
 import com.oracle.truffle.api.Assumption;
@@ -75,11 +75,11 @@ import de.hpi.swa.trufflesqueak.nodes.plugins.B2D;
 import de.hpi.swa.trufflesqueak.nodes.plugins.BitBlt;
 import de.hpi.swa.trufflesqueak.nodes.plugins.JPEGReader;
 import de.hpi.swa.trufflesqueak.nodes.plugins.Zip;
-import de.hpi.swa.trufflesqueak.nodes.plugins.ffi.InterpreterProxy;
 import de.hpi.swa.trufflesqueak.nodes.process.SignalSemaphoreNodeGen;
 import de.hpi.swa.trufflesqueak.shared.SqueakImageLocator;
 import de.hpi.swa.trufflesqueak.tools.SqueakMessageInterceptor;
 import de.hpi.swa.trufflesqueak.util.ArrayUtils;
+import de.hpi.swa.trufflesqueak.util.DebugUtils;
 import de.hpi.swa.trufflesqueak.util.FrameAccess;
 import de.hpi.swa.trufflesqueak.util.LogUtils;
 import de.hpi.swa.trufflesqueak.util.MethodCacheEntry;
@@ -209,8 +209,7 @@ public final class SqueakImageContext {
     @CompilationFinal private Object smalltalkScope;
 
     /* Plugins */
-    @CompilationFinal private InterpreterProxy interpreterProxy;
-    public final Map<String, Object> loadedLibraries = new HashMap<>();
+    public final Map<String, SymbolLookup> loadedLibraries = new HashMap<>();
     public final B2D b2d = new B2D(this);
     public final BitBlt bitblt = new BitBlt(this);
     public String[] dropPluginFileList = ArrayUtils.EMPTY_STRINGS_ARRAY;
@@ -847,14 +846,6 @@ public final class SqueakImageContext {
     public boolean supportsNFI() {
         CompilerAsserts.neverPartOfCompilation();
         return env.getInternalLanguages().containsKey("nfi");
-    }
-
-    public InterpreterProxy getInterpreterProxy(final Object[] receiverAndArguments) {
-        if (interpreterProxy == null) {
-            CompilerDirectives.transferToInterpreterAndInvalidate();
-            interpreterProxy = new InterpreterProxy(this);
-        }
-        return interpreterProxy.instanceFor(receiverAndArguments);
     }
 
     public PointersObject getScheduler() {

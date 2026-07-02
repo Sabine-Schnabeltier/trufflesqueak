@@ -140,9 +140,9 @@ suite = {
                 "resources",
             ],
             "dependencies": [
+                "de.hpi.swa.trufflesqueak.interpreterproxy.bindings",
                 "TRUFFLESQUEAK_SHARED",
                 "truffle:TRUFFLE_API",
-                "truffle:TRUFFLE_NFI",
             ],
             "requires": [
                 "java.datatransfer",
@@ -178,22 +178,15 @@ suite = {
             "javaCompliance": "24+",
             "workingSets": "TruffleSqueak",
         },
-        "de.hpi.swa.trufflesqueak.ffi.native": {
+        "de.hpi.swa.trufflesqueak.interpreterproxy.bindings": {
             "subDir": "src",
-            "class": "CMakeNinjaProject",
-            "vpath": True,
-            "ninja_targets": ["all"],
-            "os_arch": {
-                "<others>": {
-                    "<others>": {
-                        "cmakeConfig": {},
-                        "results": [
-                            "<lib:SqueakFFIPrims>",
-                            "<lib:InterpreterProxy>",
-                        ],
-                    },
-                },
-            },
+            "sourceDirs": ["src"],
+            "eclipseformat": False,
+            "forceJavac": True,
+            "javac.lint.overrides": "-restricted",
+            "jacoco": "exclude",
+            "javaCompliance": "24+",
+            "workingSets": "TruffleSqueak",
         },
         "de.hpi.swa.trufflesqueak.sdl3": {
             "subDir": "src",
@@ -257,7 +250,6 @@ suite = {
             "relative_module_path": "../modules",
             "relative_extracted_lib_paths": {
                 "truffle.attach.library": "../jvmlibs/<lib:truffleattach>",
-                "truffle.nfi.library": "../jvmlibs/<lib:trufflenfi>",
                 "java.library.path": "../lib",
             },
             "liblang_relpath": "../lib/<lib:smalltalkvm>",
@@ -306,12 +298,9 @@ suite = {
                 "TRUFFLESQUEAK_SDL3",
                 "TRUFFLESQUEAK_SHARED",
                 "truffle:TRUFFLE_API",
-                "truffle:TRUFFLE_NFI",
-                "truffle:TRUFFLE_NFI_LIBFFI",  # runtime dependency
-                "truffle:TRUFFLE_NFI_PANAMA",  # runtime dependency
             ],
             "javaProperties": {
-                "org.graalvm.language.smalltalk.home": "<path:TRUFFLESQUEAK_HOME>",
+                "org.graalvm.language.smalltalk.home": "<path:TRUFFLESQUEAK_GRAALVM_SUPPORT_PLATFORM_SPECIFIC>",
             },
             "maven": {
                 "artifactId": "smalltalk-language",
@@ -366,7 +355,6 @@ suite = {
                 "LICENSE_TRUFFLESQUEAK.txt": "file:LICENSE",
                 "README_TRUFFLESQUEAK.md": "file:README.md",
                 "lib/": [
-                    "dependency:de.hpi.swa.trufflesqueak.ffi.native/*",
                     {
                         "source_type": "extracted-dependency",
                         "dependency": "OSVM_PLUGINS",
@@ -500,7 +488,6 @@ suite = {
                     "amd64": {
                         "layout": {
                             "lib/": [
-                                "dependency:de.hpi.swa.trufflesqueak.ffi.native/*",
                                 {
                                     "source_type": "extracted-dependency",
                                     "dependency": "OSVM_PLUGINS",
@@ -513,7 +500,6 @@ suite = {
                     "aarch64": {
                         "layout": {
                             "lib/": [
-                                "dependency:de.hpi.swa.trufflesqueak.ffi.native/*",
                                 {
                                     "source_type": "extracted-dependency",
                                     "dependency": "OSVM_PLUGINS",
@@ -528,7 +514,6 @@ suite = {
                     "aarch64": {
                         "layout": {
                             "lib/": [
-                                "dependency:de.hpi.swa.trufflesqueak.ffi.native/*",
                                 {
                                     "source_type": "extracted-dependency",
                                     "dependency": "OSVM_PLUGINS",
@@ -543,7 +528,6 @@ suite = {
                     "amd64": {
                         "layout": {
                             "lib/": [
-                                "dependency:de.hpi.swa.trufflesqueak.ffi.native/*",
                                 {
                                     "source_type": "extracted-dependency",
                                     "dependency": "OSVM_PLUGINS",
@@ -635,7 +619,6 @@ suite = {
                 },
                 "jvmlibs/": [
                     "extracted-dependency:truffle:TRUFFLE_ATTACH_GRAALVM_SUPPORT",
-                    "extracted-dependency:truffle:TRUFFLE_NFI_NATIVE_GRAALVM_SUPPORT",
                 ],
                 "modules/": [
                     "classpath-dependencies:TRUFFLESQUEAK_STANDALONE_DEPENDENCIES",
