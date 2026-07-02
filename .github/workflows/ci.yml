@@ -46,11 +46,8 @@ jobs:
         python-version: '${{ env.PYTHON_VERSION }}'
     - name: Set up dependencies
       run: |
-        # Download Eclipse SDK
-        eclipse_tar_path="${RUNNER_TEMP}/eclipse.tar.gz"
-        wget --no-verbose https://archive.eclipse.org/eclipse/downloads/drops4/R-4.36-202505281830/eclipse-SDK-4.36-linux-gtk-x86_64.tar.gz -O ${eclipse_tar_path}
-        tar -xzf ${eclipse_tar_path} -C ${RUNNER_TEMP}
-        echo "ECLIPSE_EXE=${RUNNER_TEMP}/eclipse/eclipse" >> "${GITHUB_ENV}" # required by mx
+        # Compile with ECJ (and javac) as part of gate runs tagged with 'fullbuild'
+        export "JDT=builtin" >> $GITHUB_ENV
         # Set up mx, oracle/graal, and LabsJDK
         mx.trufflesqueak/utils.sh "set-up-mx && shallow-clone-graal && set-up-labsjdk latest"
         # Set up style dependencies
