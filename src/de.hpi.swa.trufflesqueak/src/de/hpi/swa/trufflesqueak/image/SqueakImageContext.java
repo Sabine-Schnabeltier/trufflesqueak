@@ -843,11 +843,6 @@ public final class SqueakImageContext {
         return linkedListClass;
     }
 
-    public boolean supportsNFI() {
-        CompilerAsserts.neverPartOfCompilation();
-        return env.getInternalLanguages().containsKey("nfi");
-    }
-
     public PointersObject getScheduler() {
         if (scheduler == null) {
             CompilerDirectives.transferToInterpreterAndInvalidate();
