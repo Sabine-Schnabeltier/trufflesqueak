@@ -51,32 +51,28 @@ suite = {
     # ==========================================================================
     "libraries": {
         "OSVM_PLUGINS": {
-            "baseurl": "https://github.com/hpi-swa/trufflesqueak/releases/download/24.2.2/osvm-plugins-202509110624",
+            "baseurl": "https://github.com/fniephaus/opensmalltalk-vm/releases/download/202607030734",
             "os_arch": {
                 "linux": {
                     "aarch64": {
-                        "urls": ["{baseurl}-linux-aarch64.zip"],
-                        "digest": "sha512:cec920765eae6dca8b95e5a24b34333fdaf5b2b9d634ff4cb42fd1a73fec24ab6fafcde7a5c27bc06441fa1c381bd05c8d48f09e3b56d8e61c590fe37d17076f",
+                        "urls": ["{baseurl}/squeak.cog.spur_linux64ARMv8.tar.gz"],
+                        "digest": "sha512:94a548dafa36843518759f37c8c118b4bb770f8707a9722cc40dbde661699ea755fbc6248a0b380a75a2d272f6b19512484c27b22abac0124b220f048dcf4690",
                     },
                     "amd64": {
-                        "urls": ["{baseurl}-linux-amd64.zip"],
-                        "digest": "sha512:ef7e6bcebb0b544908a68439685ac5ddfd60cfff13d0fcf77e0433e3a65d4185fc079907144a593e3667466fdafa2c38fbca94ba52adc7227c4a59829c5aa375",
+                        "urls": ["{baseurl}/squeak.cog.spur_linux64x64.tar.gz"],
+                        "digest": "sha512:669100d86a56ce64bde5b9dda981b8f4e1f675cc9b72ee4cb728f1156602fe474ea5f2c75cfa0fcae600f7dfe4c8a72248e373e3fb7d194aa865d3c895c390f0",
                     },
                 },
                 "darwin": {
                     "aarch64": {
-                        "urls": ["{baseurl}-darwin-aarch64.zip"],
-                        "digest": "sha512:662239e86d9a50344d23b0ff20571059f0218569455855b80f29b1f356af9fa476dfc863d86dfddf896aa48732023bf9c1132c3c9cc365feed9340f1de55d8cb",
-                    },
-                    "amd64": {
-                        "urls": ["{baseurl}-darwin-amd64.zip"],
-                        "digest": "sha512:21e1ddf84e34b228af8a352f77d810591143010c1ea0fd95b02c96822cbc1c2bdbf754de08333259cd7101d14f0ce2d19b035c7366176e07634438b968091ed7",
+                        "urls": ["{baseurl}/squeak.cog.spur_macos64ARMv8.tar.gz"],
+                        "digest": "sha512:8fde0da8c4c42900d943867b3531b546f21462d32ae57965f6a67ef8dae4041b924209e0edcff4c3f69b4b3789d401d578a7a4a3d330c54574173f53c346a7bc",
                     },
                 },
                 "windows": {
                     "amd64": {
-                        "urls": ["{baseurl}-windows-amd64.zip"],
-                        "digest": "sha512:92dd38360192b6623dac6452791b6caa0c3108a9d31d3453895b5d63dff35e8ec0aa48660fdcf3a0d10c4782101447fb6afda420ff6dd056d506b02df0c0f9f5",
+                        "urls": ["{baseurl}/squeak.cog.spur_win64x64.zip"],
+                        "digest": "sha512:a96afc9f28384f07539b85bf400cfdab28b6c05c08510ae5153040ec92d8365d01f1a7158f9e2cca4080c7451f8c870e518f04670f38c567b793e8793a9d0806",
                     },
                 },
                 "<others>": {"<others>": {"optional": True}},
@@ -347,23 +343,6 @@ suite = {
             },
             "license": ["MIT"],
         },
-        "TRUFFLESQUEAK_HOME": {
-            "native": True,
-            "platformDependent": True,
-            "description": "TruffleSqueak home distribution",
-            "layout": {
-                "LICENSE_TRUFFLESQUEAK.txt": "file:LICENSE",
-                "README_TRUFFLESQUEAK.md": "file:README.md",
-                "lib/": [
-                    {
-                        "source_type": "extracted-dependency",
-                        "dependency": "OSVM_PLUGINS",
-                        "path": "*",
-                    },
-                ],
-            },
-            "maven": False,
-        },
         "TRUFFLESQUEAK_LAUNCHER": {
             "description": "TruffleSqueak launcher",
             "moduleInfo": {
@@ -488,11 +467,9 @@ suite = {
                     "amd64": {
                         "layout": {
                             "lib/": [
-                                {
-                                    "source_type": "extracted-dependency",
-                                    "dependency": "OSVM_PLUGINS",
-                                    "path": "*",
-                                },
+                                "extracted-dependency:OSVM_PLUGINS/sqcogspur64linuxht/lib/squeak/*/JPEGReadWriter2Plugin.so",
+                                "extracted-dependency:OSVM_PLUGINS/sqcogspur64linuxht/lib/squeak/*/LocalePlugin.so",
+                                "extracted-dependency:OSVM_PLUGINS/sqcogspur64linuxht/lib/squeak/*/SqueakSSL.so",
                                 "extracted-dependency:LWJGL_SDL_PLATFORM/linux/x64/org/lwjgl/sdl/libSDL3.so",
                             ],
                         },
@@ -500,11 +477,9 @@ suite = {
                     "aarch64": {
                         "layout": {
                             "lib/": [
-                                {
-                                    "source_type": "extracted-dependency",
-                                    "dependency": "OSVM_PLUGINS",
-                                    "path": "*",
-                                },
+                                "extracted-dependency:OSVM_PLUGINS/sqcogspur64ARMv8linuxht/lib/squeak/*/JPEGReadWriter2Plugin.so",
+                                "extracted-dependency:OSVM_PLUGINS/sqcogspur64ARMv8linuxht/lib/squeak/*/LocalePlugin.so",
+                                "extracted-dependency:OSVM_PLUGINS/sqcogspur64ARMv8linuxht/lib/squeak/*/SqueakSSL.so",
                                 "extracted-dependency:LWJGL_SDL_PLATFORM/linux/arm64/org/lwjgl/sdl/libSDL3.so",
                             ],
                         },
@@ -514,11 +489,9 @@ suite = {
                     "aarch64": {
                         "layout": {
                             "lib/": [
-                                {
-                                    "source_type": "extracted-dependency",
-                                    "dependency": "OSVM_PLUGINS",
-                                    "path": "*",
-                                },
+                                "extracted-dependency:OSVM_PLUGINS/Squeak.app/Contents/Resources/JPEGReadWriter2Plugin.bundle",
+                                "extracted-dependency:OSVM_PLUGINS/Squeak.app/Contents/Resources/LocalePlugin.bundle",
+                                "extracted-dependency:OSVM_PLUGINS/Squeak.app/Contents/Resources/SqueakSSL.bundle",
                                 "extracted-dependency:LWJGL_SDL_PLATFORM/macos/arm64/org/lwjgl/sdl/libSDL3.dylib",
                             ],
                         },
@@ -528,11 +501,9 @@ suite = {
                     "amd64": {
                         "layout": {
                             "lib/": [
-                                {
-                                    "source_type": "extracted-dependency",
-                                    "dependency": "OSVM_PLUGINS",
-                                    "path": "*",
-                                },
+                                "extracted-dependency:OSVM_PLUGINS/JPEGReadWriter2Plugin.dll",
+                                "extracted-dependency:OSVM_PLUGINS/LocalePlugin.dll",
+                                "extracted-dependency:OSVM_PLUGINS/SqueakSSL.dll",
                                 "extracted-dependency:LWJGL_SDL_PLATFORM/windows/x64/org/lwjgl/sdl/SDL3.dll",
                             ],
                         },
