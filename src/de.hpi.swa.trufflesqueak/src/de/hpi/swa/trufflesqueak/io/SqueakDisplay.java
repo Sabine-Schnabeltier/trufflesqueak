@@ -912,20 +912,25 @@ public final class SqueakDisplay {
             return;
         }
 
+        final boolean isCommandOrCtrl = (buttons & (KEYBOARD.CTRL | KEYBOARD.CMD)) != 0;
         final int keyChar = toSqueakKey(sdlKeySym);
 
-        addKeyboardEvent(KEYBOARD_EVENT.DOWN, keyChar);
+        /*
+         * OSVM: Windows signals the interrupt; Linux enqueues the key; macOS does both.
+         * See https://share.gemini.google/IHLpmtSinLV6
+         * Doing both on macOS Cuis 7.3/7.5 can cause an interrupt of the interrupt notifier
+         * on the running process; Squeak & Cuis 7.6 work as expected.
+         */
+        if (isCommandOrCtrl && keyChar == '.') {
+            image.interrupt.setInterruptPending();
+        }
 
-        final boolean isCommandOrCtrl = (buttons & (KEYBOARD.CTRL | KEYBOARD.CMD)) != 0;
+        addKeyboardEvent(KEYBOARD_EVENT.DOWN, keyChar);
 
         if (isControlKey(sdlKeySym) || isCommandOrCtrl) {
             if (keyChar <= 65535) {
                 addKeyboardEvent(KEYBOARD_EVENT.CHAR, keyChar);
             }
-        }
-
-        if (isCommandOrCtrl && keyChar == '.') {
-            image.interrupt.setInterruptPending();
         }
     }
 
