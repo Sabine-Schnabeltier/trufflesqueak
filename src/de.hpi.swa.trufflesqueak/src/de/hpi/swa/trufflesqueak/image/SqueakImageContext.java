@@ -157,7 +157,7 @@ public final class SqueakImageContext {
     @CompilationFinal(dimensions = 1) private final MethodCacheEntry[] methodCache = new MethodCacheEntry[METHOD_CACHE_SIZE];
 
     /* Interpreter state */
-    private int primFailCode = -1;
+    private int primFailCode = 0;
 
     /* System Information */
     public final SqueakImageFlags flags = new SqueakImageFlags();
