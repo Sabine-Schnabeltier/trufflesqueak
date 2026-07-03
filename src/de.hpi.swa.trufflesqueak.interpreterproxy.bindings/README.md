@@ -7,3 +7,4 @@ To regenerate the checked-in InterpreterProxy bindings:
     ```bash
     jextract @./src/de.hpi.swa.trufflesqueak.interpreterproxy.bindings/jextract.args
     ```
+2. Re-apply [this Windows compatibility fix](https://github.com/hpi-swa/trufflesqueak/commit/tbd).
