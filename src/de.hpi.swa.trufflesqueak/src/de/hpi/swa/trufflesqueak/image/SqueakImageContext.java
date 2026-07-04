@@ -480,7 +480,7 @@ public final class SqueakImageContext {
     }
 
     public boolean hasDNUShortcut(final int arity) {
-        return hasDNUShortcuts() && arity < MAX_DNU_SHORTCUT_ARITY;
+        return hasDNUShortcuts() && arity < MAX_DNU_SHORTCUT_ARITY + 1;
     }
 
     public boolean hasDNUShortcuts() {

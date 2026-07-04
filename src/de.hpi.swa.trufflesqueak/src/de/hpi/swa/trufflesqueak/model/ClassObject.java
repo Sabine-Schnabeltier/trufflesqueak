@@ -501,14 +501,15 @@ public final class ClassObject extends AbstractSqueakObjectWithClassAndHash {
             // Attempt the Shortcut DNU first
             if (image.hasDNUShortcut(arity)) {
                 final NativeObject shortcutSelector = image.getDNUShortcutSelector(arity);
-                assert shortcutSelector != null;
-                final CompiledCodeObject shortcutMethod = lookupMethodInMethodDictSlow(shortcutSelector);
-                if (shortcutMethod != null) {
-                    if (shortcutMethod.getNumArgs() == arity + 1) {
-                        return new DispatchFailureResult(shortcutMethod, 1, FallbackConvention.SHORTCUT_DNU, shortcutSelector, arity);
-                    } else {
-                        LogUtils.DEBUG.warning(() -> "Ignoring misconfigured DNU shortcut " + shortcutSelector.asStringUnsafe() +
-                                        ": expected " + (arity + 1) + " arguments, but got " + shortcutMethod.getNumArgs());
+                if (shortcutSelector != null) {
+                    final CompiledCodeObject shortcutMethod = lookupMethodInMethodDictSlow(shortcutSelector);
+                    if (shortcutMethod != null) {
+                        if (shortcutMethod.getNumArgs() == arity + 1) {
+                            return new DispatchFailureResult(shortcutMethod, 1, FallbackConvention.SHORTCUT_DNU, shortcutSelector, arity);
+                        } else {
+                            LogUtils.DEBUG.warning(() -> "Ignoring misconfigured DNU shortcut " + shortcutSelector.asStringUnsafe() +
+                                            ": expected " + (arity + 1) + " arguments, but got " + shortcutMethod.getNumArgs());
+                        }
                     }
                 }
             }
