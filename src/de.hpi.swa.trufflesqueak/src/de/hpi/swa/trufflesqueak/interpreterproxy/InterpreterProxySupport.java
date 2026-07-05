@@ -96,7 +96,7 @@ public final class InterpreterProxySupport {
                     return null;
                 }
             } else {
-                LogUtils.INTERPRETER_PROXY.info(() -> "Module '" + moduleName + "' does not have an 'initialiseModule'");
+                LogUtils.INTERPRETER_PROXY.fine(() -> "Module '" + moduleName + "' does not have an 'initialiseModule'");
             }
 
             final Optional<MemorySegment> setInterpreterSymbol = lookup.find("setInterpreter");
