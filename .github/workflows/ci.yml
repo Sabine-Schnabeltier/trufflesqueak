@@ -19,8 +19,7 @@ on:
 
 env:
   # JVMCI_VERSION_CHECK: 'warn' # version of EA build does not always match
-  GRAALVM_VERSION: '25e1-ea'
-  JAVA_VERSION: '25.0.2'
+  GRAALVM_VERSION: '25.1.3'
   NATIVE_IMAGE_OPTIONS: '-J-XX:MaxRAMPercentage=100'
   PGO_FILE_CUIS: '${{ github.workspace }}/trufflesqueak-cuis.iprof'
   PGO_FILE_SQUEAK: '${{ github.workspace }}/trufflesqueak-squeak.iprof'
@@ -95,9 +94,9 @@ jobs:
         submodules: true
     - &setup_graalvm
       name: Set up Oracle GraalVM
-      uses: graalvm/setup-graalvm@6f3fa030c4b8f77c1f554a860f593a654538fa38  # v1.5.6
+      uses: graalvm/setup-graalvm@cabbb10818fabc989d6dbd508e4846596d20dd2d  # v1.6.0
       with:
-        java-version: '${{ env.GRAALVM_VERSION }}'
+        version: '${{ env.GRAALVM_VERSION }}'
         distribution: 'graalvm'
         github-token: ${{ secrets.GITHUB_TOKEN }}
     - &enable_bootstrap_graalvm
