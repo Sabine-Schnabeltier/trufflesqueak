@@ -151,17 +151,17 @@ public final class SqueakImageLocator {
 
     private static Path downloadAndUnzip(final String url, final File destDirectory, final boolean isQuiet, final PrintStream out) {
         try {
-            ImageDownloadSupport.DownloadStream download = ImageDownloadSupport.openStream(URI.create(url));
+            final ImageDownloadSupport.DownloadStream download = ImageDownloadSupport.openStream(URI.create(url));
 
             // Suppress the progress bar if the user requested quiet mode, if there is no interactive console,
             // or if we detect a CI/CD environment.
-            boolean isInteractive = System.console() != null && System.getenv("CI") == null;
-            boolean disableProgressBar = isQuiet || !isInteractive;
+            final boolean isInteractive = System.console() != null && System.getenv("CI") == null;
+            final boolean disableProgressBar = isQuiet || !isInteractive;
 
             try (BufferedInputStream bis = download.stream();
-                 ProgressTrackingInputStream ptis = new ProgressTrackingInputStream(bis, download.contentLength(), disableProgressBar, out)) {
+                            ProgressTrackingInputStream ptis = new ProgressTrackingInputStream(bis, download.contentLength(), disableProgressBar, out)) {
 
-                Path extracted = unzip(ptis, destDirectory);
+                final Path extracted = unzip(ptis, destDirectory);
 
                 if (!isQuiet) {
                     if (isInteractive) {
@@ -221,7 +221,7 @@ public final class SqueakImageLocator {
         private int lastPercent = -1;
         private long lastPrintedMegabytes = 0;
 
-        protected ProgressTrackingInputStream(InputStream in, long contentLength, boolean isQuiet, final PrintStream out) {
+        protected ProgressTrackingInputStream(final InputStream in, final long contentLength, final boolean isQuiet, final PrintStream out) {
             super(in);
             this.contentLength = contentLength;
             this.isQuiet = isQuiet;
@@ -229,33 +229,39 @@ public final class SqueakImageLocator {
         }
 
         @Override
-        public int read(byte[] b, int off, int len) throws IOException {
-            int bytesRead = super.read(b, off, len);
-            if (bytesRead != -1) trackProgress(bytesRead);
+        public int read(final byte[] b, final int off, final int len) throws IOException {
+            final int bytesRead = super.read(b, off, len);
+            if (bytesRead != -1) {
+                trackProgress(bytesRead);
+            }
             return bytesRead;
         }
 
         @Override
         public int read() throws IOException {
-            int byteRead = super.read();
-            if (byteRead != -1) trackProgress(1);
+            final int byteRead = super.read();
+            if (byteRead != -1) {
+                trackProgress(1);
+            }
             return byteRead;
         }
 
-        private void trackProgress(int bytesRead) {
-            if (isQuiet) return;
+        private void trackProgress(final int bytesRead) {
+            if (isQuiet) {
+                return;
+            }
 
             totalBytesRead += bytesRead;
 
             if (contentLength > 0) {
-                int percent = (int) ((totalBytesRead * 100) / contentLength);
+                final int percent = (int) ((totalBytesRead * 100) / contentLength);
                 if (percent > lastPercent) {
                     lastPercent = percent;
                     out.print("\rDownloading: [" + percent + "%]...");
                 }
             } else {
                 // Fallback if the server uses chunked transfer encoding without a Content-Length
-                long currentMegabytes = totalBytesRead / (1024 * 1024);
+                final long currentMegabytes = totalBytesRead / (1024 * 1024);
                 if (currentMegabytes > lastPrintedMegabytes) {
                     lastPrintedMegabytes = currentMegabytes;
                     out.print("\rDownloaded: " + currentMegabytes + " MB...");

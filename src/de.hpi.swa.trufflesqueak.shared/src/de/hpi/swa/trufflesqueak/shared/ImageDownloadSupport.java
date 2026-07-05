@@ -90,7 +90,7 @@ public final class ImageDownloadSupport {
             }
 
             // Extract the content length (defaults to -1 if the server uses chunked encoding)
-            long contentLength = response.headers().firstValueAsLong("Content-Length").orElse(-1L);
+            final long contentLength = response.headers().firstValueAsLong("Content-Length").orElse(-1L);
 
             return new DownloadStream(new BufferedInputStream(response.body()), contentLength);
         } catch (final InterruptedException e) {
