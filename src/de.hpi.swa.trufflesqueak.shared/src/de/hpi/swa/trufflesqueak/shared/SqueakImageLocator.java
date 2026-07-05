@@ -8,7 +8,9 @@ package de.hpi.swa.trufflesqueak.shared;
 
 import java.io.BufferedInputStream;
 import java.io.File;
+import java.io.FilterInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.PrintStream;
 import java.net.URI;
@@ -65,7 +67,7 @@ public final class SqueakImageLocator {
                     if (!isQuiet) {
                         out.printf("Downloading %s...%n", selectedEntry.name());
                     }
-                    final Path downloadedImage = downloadAndUnzip(downloadUrl, resourcesDirectory);
+                    final Path downloadedImage = downloadAndUnzip(downloadUrl, resourcesDirectory, isQuiet, out);
                     Files.writeString(cachePath, resourcesDirectory.toPath().relativize(downloadedImage).toString(), StandardCharsets.UTF_8);
                     return downloadedImage.toString();
                 }
@@ -147,15 +149,36 @@ public final class SqueakImageLocator {
         return languageHome.resolve("resources").toFile();
     }
 
-    private static Path downloadAndUnzip(final String url, final File destDirectory) {
-        try (BufferedInputStream bis = ImageDownloadSupport.openStream(URI.create(url))) {
-            return unzip(bis, destDirectory);
+    private static Path downloadAndUnzip(final String url, final File destDirectory, final boolean isQuiet, final PrintStream out) {
+        try {
+            ImageDownloadSupport.DownloadStream download = ImageDownloadSupport.openStream(URI.create(url));
+
+            // Suppress the progress bar if the user requested quiet mode, if there is no interactive console,
+            // or if we detect a CI/CD environment.
+            boolean isInteractive = System.console() != null && System.getenv("CI") == null;
+            boolean disableProgressBar = isQuiet || !isInteractive;
+
+            try (BufferedInputStream bis = download.stream();
+                 ProgressTrackingInputStream ptis = new ProgressTrackingInputStream(bis, download.contentLength(), disableProgressBar, out)) {
+
+                Path extracted = unzip(ptis, destDirectory);
+
+                if (!isQuiet) {
+                    if (isInteractive) {
+                        out.println("\rDownload and extraction complete!          ");
+                    } else {
+                        out.println("Download and extraction complete!");
+                    }
+                }
+
+                return extracted;
+            }
         } catch (final IOException e) {
             throw new RuntimeException(e);
         }
     }
 
-    private static Path unzip(final BufferedInputStream bis, final File destDirectory) throws IOException {
+    private static Path unzip(final InputStream bis, final File destDirectory) throws IOException {
         final ZipInputStream zis = new ZipInputStream(bis);
         ZipEntry zipEntry = zis.getNextEntry();
         Path extractedImage = null;
@@ -186,6 +209,58 @@ public final class SqueakImageLocator {
     private static void ensureDirectory(final File directory) throws IOException {
         if (!directory.isDirectory() && !directory.mkdirs()) {
             throw new IOException("Failed to create directory " + directory);
+        }
+    }
+
+    private static class ProgressTrackingInputStream extends FilterInputStream {
+        private long totalBytesRead = 0;
+        private final long contentLength;
+        private final boolean isQuiet;
+        private final PrintStream out;
+
+        private int lastPercent = -1;
+        private long lastPrintedMegabytes = 0;
+
+        protected ProgressTrackingInputStream(InputStream in, long contentLength, boolean isQuiet, final PrintStream out) {
+            super(in);
+            this.contentLength = contentLength;
+            this.isQuiet = isQuiet;
+            this.out = out;
+        }
+
+        @Override
+        public int read(byte[] b, int off, int len) throws IOException {
+            int bytesRead = super.read(b, off, len);
+            if (bytesRead != -1) trackProgress(bytesRead);
+            return bytesRead;
+        }
+
+        @Override
+        public int read() throws IOException {
+            int byteRead = super.read();
+            if (byteRead != -1) trackProgress(1);
+            return byteRead;
+        }
+
+        private void trackProgress(int bytesRead) {
+            if (isQuiet) return;
+
+            totalBytesRead += bytesRead;
+
+            if (contentLength > 0) {
+                int percent = (int) ((totalBytesRead * 100) / contentLength);
+                if (percent > lastPercent) {
+                    lastPercent = percent;
+                    out.print("\rDownloading: [" + percent + "%]...");
+                }
+            } else {
+                // Fallback if the server uses chunked transfer encoding without a Content-Length
+                long currentMegabytes = totalBytesRead / (1024 * 1024);
+                if (currentMegabytes > lastPrintedMegabytes) {
+                    lastPrintedMegabytes = currentMegabytes;
+                    out.print("\rDownloaded: " + currentMegabytes + " MB...");
+                }
+            }
         }
     }
 }
