@@ -64,10 +64,11 @@ public final class SqueakImageLocator {
                     }
                     return cachedImage.toString();
                 } else {
+                    final String downloadText = "[trufflesqueak] Downloading " + selectedEntry.name() + "... ";
                     if (!isQuiet) {
-                        out.printf("Downloading %s...%n", selectedEntry.name());
+                        out.printf(downloadText);
                     }
-                    final Path downloadedImage = downloadAndUnzip(downloadUrl, resourcesDirectory, isQuiet, out);
+                    final Path downloadedImage = downloadAndUnzip(downloadUrl, resourcesDirectory, isQuiet, downloadText, out);
                     Files.writeString(cachePath, resourcesDirectory.toPath().relativize(downloadedImage).toString(), StandardCharsets.UTF_8);
                     return downloadedImage.toString();
                 }
@@ -149,31 +150,23 @@ public final class SqueakImageLocator {
         return languageHome.resolve("resources").toFile();
     }
 
-    private static Path downloadAndUnzip(final String url, final File destDirectory, final boolean isQuiet, final PrintStream out) {
-        try {
-            final ImageDownloadSupport.DownloadStream download = ImageDownloadSupport.openStream(URI.create(url));
+    private static Path downloadAndUnzip(final String url, final File destDirectory, final boolean isQuiet, final String downloadText, final PrintStream out) throws IOException {
+        final ImageDownloadSupport.DownloadStream download = ImageDownloadSupport.openStream(URI.create(url));
 
-            // Suppress the progress bar if the user requested quiet mode or if there is no console.
-            final boolean isInteractive = System.console() != null;
-            final boolean disableProgressBar = isQuiet || !isInteractive;
+        // Suppress the progress if the user requested quiet mode, or if there is no console or running on CI.
+        final boolean isInteractive = System.console() != null || Boolean.parseBoolean(System.getenv("CI"));
+        final boolean disableProgress = isQuiet || !isInteractive;
 
-            try (BufferedInputStream bis = download.stream();
-                            ProgressTrackingInputStream ptis = new ProgressTrackingInputStream(bis, download.contentLength(), disableProgressBar, out)) {
-
-                final Path extracted = unzip(ptis, destDirectory);
-
-                if (!isQuiet) {
-                    if (isInteractive) {
-                        out.println("\rDownload and extraction complete!          ");
-                    } else {
-                        out.println("Download and extraction complete!");
-                    }
+        try (BufferedInputStream bis = download.stream(); InputStream is = disableProgress ? bis : new ProgressTrackingInputStream(bis, download.contentLength(), downloadText, out)) {
+            return unzip(is, destDirectory);
+        } finally {
+            if (!isQuiet) {
+                if (isInteractive) {
+                    out.printf("\r%sdone!          %n", downloadText);
+                } else {
+                    out.printf("done!%n");
                 }
-
-                return extracted;
             }
-        } catch (final IOException e) {
-            throw new RuntimeException(e);
         }
     }
 
@@ -214,16 +207,16 @@ public final class SqueakImageLocator {
     private static class ProgressTrackingInputStream extends FilterInputStream {
         private long totalBytesRead;
         private final long contentLength;
-        private final boolean isQuiet;
         private final PrintStream out;
+        private final String downloadText;
 
         private int lastPercent = -1;
         private long lastPrintedMegabytes;
 
-        protected ProgressTrackingInputStream(final InputStream in, final long contentLength, final boolean isQuiet, final PrintStream out) {
+        protected ProgressTrackingInputStream(final InputStream in, final long contentLength, final String downloadText, final PrintStream out) {
             super(in);
             this.contentLength = contentLength;
-            this.isQuiet = isQuiet;
+            this.downloadText = downloadText;
             this.out = out;
         }
 
@@ -246,24 +239,20 @@ public final class SqueakImageLocator {
         }
 
         private void trackProgress(final int bytesRead) {
-            if (isQuiet) {
-                return;
-            }
-
             totalBytesRead += bytesRead;
 
             if (contentLength > 0) {
                 final int percent = (int) ((totalBytesRead * 100) / contentLength);
                 if (percent > lastPercent) {
                     lastPercent = percent;
-                    out.print("\rDownloading: [" + percent + "%]...");
+                    out.printf("\r%s%s%%", downloadText, percent);
                 }
             } else {
                 // Fallback if the server uses chunked transfer encoding without a Content-Length
                 final long currentMegabytes = totalBytesRead / (1024 * 1024);
                 if (currentMegabytes > lastPrintedMegabytes) {
                     lastPrintedMegabytes = currentMegabytes;
-                    out.print("\rDownloaded: " + currentMegabytes + " MB...");
+                    out.printf("\r%s%sMiB", downloadText, currentMegabytes);
                 }
             }
         }
