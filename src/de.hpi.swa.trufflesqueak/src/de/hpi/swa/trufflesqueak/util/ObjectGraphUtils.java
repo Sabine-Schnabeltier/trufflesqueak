@@ -20,7 +20,6 @@ import java.util.logging.Level;
 
 import org.graalvm.collections.EconomicMap;
 import org.graalvm.collections.Equivalence;
-import org.graalvm.collections.MapCursor;
 import org.graalvm.collections.UnmodifiableEconomicMap;
 
 import com.oracle.truffle.api.CompilerAsserts;
@@ -32,7 +31,6 @@ import com.oracle.truffle.api.frame.FrameInstance;
 
 import de.hpi.swa.trufflesqueak.image.SqueakImageContext;
 import de.hpi.swa.trufflesqueak.model.AbstractSqueakObject;
-import de.hpi.swa.trufflesqueak.model.AbstractSqueakObjectWithClassAndHash;
 import de.hpi.swa.trufflesqueak.model.AbstractSqueakObjectWithHash;
 import de.hpi.swa.trufflesqueak.model.ClassObject;
 import de.hpi.swa.trufflesqueak.model.ContextObject;
@@ -247,48 +245,25 @@ public final class ObjectGraphUtils {
     @TruffleBoundary
     public void pointersBecomeOneWay(final Object[] fromPointers, final Object[] toPointers, final boolean copyHash) {
         final long startTime = System.nanoTime();
-        boolean allAbstractSqueakObjectWithHash = true;
         for (int i = 0; i < fromPointers.length; i++) {
             final Object from = fromPointers[i];
             final Object to = toPointers[i];
             if (from != to) {
                 becomeMap.put(from, to);
-                if (from instanceof final AbstractSqueakObjectWithClassAndHash f && to instanceof final AbstractSqueakObjectWithClassAndHash t) {
+                if (from instanceof final AbstractSqueakObjectWithHash f && to instanceof final AbstractSqueakObjectWithHash t) {
                     if (copyHash) {
                         t.setSqueakHash(MiscUtils.toIntExact(f.getOrCreateSqueakHash()));
                     }
-                    f.forwardTo(t);
-                } else {
-                    allAbstractSqueakObjectWithHash = false;
                 }
             }
         }
         if (!becomeMap.isEmpty()) {
-            flattenForwardPointers();
-            if (allAbstractSqueakObjectWithHash) {
-                pointersBecomeOneWayFrames(_ -> {
-                }, becomeMap);
-            } else {
-                final ObjectTracer roots = ObjectTracer.fromRoots(image, false, FrameHandling.SCAN);
-                pointersBecomeOneWayFrames(roots::addIfUnmarked, becomeMap);
-                becomeOneWayManyPairs(roots);
-            }
+            final ObjectTracer roots = ObjectTracer.fromRoots(image, false, FrameHandling.SCAN);
+            pointersBecomeOneWayFrames(roots::addIfUnmarked, becomeMap);
+            becomeOneWayManyPairs(roots);
         }
         if (trackOperations) {
             ObjectGraphOperations.POINTERS_BECOME_ONE_WAY.addNanos(System.nanoTime() - startTime);
-        }
-    }
-
-    /* Ensure forward pointers are never recursive. */
-    private void flattenForwardPointers() {
-        final MapCursor<Object, Object> cursor = becomeMap.getEntries();
-        while (cursor.advance()) {
-            final Object toPointer = becomeMap.get(cursor.getValue());
-            if (toPointer instanceof final AbstractSqueakObjectWithClassAndHash to) {
-                /* Current value is also key, so update forward object of value's key. */
-                ((AbstractSqueakObjectWithClassAndHash) cursor.getKey()).forwardTo(to);
-                cursor.setValue(to);
-            }
         }
     }
 
@@ -397,8 +372,6 @@ public final class ObjectGraphUtils {
 
     @TruffleBoundary
     public boolean checkEphemerons() {
-        assert !isUnfollowNeeded();
-
         final long startTime = System.nanoTime();
 
         final ObjectTracer roots = ObjectTracer.fromRoots(image, true, FrameHandling.SCAN);
@@ -579,9 +552,8 @@ public final class ObjectGraphUtils {
         }
 
         private void addNonNullIfUnmarked(final AbstractSqueakObjectWithHash object) {
-            final AbstractSqueakObjectWithHash o = object.resolveForwardingPointer();
-            if (o.tryToMarkWith(currentMarkingFlag)) {
-                workStack.addFirst(o);
+            if (object.tryToMarkWith(currentMarkingFlag)) {
+                workStack.addFirst(object);
             }
         }
 

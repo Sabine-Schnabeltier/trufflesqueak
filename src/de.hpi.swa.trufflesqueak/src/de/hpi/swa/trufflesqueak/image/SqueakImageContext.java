@@ -523,7 +523,6 @@ public final class SqueakImageContext {
     /* SpurMemoryManager>>#enterIntoClassTable: */
     @TruffleBoundary
     public void enterIntoClassTable(final ClassObject clazz) {
-        assert clazz.assertNotForwarded();
         int majorIndex = SqueakImageConstants.majorClassIndexOf(classTableIndex);
         final int initialMajorIndex = majorIndex;
         assert initialMajorIndex > 0 : "classTableIndex should never index the first page; it's reserved for known classes";
@@ -583,10 +582,6 @@ public final class SqueakImageContext {
             if (page.isObjectType()) {
                 for (int minorIndex = 0; minorIndex < SqueakImageConstants.CLASS_TABLE_PAGE_SIZE; minorIndex++) {
                     Object entry = page.getObject(minorIndex);
-                    if (entry instanceof final ClassObject classObject && !classObject.isNotForwarded()) {
-                        entry = classObject.getForwardingPointer();
-                        page.setObject(minorIndex, entry);
-                    }
                     final int currentClassTableIndex = SqueakImageConstants.classTableIndexFor(majorIndex, minorIndex);
                     final boolean isDuplicate = entry == clazz && currentClassTableIndex != expectedIndex && currentClassTableIndex > SqueakImageConstants.LAST_CLASS_INDEX_PUN;
                     if (isDuplicate || isUnreachable(entry)) {
@@ -627,9 +622,6 @@ public final class SqueakImageContext {
                     for (int i = 0; i < SqueakImageConstants.CLASS_TABLE_PAGE_SIZE; i++) {
                         final Object entry = entries[i];
                         if (entry instanceof final ClassObject classObject) {
-                            if (!classObject.isNotForwarded()) {
-                                entries[i] = classObject.getForwardingPointer();
-                            }
                             ((ClassObject) entries[i]).flushCachesForSelector(selector);
                         } else {
                             assert entry == NilObject.SINGLETON;

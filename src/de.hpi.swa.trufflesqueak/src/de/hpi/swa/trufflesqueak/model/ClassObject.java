@@ -64,7 +64,6 @@ public final class ClassObject extends AbstractSqueakObjectWithClassAndHash {
         image = original.image;
         instancesAreClasses = original.instancesAreClasses;
         superclass = original.superclass;
-        assert superclass == null || superclass.assertNotForwarded();
         methodDict = original.methodDict != null ? new VariablePointersObject(original.methodDict) : null;
         format = original.format;
         // FIXME: should clone the pointers themselves, too
@@ -110,9 +109,6 @@ public final class ClassObject extends AbstractSqueakObjectWithClassAndHash {
 
     @TruffleBoundary
     public String getClassName() {
-        if (!isNotForwarded()) {
-            return "forward to " + getForwardingPointer().toString();
-        }
         if (image.isMetaClass(getSqueakClass())) {
             final Object classInstance = pointers[METACLASS.THIS_CLASS - CLASS_DESCRIPTION.INLINE_POINTERS];
             if (classInstance != NilObject.SINGLETON && ((ClassObject) classInstance).pointers[CLASS.NAME] instanceof final NativeObject metaClassName) {
@@ -309,39 +305,24 @@ public final class ClassObject extends AbstractSqueakObjectWithClassAndHash {
     }
 
     public ClassObject getSuperclassOrNull() {
-        assert assertNotForwarded() && (superclass == null || superclass.assertNotForwarded());
         return superclass;
     }
 
     public ClassObject getResolvedSuperclass() {
-        assert assertNotForwarded();
-        if (!superclass.isNotForwarded()) {
-            CompilerDirectives.transferToInterpreter();
-            setSuperclass((ClassObject) superclass.getForwardingPointer());
-        }
         return getSuperclassOrNull();
     }
 
     public AbstractSqueakObject getMethodDictOrNil() {
-        assert assertNotForwarded();
         return NilObject.nullToNil(methodDict);
     }
 
     public VariablePointersObject getMethodDict() {
-        assert assertNotForwarded() && (methodDict == null || methodDict.assertNotForwarded());
         return methodDict;
     }
 
     private VariablePointersObject getResolvedMethodDict() {
-        assert assertNotForwarded();
-        if (methodDict == null) {
-            return methodDict;
-        }
-        if (!methodDict.isNotForwarded()) {
-            CompilerDirectives.transferToInterpreter();
-            setMethodDict((VariablePointersObject) methodDict.getForwardingPointer());
-        }
-        return getMethodDict();
+        assert  methodDict != null;
+        return methodDict;
     }
 
     public Object getOtherPointer(final int index) {
@@ -365,7 +346,6 @@ public final class ClassObject extends AbstractSqueakObjectWithClassAndHash {
     }
 
     public void setSuperclass(final ClassObject superclass) {
-        assert superclass == null || superclass.assertNotForwarded();
         invalidateClassHierarchyAndMethodDictStableAssumption("new superclass");
         this.superclass = superclass;
         /*
@@ -376,7 +356,6 @@ public final class ClassObject extends AbstractSqueakObjectWithClassAndHash {
     }
 
     public void setMethodDict(final VariablePointersObject methodDict) {
-        assert methodDict == null || methodDict.assertNotForwarded();
         invalidateClassHierarchyAndMethodDictStableAssumption("new method dict");
         this.methodDict = methodDict;
         /*
@@ -409,7 +388,6 @@ public final class ClassObject extends AbstractSqueakObjectWithClassAndHash {
         final int selectorHash = selector.getSqueakHashInt();
         ClassObject lookupClass = this;
         while (lookupClass != null) {
-            assert lookupClass.assertNotForwarded();
             if (lookupClass.methodDict == null) {
                 /*
                  * "MethodDict pointer is nil (hopefully due a swapped out stub) -- raise exception
@@ -448,9 +426,6 @@ public final class ClassObject extends AbstractSqueakObjectWithClassAndHash {
             } else if (nextSelector == messageSelector) {
                 final Object[] methodDictValues = AbstractPointersObjectReadNode.getUncached().executeArray(methodDictionary, METHOD_DICT.VALUES).getObjectStorage();
                 final Object method = methodDictValues[index];
-                if (method instanceof final AbstractSqueakObjectWithClassAndHash o && !o.isNotForwarded()) {
-                    return methodDictValues[index] = o.getForwardingPointer();
-                }
                 return method;
             }
             index = ++index & sizeMask;
@@ -471,7 +446,6 @@ public final class ClassObject extends AbstractSqueakObjectWithClassAndHash {
         // Walk superclass chain to determine if #cannotInterpret:.
         ClassObject current = this;
         while (current != null) {
-            assert current.assertNotForwarded();
             if (current.methodDict == null) {
                 break;
             }
@@ -624,13 +598,6 @@ public final class ClassObject extends AbstractSqueakObjectWithClassAndHash {
     }
 
     @Override
-    public void forwardTo(final AbstractSqueakObjectWithClassAndHash pointer) {
-        super.forwardTo(pointer);
-        invalidateClassHierarchyAndMethodDictStableAssumption("forwarded");
-        invalidateClassFormatStableAssumption("forwarded");
-    }
-
-    @Override
     public void pointersBecomeOneWay(final UnmodifiableEconomicMap<Object, Object> fromToMap) {
         super.pointersBecomeOneWay(fromToMap);
         if (superclass != null) {
@@ -638,7 +605,6 @@ public final class ClassObject extends AbstractSqueakObjectWithClassAndHash {
             if (replacement != null) {
                 setSuperclass((ClassObject) replacement);
             }
-            assert superclass.assertNotForwarded();
         }
         if (methodDict != null) {
             final Object replacement = fromToMap.get(methodDict);
@@ -646,7 +612,6 @@ public final class ClassObject extends AbstractSqueakObjectWithClassAndHash {
                 assert replacement != methodDict;
                 setMethodDict((VariablePointersObject) replacement);
             }
-            assert methodDict.assertNotForwarded();
         }
         ArrayUtils.replaceAll(pointers, fromToMap);
     }

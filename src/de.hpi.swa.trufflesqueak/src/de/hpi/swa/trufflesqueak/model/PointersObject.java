@@ -137,9 +137,6 @@ public final class PointersObject extends AbstractPointersObject {
     @Override
     public String toString() {
         CompilerAsserts.neverPartOfCompilation();
-        if (!isNotForwarded()) {
-            return "forward to " + resolveForwardingPointer().toString();
-        }
         final AbstractPointersObjectReadNode readNode = AbstractPointersObjectReadNode.getUncached();
         final ClassObject classObject = getSqueakClass();
         /*

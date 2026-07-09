@@ -53,7 +53,7 @@ public abstract class LookupClassGuard {
         } else if (receiver instanceof FloatObject) {
             return FloatObjectGuard.SINGLETON;
         } else if (receiver instanceof final AbstractSqueakObjectWithClassAndHash o) {
-            return new AbstractSqueakObjectWithClassAndHashGuard((AbstractSqueakObjectWithClassAndHash) o.resolveForwardingPointer());
+            return new AbstractSqueakObjectWithClassAndHashGuard(o);
         } else {
             assert !(receiver instanceof AbstractSqueakObject);
             return ForeignObjectGuard.SINGLETON;
@@ -205,7 +205,6 @@ public abstract class LookupClassGuard {
 
         private AbstractSqueakObjectWithClassAndHashGuard(final AbstractSqueakObjectWithClassAndHash receiver) {
             expectedClass = receiver.getSqueakClass();
-            assert expectedClass.assertNotForwarded();
         }
 
         @Override

@@ -73,8 +73,6 @@ public abstract class SqueakObjectIdentityNode extends AbstractNode {
 
     @Specialization(guards = "!isCharacterObject(left)", replaces = {"doJavaIdenticalObject", "doAbstractSqueakObjectPrimitive"})
     protected static final boolean doAbstractSqueakObjectGeneric(final AbstractSqueakObject left, final Object right) {
-        assert !(left instanceof final AbstractSqueakObjectWithClassAndHash l) || l.assertNotForwarded();
-        assert !(right instanceof final AbstractSqueakObjectWithClassAndHash r) || r.assertNotForwarded();
         return BooleanObject.wrap(left == right);
     }
 

@@ -491,14 +491,7 @@ public final class CompiledCodeObject extends AbstractSqueakObjectWithClassAndHa
     /** See storeLiteralVariable:withValue:. */
     public Object getAndResolveLiteral(final long longIndex) {
         final Object litVar = getLiteral(longIndex);
-        if (litVar instanceof final AbstractSqueakObjectWithClassAndHash obj && !obj.isNotForwarded()) {
-            CompilerDirectives.transferToInterpreter();
-            final AbstractSqueakObjectWithClassAndHash forwarded = obj.getForwardingPointer();
-            setLiteral(longIndex, forwarded);
-            return forwarded;
-        } else {
             return litVar;
-        }
     }
 
     @Idempotent
@@ -590,12 +583,6 @@ public final class CompiledCodeObject extends AbstractSqueakObjectWithClassAndHa
             return true;
         }
         return ArrayUtils.contains(getLiterals(), thang);
-    }
-
-    @Override
-    public void forwardTo(final AbstractSqueakObjectWithClassAndHash pointer) {
-        super.forwardTo(pointer);
-        invalidateCallTargetStable("forwarded");
     }
 
     @Override
@@ -706,13 +693,7 @@ public final class CompiledCodeObject extends AbstractSqueakObjectWithClassAndHa
         final AbstractPointersObjectReadNode readNode = AbstractPointersObjectReadNode.getUncached();
         if (hasMethodClass(readNode)) {
             final ClassObject methodClass = getMethodClass(readNode);
-            if (methodClass.isNotForwarded()) {
-                return methodClass;
-            } else {
-                final ClassObject forwardedMethodClass = (ClassObject) methodClass.getForwardingPointer();
-                AbstractPointersObjectWriteNode.executeUncached((AbstractPointersObject) getMethodClassAssociation(), CLASS_BINDING.VALUE, forwardedMethodClass);
-                return forwardedMethodClass;
-            }
+            return methodClass;
         }
         return null;
     }

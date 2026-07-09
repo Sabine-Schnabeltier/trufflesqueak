@@ -187,14 +187,12 @@ public final class SqueakImageWriter {
         AbstractSqueakObjectWithHash previousObject = image.getHiddenRoots();
         for (final AbstractSqueakObjectWithHash currentObject : allTracedObjects) {
             assert correctPosition(currentObject) : "Previous object was not written correctly: " + previousObject;
-            assert currentObject.assertNotForwarded();
             currentObject.write(this);
             previousObject = currentObject;
         }
         assert currentOop() == nextChunkAfterTracing;
         /* Write additional large integers and boxed floats. */
         for (final AbstractSqueakObjectWithHash value : additionalBoxedObjects) {
-            assert value.assertNotForwarded();
             value.write(this);
         }
         assert currentOop() == nextChunk;
@@ -259,7 +257,6 @@ public final class SqueakImageWriter {
     }
 
     private long reserve(final AbstractSqueakObjectWithHash object) {
-        assert object.assertNotForwarded();
         final int numSlots = object.getNumSlots();
         final int headerSlots = numSlots < SqueakImageConstants.OVERFLOW_SLOTS ? 1 : 2;
         final int offset = (headerSlots - 1) * SqueakImageConstants.WORD_SIZE;

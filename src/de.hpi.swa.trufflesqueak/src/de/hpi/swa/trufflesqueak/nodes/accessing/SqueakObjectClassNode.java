@@ -45,7 +45,6 @@ public abstract class SqueakObjectClassNode extends AbstractNode {
 
     @Specialization
     protected static final ClassObject doAbstractSqueakObjectWithClassAndHash(final AbstractSqueakObjectWithClassAndHash value) {
-        assert value.assertNotForwarded();
         return value.getSqueakClass();
     }
 

@@ -51,8 +51,6 @@ public abstract class AbstractSqueakObjectWithHash extends AbstractSqueakObject 
     private static final int VALID_MARK_BIT = 1 << 1;
     private static final int MARKING_MASK = VALID_MARK_BIT | MARK_BIT;
 
-    private static final int FORWARDED_BIT = 1 << 2;
-
     private static final int BOOLEAN_A_BIT = 1 << 3;
     private static final int BOOLEAN_B_BIT = 1 << 4;
     private static final int BOOLEAN_C_BIT = 1 << 5;
@@ -135,7 +133,6 @@ public abstract class AbstractSqueakObjectWithHash extends AbstractSqueakObject 
     }
 
     public final int getSqueakHashInt() {
-        assert assertNotForwarded();
         return squeakHashAndBits >>> SQUEAK_HASH_SHIFT;
     }
 
@@ -145,7 +142,6 @@ public abstract class AbstractSqueakObjectWithHash extends AbstractSqueakObject 
 
     @SuppressWarnings("this-escape")
     public final void setSqueakHash(final int newHash) {
-        assert assertNotForwarded();
         assert (newHash & SqueakImageConstants.IDENTITY_HASH_HALF_WORD_MASK) == newHash : "Invalid hash: " + newHash;
         squeakHashAndBits = (newHash << SQUEAK_HASH_SHIFT) | (squeakHashAndBits & SQUEAK_HASH_FLAGS_MASK);
     }
@@ -189,28 +185,6 @@ public abstract class AbstractSqueakObjectWithHash extends AbstractSqueakObject 
     public final void unmarkWith(final boolean currentMarkingFlag) {
         tryToMarkWith(!currentMarkingFlag);
     }
-
-    protected final void setForwardedBit() {
-        squeakHashAndBits |= FORWARDED_BIT;
-    }
-
-    public final boolean isNotForwarded() {
-        return (squeakHashAndBits & FORWARDED_BIT) == 0;
-    }
-
-    @SuppressWarnings("this-escape")
-    public final boolean assertNotForwarded() {
-        assert isNotForwarded() : MiscUtils.toObjectString(this) + " was unexpectedly forwarded to " + MiscUtils.toObjectString(getForwardingPointer());
-        return true;
-    }
-
-    public static final boolean assertNotForwarded(final Object object) {
-        return !(object instanceof final AbstractSqueakObjectWithClassAndHash o) || o.assertNotForwarded();
-    }
-
-    protected abstract AbstractSqueakObjectWithHash getForwardingPointer();
-
-    public abstract AbstractSqueakObjectWithHash resolveForwardingPointer();
 
     /* General purpose boolean flags. */
 

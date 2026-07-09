@@ -84,16 +84,6 @@ public final class BlockClosureObject extends AbstractSqueakObjectWithHash {
     }
 
     @Override
-    protected AbstractSqueakObjectWithHash getForwardingPointer() {
-        return this;
-    }
-
-    @Override
-    public AbstractSqueakObjectWithHash resolveForwardingPointer() {
-        return this;
-    }
-
-    @Override
     public ClassObject getSqueakClass() {
         return getSqueakClass(SqueakImageContext.getSlow());
     }

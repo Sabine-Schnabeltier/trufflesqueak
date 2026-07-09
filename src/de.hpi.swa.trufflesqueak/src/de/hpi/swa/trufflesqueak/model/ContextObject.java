@@ -149,16 +149,6 @@ public final class ContextObject extends AbstractSqueakObjectWithHash {
         return image.methodContextClass;
     }
 
-    @Override
-    protected AbstractSqueakObjectWithHash getForwardingPointer() {
-        return this; // ContextObject cannot be forwarded
-    }
-
-    @Override
-    public AbstractSqueakObjectWithHash resolveForwardingPointer() {
-        return this; // ContextObject cannot be forwarded
-    }
-
     public CompiledCodeObject getMethodOrBlock() {
         return hasClosure() ? getClosure().getCompiledBlock() : getCodeObject();
     }

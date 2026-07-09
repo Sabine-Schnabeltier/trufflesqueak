@@ -47,7 +47,6 @@ public abstract class AbstractSqueakObjectWithClassAndHash extends AbstractSquea
     @SuppressWarnings("this-escape")
     protected AbstractSqueakObjectWithClassAndHash(final AbstractSqueakObjectWithClassAndHash original) {
         super(original);
-        assert original.assertNotForwarded() && original.squeakClass.assertNotForwarded();
         squeakClass = original.squeakClass;
         setSqueakHash(HASH_UNINITIALIZED);
     }
@@ -60,7 +59,6 @@ public abstract class AbstractSqueakObjectWithClassAndHash extends AbstractSquea
 
     @Override
     public final ClassObject getSqueakClass() {
-        assert assertNotForwarded();
         return (ClassObject) squeakClass;
     }
 
@@ -74,14 +72,10 @@ public abstract class AbstractSqueakObjectWithClassAndHash extends AbstractSquea
     }
 
     public final String getSqueakClassName() {
-        if (!isNotForwarded()) {
-            return "forward to " + getForwardingPointer().getSqueakClassName();
-        }
         return getSqueakClass().getClassName();
     }
 
     public final void setSqueakClass(final ClassObject newClass) {
-        assert assertNotForwarded();
         squeakClass = newClass;
     }
 
@@ -93,33 +87,6 @@ public abstract class AbstractSqueakObjectWithClassAndHash extends AbstractSquea
 
     public final boolean hasFormatOf(final ClassObject other) {
         return getSqueakClass().getFormat() == other.getFormat();
-    }
-
-    public void forwardTo(final AbstractSqueakObjectWithClassAndHash pointer) {
-        assert this != pointer && pointer.isNotForwarded() : "Forwarding pointer should neither be the same nor a forwarded object itself (" + this + "->" + pointer + ")";
-        setForwardedBit();
-        squeakClass = pointer;
-    }
-
-    @Override
-    public final AbstractSqueakObjectWithHash resolveForwardingPointer() {
-        if (isNotForwarded()) {
-            return this;
-        } else {
-            CompilerDirectives.transferToInterpreter();
-            assert squeakClass.isNotForwarded() : "Forwarding pointer should not be a forwarded object (" + MiscUtils.toObjectString(this) + "->" + MiscUtils.toObjectString(squeakClass) + ")";
-            return squeakClass;
-        }
-    }
-
-    @Override
-    public final AbstractSqueakObjectWithClassAndHash getForwardingPointer() {
-        assert !isNotForwarded();
-        return squeakClass;
-    }
-
-    public static final Object resolveForwardingPointer(final Object pointer) {
-        return pointer instanceof final AbstractSqueakObjectWithClassAndHash p ? p.resolveForwardingPointer() : pointer;
     }
 
     @Override

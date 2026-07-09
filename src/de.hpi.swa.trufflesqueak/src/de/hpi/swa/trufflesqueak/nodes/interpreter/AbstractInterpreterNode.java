@@ -127,7 +127,7 @@ public abstract class AbstractInterpreterNode extends AbstractInterpreterInstrum
     }
 
     protected final Object send(final VirtualFrame frame, final int currentPC, final Object receiver) {
-        return followForwarded(currentPC, dispatch(frame, currentPC, receiver));
+        return dispatch(frame, currentPC, receiver);
     }
 
     private Object dispatch(final VirtualFrame frame, final int currentPC, final Object receiver) {
@@ -139,7 +139,7 @@ public abstract class AbstractInterpreterNode extends AbstractInterpreterInstrum
     }
 
     protected final Object send(final VirtualFrame frame, final int currentPC, final Object receiver, final Object arg) {
-        return followForwarded(currentPC, dispatch(frame, currentPC, receiver, arg));
+        return dispatch(frame, currentPC, receiver, arg);
     }
 
     private Object dispatch(final VirtualFrame frame, final int currentPC, final Object receiver, final Object arg) {
@@ -151,7 +151,7 @@ public abstract class AbstractInterpreterNode extends AbstractInterpreterInstrum
     }
 
     protected final Object send(final VirtualFrame frame, final int currentPC, final Object receiver, final Object arg1, final Object arg2) {
-        return followForwarded(currentPC, dispatch(frame, currentPC, receiver, arg1, arg2));
+        return dispatch(frame, currentPC, receiver, arg1, arg2);
     }
 
     private Object dispatch(final VirtualFrame frame, final int currentPC, final Object receiver, final Object arg1, final Object arg2) {
@@ -163,7 +163,7 @@ public abstract class AbstractInterpreterNode extends AbstractInterpreterInstrum
     }
 
     protected final Object sendNary(final VirtualFrame frame, final int currentPC, final Object receiver, final Object[] arguments) {
-        return followForwarded(currentPC, dispatchNary(frame, currentPC, receiver, arguments));
+        return dispatchNary(frame, currentPC, receiver, arguments);
     }
 
     private Object dispatchNary(final VirtualFrame frame, final int currentPC, final Object receiver, final Object[] arguments) {
@@ -175,7 +175,7 @@ public abstract class AbstractInterpreterNode extends AbstractInterpreterInstrum
     }
 
     protected final Object sendValue(final VirtualFrame frame, final int currentPC, final Object receiver) {
-        return followForwarded(currentPC, dispatchValue(frame, currentPC, receiver));
+        return dispatchValue(frame, currentPC, receiver);
     }
 
     private Object dispatchValue(final VirtualFrame frame, final int currentPC, final Object receiver) {
@@ -187,7 +187,7 @@ public abstract class AbstractInterpreterNode extends AbstractInterpreterInstrum
     }
 
     protected final Object sendValueWithArg(final VirtualFrame frame, final int currentPC, final Object receiver, final Object arg) {
-        return followForwarded(currentPC, dispatchValueWithArg(frame, currentPC, receiver, arg));
+        return dispatchValueWithArg(frame, currentPC, receiver, arg);
     }
 
     private Object dispatchValueWithArg(final VirtualFrame frame, final int currentPC, final Object receiver, final Object arg) {
@@ -264,15 +264,6 @@ public abstract class AbstractInterpreterNode extends AbstractInterpreterInstrum
     /** Profiled version of {@link CompiledCodeObject#getAndResolveLiteral(long)}. */
     public final Object getAndResolveLiteral(final int currentPC, final long longIndex) {
         final Object litVar = code.getLiteral(longIndex);
-        if (litVar instanceof final AbstractSqueakObjectWithClassAndHash obj) {
-            enter(currentPC, getProfile(currentPC), BRANCH1);
-            if (!obj.isNotForwarded()) {
-                CompilerDirectives.transferToInterpreter();
-                final AbstractSqueakObjectWithClassAndHash forwarded = obj.getForwardingPointer();
-                code.setLiteral(longIndex, forwarded);
-                return forwarded;
-            }
-        }
         return litVar;
     }
 
@@ -408,14 +399,7 @@ public abstract class AbstractInterpreterNode extends AbstractInterpreterInstrum
      * Handling of forwarding pointers
      */
     private Object followForwarded(final int currentPC, final Object value) {
-        final byte profile = getProfile(currentPC);
-        if (value instanceof final AbstractSqueakObjectWithClassAndHash object) {
-            enter(currentPC, profile, BRANCH6);
-            return object.resolveForwardingPointer();
-        } else {
-            enter(currentPC, profile, BRANCH7);
-            return value;
-        }
+        return value;
     }
 
     /*
@@ -423,7 +407,7 @@ public abstract class AbstractInterpreterNode extends AbstractInterpreterInstrum
      */
 
     protected final void pushFollowed(final VirtualFrame frame, final int currentPC, final int sp, final Object value) {
-        push(frame, sp, followForwarded(currentPC, value));
+        push(frame, sp, value);
     }
 
     protected static final void push(final VirtualFrame frame, final int sp, final Object value) {

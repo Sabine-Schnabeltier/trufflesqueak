@@ -537,7 +537,7 @@ public final class InterpreterV3PlusClosuresNode extends AbstractInterpreterNode
                                 final int numArgs = byte2 & 31;
                                 final Object[] arguments = popN(frame, sp, numArgs);
                                 sp -= numArgs;
-                                final Object receiver = AbstractSqueakObjectWithClassAndHash.resolveForwardingPointer(pop(frame, --sp));
+                                final Object receiver = pop(frame, --sp);
                                 FrameAccess.externalizePCAndSP(frame, pc, sp);
                                 pushFollowed(frame, currentPC, sp++, sendSuper(frame, currentPC, receiver, arguments));
                                 break;
@@ -578,7 +578,7 @@ public final class InterpreterV3PlusClosuresNode extends AbstractInterpreterNode
                         final int numArgs = getUnsignedInt(bc, pc++) >> 5;
                         final Object[] arguments = popN(frame, sp, numArgs);
                         sp -= numArgs;
-                        final Object receiver = AbstractSqueakObjectWithClassAndHash.resolveForwardingPointer(pop(frame, --sp));
+                        final Object receiver = pop(frame, --sp);
                         FrameAccess.externalizePCAndSP(frame, pc, sp);
                         pushFollowed(frame, currentPC, sp++, sendSuper(frame, currentPC, receiver, arguments));
                         break;

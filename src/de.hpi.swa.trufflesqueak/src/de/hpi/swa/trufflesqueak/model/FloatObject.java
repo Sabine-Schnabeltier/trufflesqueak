@@ -55,16 +55,6 @@ public final class FloatObject extends AbstractSqueakObjectWithHash {
     }
 
     @Override
-    protected AbstractSqueakObjectWithHash getForwardingPointer() {
-        return this; // FloatObject cannot be forwarded
-    }
-
-    @Override
-    public AbstractSqueakObjectWithHash resolveForwardingPointer() {
-        return this; // FloatObject cannot be forwarded
-    }
-
-    @Override
     public void pointersBecomeOneWay(final UnmodifiableEconomicMap<Object, Object> fromToMap) {
         // Nothing to do
     }

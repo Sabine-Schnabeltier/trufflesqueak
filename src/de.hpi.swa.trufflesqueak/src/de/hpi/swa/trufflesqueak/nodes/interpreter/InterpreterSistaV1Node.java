@@ -1839,7 +1839,6 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
     private int handleExtendedPushFullClosure(final VirtualFrame frame, final int pc, final VirtualState vstate, final State state) {
         final int literalIndex = getByteExtendedWithExtA(pc, vstate, state);
         final CompiledCodeObject block = (CompiledCodeObject) code.getLiteral(literalIndex);
-        assert block.assertNotForwarded();
         CompilerAsserts.partialEvaluationConstant(block);
         final byte byteB = getByte(state.bytecode, pc + 2);
         final int numCopied = Byte.toUnsignedInt(byteB) & 63;

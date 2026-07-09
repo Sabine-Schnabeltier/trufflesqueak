@@ -6,7 +6,6 @@
  */
 package de.hpi.swa.trufflesqueak.nodes.accessing;
 
-import static de.hpi.swa.trufflesqueak.model.AbstractSqueakObjectWithClassAndHash.assertNotForwarded;
 
 import com.oracle.truffle.api.dsl.Cached;
 import com.oracle.truffle.api.dsl.Cached.Shared;
@@ -44,7 +43,6 @@ import de.hpi.swa.trufflesqueak.nodes.accessing.NativeObjectNodes.NativeObjectWr
 public abstract class SqueakObjectAtPut0Node extends AbstractNode {
 
     public final void execute(final Node node, final Object object, final long index, final Object value) {
-        assert assertNotForwarded(object);
         executeSpecialized(node, object, index, value);
     }
 
