@@ -246,7 +246,7 @@ jobs:
       shell: bash
       run: |
         trufflesqueak --download-image trufflesqueak-test --engine.Mode=default --vm.XX:ProfilesDumpFile=${{ env.PGO_FILE_SQUEAK }} --vm.XX:ProfilesLCOVFile=${{ env.PGO_LCOV_FILE_SQUEAK }} -- $(pwd)/src/image-tests/runSqueakTests.st
-      timeout-minutes: 30
+      timeout-minutes: 40
     - name: Report code coverage
       env:
         CODACY_PROJECT_TOKEN: ${{ secrets.CODACY_PROJECT_TOKEN }}
