@@ -1421,7 +1421,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
 
     @EarlyInline
     private int handlePushLiteralVariable(final VirtualFrame frame, final int pc, final VirtualState vstate, final int index) {
-        push(frame, vstate.sp++, readLiteralVariable(pc, index));
+        pushFollowed(frame, pc, vstate.sp++, readLiteralVariable(pc, index));
         return pc + 1;
     }
 
@@ -1780,7 +1780,7 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
     @BytecodeInterpreterHandler(value = BC.EXT_PUSH_LITERAL_VARIABLE, safepoint = false)
     private int handleExtendedPushLiteralVariable(final VirtualFrame frame, final int pc, final VirtualState vstate, final State state) {
         final int index = getByteExtendedWithExtA(pc, vstate, state);
-        push(frame, vstate.sp++, readLiteralVariable(pc, index));
+        pushFollowed(frame, pc, vstate.sp++, readLiteralVariable(pc, index));
         return pc + 2;
     }
 

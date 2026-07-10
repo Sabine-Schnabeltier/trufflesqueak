@@ -348,7 +348,7 @@ public final class InterpreterV3PlusClosuresNode extends AbstractInterpreterNode
                         BC.PUSH_LIT_VAR_08, BC.PUSH_LIT_VAR_09, BC.PUSH_LIT_VAR_0A, BC.PUSH_LIT_VAR_0B, BC.PUSH_LIT_VAR_0C, BC.PUSH_LIT_VAR_0D, BC.PUSH_LIT_VAR_0E, BC.PUSH_LIT_VAR_0F, //
                         BC.PUSH_LIT_VAR_10, BC.PUSH_LIT_VAR_11, BC.PUSH_LIT_VAR_12, BC.PUSH_LIT_VAR_13, BC.PUSH_LIT_VAR_14, BC.PUSH_LIT_VAR_15, BC.PUSH_LIT_VAR_16, BC.PUSH_LIT_VAR_17, //
                         BC.PUSH_LIT_VAR_18, BC.PUSH_LIT_VAR_19, BC.PUSH_LIT_VAR_1A, BC.PUSH_LIT_VAR_1B, BC.PUSH_LIT_VAR_1C, BC.PUSH_LIT_VAR_1D, BC.PUSH_LIT_VAR_1E, BC.PUSH_LIT_VAR_1F: {
-                        push(frame, sp++, readLiteralVariable(currentPC, b & 0x1F));
+                        pushFollowed(frame, currentPC, sp++, readLiteralVariable(currentPC, b & 0x1F));
                         break;
                     }
                     case BC.POP_INTO_RCVR_VAR_0, BC.POP_INTO_RCVR_VAR_2, BC.POP_INTO_RCVR_VAR_3, BC.POP_INTO_RCVR_VAR_4, BC.POP_INTO_RCVR_VAR_5, BC.POP_INTO_RCVR_VAR_6, BC.POP_INTO_RCVR_VAR_7: {
@@ -453,7 +453,7 @@ public final class InterpreterV3PlusClosuresNode extends AbstractInterpreterNode
                                 break;
                             }
                             case 3: {
-                                push(frame, sp++, readLiteralVariable(currentPC, variableIndex));
+                                pushFollowed(frame, currentPC, sp++, readLiteralVariable(currentPC, variableIndex));
                                 break;
                             }
                         }
@@ -553,7 +553,7 @@ public final class InterpreterV3PlusClosuresNode extends AbstractInterpreterNode
                                 break;
                             }
                             case 4: {
-                                push(frame, sp++, readLiteralVariable(currentPC, byte3));
+                                pushFollowed(frame, currentPC, sp++, readLiteralVariable(currentPC, byte3));
                                 break;
                             }
                             case 5: {
