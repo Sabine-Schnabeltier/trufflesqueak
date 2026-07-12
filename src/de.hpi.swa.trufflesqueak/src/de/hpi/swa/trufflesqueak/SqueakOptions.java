@@ -6,6 +6,9 @@
  */
 package de.hpi.swa.trufflesqueak;
 
+import static de.hpi.swa.trufflesqueak.shared.SqueakLanguageConfig.DEFAULT_CONTEXT_STACK_DEPTH;
+import static de.hpi.swa.trufflesqueak.shared.SqueakLanguageConfig.MIN_CONTEXT_STACK_DEPTH;
+
 import org.graalvm.options.OptionCategory;
 import org.graalvm.options.OptionDescriptors;
 import org.graalvm.options.OptionKey;
@@ -44,7 +47,7 @@ public final class SqueakOptions {
     public static final OptionKey<Boolean> ResourceSummary = new OptionKey<>(false);
 
     @Option(name = SqueakLanguageOptions.CONTEXT_STACK_DEPTH, category = OptionCategory.USER, stability = OptionStability.EXPERIMENTAL, help = SqueakLanguageOptions.CONTEXT_STACK_DEPTH_HELP, usageSyntax = "number")//
-    public static final OptionKey<Integer> ContextStackDepth = new OptionKey<>(2 << 12);
+    public static final OptionKey<Integer> ContextStackDepth = new OptionKey<>(DEFAULT_CONTEXT_STACK_DEPTH);
 
     @Option(name = SqueakLanguageOptions.SIGNAL_INPUT_SEMAPHORE, category = OptionCategory.INTERNAL, stability = OptionStability.EXPERIMENTAL, help = SqueakLanguageOptions.SIGNAL_INPUT_SEMAPHORE_HELP, usageSyntax = "false|true")//
     public static final OptionKey<Boolean> SignalInputSemaphore = new OptionKey<>(false);
@@ -71,7 +74,7 @@ public final class SqueakOptions {
                             options.get(ResourceSummary),
                             options.get(Headless),
                             options.get(Interrupts),
-                            Math.max(1, options.get(ContextStackDepth)),
+                            Math.max(MIN_CONTEXT_STACK_DEPTH, options.get(ContextStackDepth)),
                             options.get(Startup),
                             options.get(Testing),
                             options.get(SignalInputSemaphore));

@@ -19,6 +19,9 @@ public final class SqueakLanguageConfig {
     public static final String WEBSITE = "https://github.com/hpi-swa/trufflesqueak";
     private static final String IMAGE_VERSION = "25.0.1"; // on release: `VERSION;`
 
+    public static final int DEFAULT_CONTEXT_STACK_DEPTH = 2 << 12;
+    public static final int MIN_CONTEXT_STACK_DEPTH = 128;
+
     public record SupportedImage(String id, String name, String url) {
         public static SupportedImage url(final String url) {
             final String name = extractName(url);
