@@ -340,10 +340,12 @@ public final class ArithmeticPrimitives extends AbstractPrimitiveFactoryHolder {
                 throw PrimitiveFailed.BAD_ARGUMENT;
             } else if (isOverflowProfile.profile(node, SqueakGuards.isOverflowDivision(lhs, rhs))) {
                 return LargeIntegers.createLongMinOverflowResult(image);
-            } else if (isIntegralProfile.profile(node, SqueakGuards.isIntegralWhenDividedBy(lhs, rhs))) {
+            }
+            final long remainder = lhs % rhs;
+            if (isIntegralProfile.profile(node, remainder == 0)) {
                 return lhs / rhs;
             } else {
-                return image.asFraction(lhs, rhs, writeNode);
+                return image.asFraction(lhs, rhs, remainder, writeNode);
             }
         }
 

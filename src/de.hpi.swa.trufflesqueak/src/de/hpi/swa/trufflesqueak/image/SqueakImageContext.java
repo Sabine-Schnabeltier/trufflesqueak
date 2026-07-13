@@ -1157,27 +1157,48 @@ public final class SqueakImageContext {
         return fractionClass;
     }
 
-    public PointersObject asFraction(final long numerator, final long denominator, final AbstractPointersObjectWriteNode writeNode) {
-        final long actualNumerator;
-        final long actualDenominator;
-        if (denominator < 0) { // "keep sign in numerator"
-            actualNumerator = -numerator;
-            actualDenominator = -denominator;
-        } else {
-            actualNumerator = numerator;
-            actualDenominator = denominator;
+    public PointersObject asFraction(final long numerator, final long denominator, final long nonzeroRemainder, final AbstractPointersObjectWriteNode writeNode) {
+        // Keep sign in numerator and use previously computed non-zero remainder
+        long finalNum = denominator < 0 ? -numerator : numerator;
+        long finalDen = Math.abs(denominator);
+        long b = Math.abs(nonzeroRemainder);
+
+        // GCD and Division (if remainder != 1)
+        if (b != 1) {
+            // Compute GCD using Stein's algorithm
+            long a = finalDen;
+            final int commonTrailingZeros = Long.numberOfTrailingZeros(a | b);
+            a >>= Long.numberOfTrailingZeros(a);
+
+            while (b != 0) {
+                b >>= Long.numberOfTrailingZeros(b);
+                if (b == 1) {
+                    a = 1;
+                    break; // Stein's Early Exit
+                }
+                if (a > b) {
+                    final long temp = a;
+                    a = b;
+                    b = temp;
+                }
+                b -= a;
+            }
+
+            // Divide numerator and denominator by GCD (= a << commonTrailingZeros)
+            if (commonTrailingZeros > 0) {
+                finalNum >>= commonTrailingZeros;
+                finalDen >>= commonTrailingZeros;
+            }
+            if (a != 1) {
+                finalNum /= a;
+                finalDen /= a;
+            }
         }
-        // Calculate gcd
-        long n = actualNumerator;
-        long m = actualDenominator;
-        while (n != 0) {
-            n = m % (m = n);
-        }
-        final long gcd = Math.abs(m);
+
         // Instantiate reduced fraction
         final PointersObject fraction = new PointersObject(getFractionClass());
-        writeNode.execute(fraction, FRACTION.NUMERATOR, actualNumerator / gcd);
-        writeNode.execute(fraction, FRACTION.DENOMINATOR, actualDenominator / gcd);
+        writeNode.execute(fraction, FRACTION.NUMERATOR, finalNum);
+        writeNode.execute(fraction, FRACTION.DENOMINATOR, finalDen);
         return fraction;
     }
 
