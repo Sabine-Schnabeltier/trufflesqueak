@@ -16,6 +16,7 @@ import com.oracle.truffle.api.nodes.RootNode;
 
 import de.hpi.swa.trufflesqueak.SqueakLanguage;
 import de.hpi.swa.trufflesqueak.image.SqueakImageContext;
+import de.hpi.swa.trufflesqueak.image.SqueakImageContext.SavedExecutionState;
 import de.hpi.swa.trufflesqueak.interop.WrapToSqueakNode;
 import de.hpi.swa.trufflesqueak.model.BlockClosureObject;
 import de.hpi.swa.trufflesqueak.model.NilObject;
@@ -44,11 +45,11 @@ public abstract class DoItRootNode extends RootNode {
         if (blockClosure.getNumArgs() != frame.getArguments().length) {
             return NilObject.SINGLETON;
         }
-        final boolean wasActive = image.interrupt.deactivate();
+        final SavedExecutionState state = image.suspendNormalExecution();
         try {
             return primitiveNode.execute(image.externalSenderFrame, blockClosure, wrapNode.executeWrap(node, frame.getArguments()));
         } finally {
-            image.interrupt.reactivate(wasActive);
+            image.resumeNormalExecution(state);
         }
     }
 }

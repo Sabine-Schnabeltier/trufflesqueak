@@ -90,6 +90,10 @@ import de.hpi.swa.trufflesqueak.util.ObjectGraphUtils;
 public final class SqueakImageContext {
     private static final ContextReference<SqueakImageContext> REFERENCE = ContextReference.create(SqueakLanguage.class);
 
+    /* Encapsulates the state needed to safely execute without interrupts and stack limits */
+    public record SavedExecutionState(boolean insterruptsWereActive, int savedContextDepth) {
+    }
+
     /* Special objects */
     public final ClassObject falseClass = new ClassObject(this);
     public final ClassObject trueClass = new ClassObject(this);
@@ -292,6 +296,31 @@ public final class SqueakImageContext {
         return squeakImage;
     }
 
+    /**
+     * Suspends normal execution constraints by deactivating the interrupt handler
+     * and bypassing context stack depth limits.
+     *
+     * This method prepares the environment for safe execution of internal VM routines
+     * or external Interop calls. In these scenarios, normal Smalltalk semantics
+     * (such as process switching or flushing the Truffle execution stack) must be suppressed
+     * to prevent disrupting the host execution flow.
+     *
+     * @return a {@link SavedExecutionState} record containing the original environment state.
+     * This MUST be passed to {@link #resumeNormalExecution(SavedExecutionState)}
+     * inside a {@code finally} block to restore normal VM operations.
+     */
+    public SavedExecutionState suspendNormalExecution() {
+        final boolean wasActive = interrupt.deactivate();
+        final int savedDepth = currentContextStackDepth;
+        currentContextStackDepth = -100_000;
+        return new SavedExecutionState(wasActive, savedDepth);
+    }
+
+    public void resumeNormalExecution(final SavedExecutionState state) {
+        currentContextStackDepth = state.savedContextDepth();
+        interrupt.reactivate(state.insterruptsWereActive());
+    }
+
     @TruffleBoundary
     public Object evaluate(final String sourceCode) {
         return getDoItContextNode(sourceCode).getCallTarget().call();
@@ -299,11 +328,11 @@ public final class SqueakImageContext {
 
     @TruffleBoundary
     public Object evaluateUninterruptably(final String sourceCode) {
-        final boolean wasActive = interrupt.deactivate();
+        final SavedExecutionState state = suspendNormalExecution();
         try {
             return evaluate(sourceCode);
         } finally {
-            interrupt.reactivate(wasActive);
+            resumeNormalExecution(state);
         }
     }
 
