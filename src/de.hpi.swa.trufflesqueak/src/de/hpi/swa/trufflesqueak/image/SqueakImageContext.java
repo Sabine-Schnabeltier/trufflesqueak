@@ -89,9 +89,14 @@ import de.hpi.swa.trufflesqueak.util.ObjectGraphUtils;
 @DefaultExpression("get($node)")
 public final class SqueakImageContext {
     private static final ContextReference<SqueakImageContext> REFERENCE = ContextReference.create(SqueakLanguage.class);
+    private static final int SUSPENDED_CONTEXT_STACK_DEPTH = Integer.MIN_VALUE / 2;
 
     /* Encapsulates the state needed to safely execute without interrupts and stack limits */
-    public record SavedExecutionState(boolean insterruptsWereActive, int savedContextDepth) {
+    public record SavedExecutionState(SqueakImageContext context, boolean interruptsWereActive, int savedContextDepth) implements AutoCloseable {
+        @Override
+        public void close() {
+            context.resumeNormalExecution(this);
+        }
     }
 
     /* Special objects */
@@ -305,20 +310,20 @@ public final class SqueakImageContext {
      * (such as process switching or flushing the Truffle execution stack) must be suppressed
      * to prevent disrupting the host execution flow.
      *
-     * @return a {@link SavedExecutionState} record containing the original environment state.
-     * This MUST be passed to {@link #resumeNormalExecution(SavedExecutionState)}
-     * inside a {@code finally} block to restore normal VM operations.
+     * @return a {@link SavedExecutionState} that must be managed within a
+     *         {@code try-with-resources} block. This ensures the original
+     *         environment state is automatically and safely restored upon exit.
      */
     public SavedExecutionState suspendNormalExecution() {
         final boolean wasActive = interrupt.deactivate();
         final int savedDepth = currentContextStackDepth;
-        currentContextStackDepth = -100_000;
-        return new SavedExecutionState(wasActive, savedDepth);
+        currentContextStackDepth = SUSPENDED_CONTEXT_STACK_DEPTH;
+        return new SavedExecutionState(this, wasActive, savedDepth);
     }
 
-    public void resumeNormalExecution(final SavedExecutionState state) {
+    private void resumeNormalExecution(final SavedExecutionState state) {
         currentContextStackDepth = state.savedContextDepth();
-        interrupt.reactivate(state.insterruptsWereActive());
+        interrupt.reactivate(state.interruptsWereActive());
     }
 
     @TruffleBoundary
@@ -328,11 +333,8 @@ public final class SqueakImageContext {
 
     @TruffleBoundary
     public Object evaluateUninterruptably(final String sourceCode) {
-        final SavedExecutionState state = suspendNormalExecution();
-        try {
+        try (var _ = suspendNormalExecution()) {
             return evaluate(sourceCode);
-        } finally {
-            resumeNormalExecution(state);
         }
     }
 

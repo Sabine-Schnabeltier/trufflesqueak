@@ -34,7 +34,6 @@ import com.oracle.truffle.api.nodes.Node;
 
 import de.hpi.swa.trufflesqueak.exceptions.ProcessSwitch;
 import de.hpi.swa.trufflesqueak.image.SqueakImageContext;
-import de.hpi.swa.trufflesqueak.image.SqueakImageContext.SavedExecutionState;
 import de.hpi.swa.trufflesqueak.interop.WrapToSqueakNode;
 import de.hpi.swa.trufflesqueak.nodes.AbstractNode;
 import de.hpi.swa.trufflesqueak.nodes.LookupMethodNode;
@@ -70,8 +69,7 @@ public abstract class AbstractSqueakObject implements TruffleObject {
                     @SuppressWarnings("unused") @Bind final Node node,
                     @Cached final PerformInteropSendNode performInteropSendNode) throws Exception {
         final SqueakImageContext image = SqueakImageContext.get(node);
-        final SavedExecutionState state = image.suspendNormalExecution();
-        try {
+        try (var _ = image.suspendNormalExecution()) {
             return performInteropSendNode.execute(node, receiver, message, arguments);
         } catch (final ProcessSwitch ps) {
             CompilerDirectives.transferToInterpreter();
@@ -81,8 +79,6 @@ public abstract class AbstractSqueakObject implements TruffleObject {
             } else {
                 throw ps; // open debugger in interactive mode
             }
-        } finally {
-            image.resumeNormalExecution(state);
         }
     }
 

@@ -22,7 +22,6 @@ import de.hpi.swa.trufflesqueak.exceptions.SqueakExceptions;
 import de.hpi.swa.trufflesqueak.image.SqueakImageChunk;
 import de.hpi.swa.trufflesqueak.image.SqueakImageConstants;
 import de.hpi.swa.trufflesqueak.image.SqueakImageContext;
-import de.hpi.swa.trufflesqueak.image.SqueakImageContext.SavedExecutionState;
 import de.hpi.swa.trufflesqueak.image.SqueakImageWriter;
 import de.hpi.swa.trufflesqueak.interop.LookupMethodByStringNode;
 import de.hpi.swa.trufflesqueak.nodes.dispatch.DispatchSelectorNaryNode.DispatchIndirectNaryNode.TryPrimitiveNaryNode;
@@ -281,16 +280,13 @@ public abstract class AbstractSqueakObjectWithHash extends AbstractSqueakObject 
     public final Object send(final SqueakImageContext image, final String selector, final Object... arguments) {
         final Object methodObject = LookupMethodByStringNode.executeUncached(getSqueakClass(), selector);
         if (methodObject instanceof final CompiledCodeObject method) {
-            final SavedExecutionState state = image.suspendNormalExecution();
-            try {
+            try (var _ = image.suspendNormalExecution()) {
                 final Object result = TryPrimitiveNaryNode.executeUncached(image.externalSenderFrame, method, this, arguments);
                 if (result != null) {
                     return result;
                 } else {
                     return IndirectCallNode.getUncached().call(method.getCallTarget(), FrameAccess.newWith(NilObject.SINGLETON, null, this, arguments));
                 }
-            } finally {
-                image.resumeNormalExecution(state);
             }
         } else {
             throw SqueakExceptions.SqueakException.create("CompiledMethodObject expected, got: " + methodObject);
