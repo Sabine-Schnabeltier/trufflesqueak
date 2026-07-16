@@ -44,8 +44,8 @@ public final class PlatformEventLoop {
     private static final int EVENT_FETCH_BATCH_SIZE = 32;
     private static final CountDownLatch startLatch = new CountDownLatch(1);
     private static final CountDownLatch initLatch = new CountDownLatch(1);
-    private static volatile boolean isRunning = false;
-    private static volatile boolean shutdownRequested = false;
+    private static volatile boolean isRunning;
+    private static volatile boolean shutdownRequested;
     private static volatile Consumer<MemorySegment> eventHandler;
     private static volatile Runnable renderFrame;
     private static final MemorySegment wakeUpEvent;

@@ -39,7 +39,7 @@ import de.hpi.swa.trufflesqueak.util.MiscUtils;
 public final class InterpreterProxy implements AutoCloseable {
     private static final int BASE_HEADER_SIZE = 8;
 
-    public static InterpreterProxy SINGLETON = new InterpreterProxy();
+    public static final InterpreterProxy SINGLETON = new InterpreterProxy();
 
     private SqueakImageContext context;
     private int numReceiverAndArguments;

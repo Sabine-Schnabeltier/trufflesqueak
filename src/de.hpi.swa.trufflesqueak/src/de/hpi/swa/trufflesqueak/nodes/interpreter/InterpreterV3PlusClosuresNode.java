@@ -124,6 +124,9 @@ public final class InterpreterV3PlusClosuresNode extends AbstractInterpreterNode
                             setData(currentPC, getLiteralVariableOrCreateLiteralNode(code.getAndResolveLiteral(variableIndex)));
                             break;
                         }
+                        default: {
+                            throw CompilerDirectives.shouldNotReachHere();
+                        }
                     }
                     break;
                 }
@@ -455,6 +458,9 @@ public final class InterpreterV3PlusClosuresNode extends AbstractInterpreterNode
                             case 3: {
                                 push(frame, sp++, readLiteralVariable(currentPC, variableIndex));
                                 break;
+                            }
+                            default: {
+                                throw CompilerDirectives.shouldNotReachHere();
                             }
                         }
                         break;

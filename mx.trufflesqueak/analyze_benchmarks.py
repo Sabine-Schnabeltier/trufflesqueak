@@ -252,7 +252,10 @@ def get_result(bench_name):
                 match = RE_LOG_LINE.match(line)
                 if match:
                     iteration += 1
-                    assert bench_name == match.group(1)
+                    if bench_name != match.group(1):
+                        raise AssertionError(
+                            f"Unexpected bench_name (got {bench_name}; expected {match.group(1)})"
+                        )
                     time = float(match.group("runtime"))
                     if match.group("unit") == "u":
                         time /= 1000

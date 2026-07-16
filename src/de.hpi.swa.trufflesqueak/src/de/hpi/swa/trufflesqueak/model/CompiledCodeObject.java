@@ -323,10 +323,8 @@ public final class CompiledCodeObject extends AbstractSqueakObjectWithClassAndHa
     }
 
     private void invalidateCallTargetStable(final String reason) {
-        if (hasExecutionData()) {
-            if (executionData.callTargetStable != null) {
-                executionData.callTargetStable.invalidate(reason);
-            }
+        if (hasExecutionData() && executionData.callTargetStable != null) {
+            executionData.callTargetStable.invalidate(reason);
         }
     }
 

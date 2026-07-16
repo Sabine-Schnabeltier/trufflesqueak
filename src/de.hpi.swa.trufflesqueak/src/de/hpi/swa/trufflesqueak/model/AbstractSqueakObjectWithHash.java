@@ -166,7 +166,8 @@ public abstract class AbstractSqueakObjectWithHash extends AbstractSqueakObject 
      * @return <tt>false</tt> if already marked, <tt>true</tt> otherwise
      */
     public final boolean tryToMarkWith(final boolean currentMarkingFlag) {
-        int oldValue, newValue;
+        int oldValue;
+        int newValue;
         /*
          * Atomically set the new value with release semantics. If another thread modified 'flags'
          * since our getAcquire, CAS will fail and we retry.
