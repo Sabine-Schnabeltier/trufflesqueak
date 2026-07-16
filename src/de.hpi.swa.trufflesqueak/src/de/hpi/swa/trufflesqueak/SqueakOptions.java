@@ -7,7 +7,6 @@
 package de.hpi.swa.trufflesqueak;
 
 import static de.hpi.swa.trufflesqueak.shared.SqueakLanguageConfig.DEFAULT_CONTEXT_STACK_DEPTH;
-import static de.hpi.swa.trufflesqueak.shared.SqueakLanguageConfig.MIN_CONTEXT_STACK_DEPTH;
 
 import org.graalvm.options.OptionCategory;
 import org.graalvm.options.OptionDescriptors;
@@ -74,7 +73,7 @@ public final class SqueakOptions {
                             options.get(ResourceSummary),
                             options.get(Headless),
                             options.get(Interrupts),
-                            Math.max(MIN_CONTEXT_STACK_DEPTH, options.get(ContextStackDepth)),
+                            Math.max(1, options.get(ContextStackDepth)),
                             options.get(Startup),
                             options.get(Testing),
                             options.get(SignalInputSemaphore));

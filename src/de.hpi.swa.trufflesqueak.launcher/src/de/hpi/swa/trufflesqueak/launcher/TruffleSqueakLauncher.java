@@ -7,7 +7,6 @@
 package de.hpi.swa.trufflesqueak.launcher;
 
 import static de.hpi.swa.trufflesqueak.shared.SqueakLanguageConfig.DEFAULT_CONTEXT_STACK_DEPTH;
-import static de.hpi.swa.trufflesqueak.shared.SqueakLanguageConfig.MIN_CONTEXT_STACK_DEPTH;
 
 import java.io.File;
 import java.io.IOException;
@@ -96,7 +95,7 @@ public final class TruffleSqueakLauncher extends AbstractLanguageLauncher {
             } else if (arg.startsWith(SqueakLanguageOptions.SDL_POLL_TIMEOUT_FLAG)) {
                 i = handleIntOption(arguments, i, arg, SqueakLanguageOptions.SDL_POLL_TIMEOUT_FLAG, val -> sdlPollTimeoutMilliseconds = val, unrecognized);
             } else if (arg.startsWith(SqueakLanguageOptions.CONTEXT_STACK_DEPTH_FLAG)) {
-                i = handleIntOption(arguments, i, arg, SqueakLanguageOptions.CONTEXT_STACK_DEPTH_FLAG, val -> contextStackDepth = Math.max(MIN_CONTEXT_STACK_DEPTH, val), unrecognized);
+                i = handleIntOption(arguments, i, arg, SqueakLanguageOptions.CONTEXT_STACK_DEPTH_FLAG, val -> contextStackDepth = Math.max(1, val), unrecognized);
             } else if (SqueakLanguageOptions.DOWNLOAD_IMAGE_FLAG.equals(arg)) {
                 downloadImageKey = getRequiredDownloadImageKey(arguments, ++i);
             } else {
