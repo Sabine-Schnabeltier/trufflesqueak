@@ -95,19 +95,8 @@ public final class TruffleSqueakLauncher extends AbstractLanguageLauncher {
                 i = handleIntOption(arguments, i, arg, SqueakLanguageOptions.WATCHDOG_TIMEOUT_FLAG, val -> watchdogTimeoutMinutes = val, unrecognized);
             } else if (arg.startsWith(SqueakLanguageOptions.SDL_POLL_TIMEOUT_FLAG)) {
                 i = handleIntOption(arguments, i, arg, SqueakLanguageOptions.SDL_POLL_TIMEOUT_FLAG, val -> sdlPollTimeoutMilliseconds = val, unrecognized);
-            } else if (arg.startsWith(SqueakLanguageOptions.CONTEXT_STACK_DEPTH_FLAG) ||
-                            arg.startsWith("--" + SqueakLanguageConfig.ID + "." + SqueakLanguageOptions.CONTEXT_STACK_DEPTH)) {
-
-                final String matchedPrefix = arg.startsWith(SqueakLanguageOptions.CONTEXT_STACK_DEPTH_FLAG)
-                                ? SqueakLanguageOptions.CONTEXT_STACK_DEPTH_FLAG
-                                : "--" + SqueakLanguageConfig.ID + "." + SqueakLanguageOptions.CONTEXT_STACK_DEPTH;
-
-                i = handleIntOption(arguments, i, arg, matchedPrefix, val -> {
-                    contextStackDepth = Math.max(SqueakLanguageConfig.MIN_CONTEXT_STACK_DEPTH, val);
-                }, unrecognized);
-
-                // Push the fully-qualified flag back into unrecognized.
-                unrecognized.add("--" + SqueakLanguageConfig.ID + "." + SqueakLanguageOptions.CONTEXT_STACK_DEPTH + "=" + contextStackDepth);
+            } else if (arg.startsWith(SqueakLanguageOptions.CONTEXT_STACK_DEPTH_FLAG)) {
+                i = handleIntOption(arguments, i, arg, SqueakLanguageOptions.CONTEXT_STACK_DEPTH_FLAG, val -> contextStackDepth = Math.max(MIN_CONTEXT_STACK_DEPTH, val), unrecognized);
             } else if (SqueakLanguageOptions.DOWNLOAD_IMAGE_FLAG.equals(arg)) {
                 downloadImageKey = getRequiredDownloadImageKey(arguments, ++i);
             } else {
@@ -126,7 +115,7 @@ public final class TruffleSqueakLauncher extends AbstractLanguageLauncher {
     /**
      * Handles parsing a non-negative integer option, routing it to 'unrecognized' if it is a false
      * prefix match.
-     *
+     * 
      * @return the updated argument index 'i'
      */
     private int handleIntOption(final List<String> arguments, final int i, final String arg, final String flagName, final IntConsumer setter, final List<String> unrecognized) {
@@ -224,6 +213,7 @@ public final class TruffleSqueakLauncher extends AbstractLanguageLauncher {
         contextBuilder.option(SqueakLanguageConfig.ID + "." + SqueakLanguageOptions.IMAGE_PATH, imagePath);
         contextBuilder.option(SqueakLanguageConfig.ID + "." + SqueakLanguageOptions.HEADLESS, Boolean.toString(headless));
         contextBuilder.option(SqueakLanguageConfig.ID + "." + SqueakLanguageOptions.QUIET, Boolean.toString(quiet));
+        contextBuilder.option(SqueakLanguageConfig.ID + "." + SqueakLanguageOptions.CONTEXT_STACK_DEPTH, Integer.toString(contextStackDepth));
         contextBuilder.arguments(getLanguageId(), imageArguments);
         final String runtimeName = getRuntimeName();
         final boolean hasGraalCompiler = runtimeName.contains("Graal");
