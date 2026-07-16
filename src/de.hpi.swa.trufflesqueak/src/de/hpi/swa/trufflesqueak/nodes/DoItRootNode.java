@@ -44,8 +44,11 @@ public abstract class DoItRootNode extends RootNode {
         if (blockClosure.getNumArgs() != frame.getArguments().length) {
             return NilObject.SINGLETON;
         }
-        try (var _ = image.suspendNormalExecution()) {
+        final var state = image.suspendNormalExecution();
+        try {
             return primitiveNode.execute(image.externalSenderFrame, blockClosure, wrapNode.executeWrap(node, frame.getArguments()));
+        } finally {
+            state.close();
         }
     }
 }
