@@ -6,6 +6,9 @@ setUpImage
 	PolyglotToolSet register.
 	ToolSet default: PolyglotToolSet.
 	
+	"Set a default language."
+	Polyglot askForDefaultLanguageInfo.
+	
 	"Ensure FullBlockClosure is in special objects array"
 	(Smalltalk specialObjectsArray at: 38) ifNil:
 		[ Smalltalk specialObjectsArray at: 38 put: FullBlockClosure ].
