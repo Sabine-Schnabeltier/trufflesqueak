@@ -281,7 +281,7 @@ public abstract class AbstractSqueakObjectWithHash extends AbstractSqueakObject 
     public final Object send(final SqueakImageContext image, final String selector, final Object... arguments) {
         final Object methodObject = LookupMethodByStringNode.executeUncached(getSqueakClass(), selector);
         if (methodObject instanceof final CompiledCodeObject method) {
-            final boolean wasActive = image.interrupt.deactivate();
+            final var state = image.suspendNormalExecution();
             try {
                 final Object result = TryPrimitiveNaryNode.executeUncached(image.externalSenderFrame, method, this, arguments);
                 if (result != null) {
@@ -290,7 +290,7 @@ public abstract class AbstractSqueakObjectWithHash extends AbstractSqueakObject 
                     return IndirectCallNode.getUncached().call(method.getCallTarget(), FrameAccess.newWith(NilObject.SINGLETON, null, this, arguments));
                 }
             } finally {
-                image.interrupt.reactivate(wasActive);
+                state.close();
             }
         } else {
             throw SqueakExceptions.SqueakException.create("CompiledMethodObject expected, got: " + methodObject);

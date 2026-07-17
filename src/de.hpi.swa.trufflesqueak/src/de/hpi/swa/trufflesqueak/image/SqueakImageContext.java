@@ -89,6 +89,19 @@ import de.hpi.swa.trufflesqueak.util.ObjectGraphUtils;
 @DefaultExpression("get($node)")
 public final class SqueakImageContext {
     private static final ContextReference<SqueakImageContext> REFERENCE = ContextReference.create(SqueakLanguage.class);
+    private static final int SUSPENDED_CONTEXT_STACK_DEPTH = Integer.MIN_VALUE / 2;
+
+    /*
+     * Encapsulates the state needed to safely execute without interrupts and stack limits.
+     * Note: Use a standard try/finally block in partially evaluated Truffle code to avoid
+     * AOT compilation failures caused by try-with-resources desugaring.
+     */
+    public record SavedExecutionState(SqueakImageContext context, boolean interruptsWereActive, int savedContextDepth) implements AutoCloseable {
+        @Override
+        public void close() {
+            context.resumeNormalExecution(this);
+        }
+    }
 
     /* Special objects */
     public final ClassObject falseClass = new ClassObject(this);
@@ -292,6 +305,36 @@ public final class SqueakImageContext {
         return squeakImage;
     }
 
+    /**
+     * Suspends normal execution constraints by deactivating the interrupt handler
+     * and bypassing context stack depth limits.
+     *
+     * This method prepares the environment for safe execution of internal VM routines
+     * or external Interop calls. In these scenarios, normal Smalltalk semantics
+     * (such as process switching or flushing the Truffle execution stack) must be suppressed
+     * to prevent disrupting the host execution flow.
+     *
+     * @return a {@link SavedExecutionState} that must be closed to restore the original state.
+     * <p>
+     * <b>Usage Note:</b> While this implements {@link AutoCloseable}, it must be used
+     * with a traditional {@code try/finally} block inside Truffle compiled code paths.
+     * Using {@code try-with-resources} generates {@code Throwable.addSuppressed()}
+     * bytecode, which violates GraalVM Native Image compilation blocklists during
+     * partial evaluation. In standard Java code or behind a {@code @TruffleBoundary},
+     * {@code try-with-resources} is safe to use.
+     */
+    public SavedExecutionState suspendNormalExecution() {
+        final boolean wasActive = interrupt.deactivate();
+        final int savedDepth = currentContextStackDepth;
+        currentContextStackDepth = SUSPENDED_CONTEXT_STACK_DEPTH;
+        return new SavedExecutionState(this, wasActive, savedDepth);
+    }
+
+    private void resumeNormalExecution(final SavedExecutionState state) {
+        currentContextStackDepth = state.savedContextDepth();
+        interrupt.reactivate(state.interruptsWereActive());
+    }
+
     @TruffleBoundary
     public Object evaluate(final String sourceCode) {
         return getDoItContextNode(sourceCode).getCallTarget().call();
@@ -299,11 +342,11 @@ public final class SqueakImageContext {
 
     @TruffleBoundary
     public Object evaluateUninterruptably(final String sourceCode) {
-        final boolean wasActive = interrupt.deactivate();
+        final var state = suspendNormalExecution();
         try {
             return evaluate(sourceCode);
         } finally {
-            interrupt.reactivate(wasActive);
+            state.close();
         }
     }
 
