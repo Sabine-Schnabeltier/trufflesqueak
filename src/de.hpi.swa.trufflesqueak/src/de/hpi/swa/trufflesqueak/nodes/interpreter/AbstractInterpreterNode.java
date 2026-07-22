@@ -39,6 +39,7 @@ import de.hpi.swa.trufflesqueak.model.ArrayObject;
 import de.hpi.swa.trufflesqueak.model.BlockClosureObject;
 import de.hpi.swa.trufflesqueak.model.CompiledCodeObject;
 import de.hpi.swa.trufflesqueak.model.ContextObject;
+import de.hpi.swa.trufflesqueak.model.NativeObject;
 import de.hpi.swa.trufflesqueak.model.layout.ObjectLayouts.ASSOCIATION;
 import de.hpi.swa.trufflesqueak.model.layout.ObjectLayouts.CONTEXT;
 import de.hpi.swa.trufflesqueak.model.layout.ObjectLayouts.PROCESS;
@@ -136,6 +137,18 @@ public abstract class AbstractInterpreterNode extends AbstractInterpreterInstrum
 
     protected static final BlockClosureObject createBlockClosure(final VirtualFrame frame, final CompiledCodeObject block, final Object[] copiedValues, final ContextObject outerContext) {
         return new BlockClosureObject(true, block, block.getShadowBlockNumArgs(), copiedValues, FrameAccess.getReceiver(frame), outerContext);
+    }
+
+    protected static final AbstractDispatchNode createDispatchNode(final int numArgs, final NativeObject selector) {
+        return switch (numArgs) {
+            case 0 -> Dispatch0Node.create(selector);
+            case 1 -> Dispatch1Node.create(selector);
+            case 2 -> Dispatch2Node.create(selector);
+            case 3 -> Dispatch3Node.create(selector);
+            case 4 -> Dispatch4Node.create(selector);
+            case 5 -> Dispatch5Node.create(selector);
+            default -> DispatchNaryNode.create(selector);
+        };
     }
 
     protected final Object send(final VirtualFrame frame, final int currentPC, final Object receiver) {

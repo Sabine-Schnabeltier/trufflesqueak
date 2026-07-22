@@ -47,14 +47,9 @@ import de.hpi.swa.trufflesqueak.nodes.accessing.SqueakObjectAtPut0Node;
 import de.hpi.swa.trufflesqueak.nodes.accessing.SqueakObjectAtPut0NodeGen;
 import de.hpi.swa.trufflesqueak.nodes.accessing.SqueakObjectClassNodeGen;
 import de.hpi.swa.trufflesqueak.nodes.accessing.SqueakObjectIdentityNodeGen;
-import de.hpi.swa.trufflesqueak.nodes.dispatch.AbstractDispatchNode;
 import de.hpi.swa.trufflesqueak.nodes.dispatch.DispatchSelector0Node.Dispatch0Node;
 import de.hpi.swa.trufflesqueak.nodes.dispatch.DispatchSelector1Node.Dispatch1Node;
 import de.hpi.swa.trufflesqueak.nodes.dispatch.DispatchSelector2Node.Dispatch2Node;
-import de.hpi.swa.trufflesqueak.nodes.dispatch.DispatchSelector3Node.Dispatch3Node;
-import de.hpi.swa.trufflesqueak.nodes.dispatch.DispatchSelector4Node.Dispatch4Node;
-import de.hpi.swa.trufflesqueak.nodes.dispatch.DispatchSelector5Node.Dispatch5Node;
-import de.hpi.swa.trufflesqueak.nodes.dispatch.DispatchSelectorNaryNode.DispatchNaryNode;
 import de.hpi.swa.trufflesqueak.nodes.dispatch.DispatchSelectorNaryNodeFactory.DispatchDirectedSuperNaryNodeGen;
 import de.hpi.swa.trufflesqueak.nodes.dispatch.DispatchSelectorNaryNodeFactory.DispatchSuperNaryNodeGen;
 import de.hpi.swa.trufflesqueak.nodes.dispatch.DispatchValueNodeGen;
@@ -313,18 +308,13 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
                     vstate.resetExtAB();
                     break;
                 }
-                case BC.EXT_PUSH_LITERAL, BC.EXT_PUSH_CHARACTER: {
+                case BC.EXT_PUSH_LITERAL, BC.EXT_PUSH_INTEGER, BC.EXT_PUSH_CHARACTER: {
                     pc++;
                     vstate.resetExtAB();
                     break;
                 }
                 case BC.LONG_PUSH_TEMPORARY_VARIABLE, BC.PUSH_NEW_ARRAY, BC.LONG_STORE_AND_POP_TEMPORARY_VARIABLE, BC.LONG_STORE_TEMPORARY_VARIABLE: {
                     pc++;
-                    break;
-                }
-                case BC.EXT_PUSH_INTEGER: {
-                    pc++;
-                    vstate.resetExtAB();
                     break;
                 }
                 case BC.EXT_SEND: {
@@ -2915,18 +2905,6 @@ public final class InterpreterSistaV1Node extends AbstractInterpreterNode {
         } catch (final AbstractStandardSendReturn r) {
             return handleReturnException(frame, currentPC, r);
         }
-    }
-
-    private static AbstractDispatchNode createDispatchNode(final int numArgs, final NativeObject selector) {
-        return switch (numArgs) {
-            case 0 -> Dispatch0Node.create(selector);
-            case 1 -> Dispatch1Node.create(selector);
-            case 2 -> Dispatch2Node.create(selector);
-            case 3 -> Dispatch3Node.create(selector);
-            case 4 -> Dispatch4Node.create(selector);
-            case 5 -> Dispatch5Node.create(selector);
-            default -> DispatchNaryNode.create(selector);
-        };
     }
 
     public static int calculateLongExtendedOffset(final byte bytecode, final int extB) {

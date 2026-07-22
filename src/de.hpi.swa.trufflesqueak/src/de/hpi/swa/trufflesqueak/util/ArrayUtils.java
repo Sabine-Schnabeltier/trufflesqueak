@@ -10,6 +10,7 @@ import java.util.Arrays;
 
 import org.graalvm.collections.UnmodifiableEconomicMap;
 
+import com.oracle.truffle.api.CompilerAsserts;
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.CompilerDirectives.CompilationFinal;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
@@ -97,6 +98,7 @@ public final class ArrayUtils {
 
     @ExplodeLoop
     public static void copyExploded(final Object[] source, final Object[] dest, final int length) {
+        CompilerAsserts.partialEvaluationConstant(length);
         for (int i = 0; i < length; i++) {
             dest[i] = source[i];
         }
