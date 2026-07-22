@@ -313,7 +313,7 @@ public final class DispatchSelectorNaryNode extends AbstractDispatchSelectorNode
                 if (primitiveNode != null) {
                     return new DispatchDirectPrimitiveNaryNode(assumptions, method, primitiveNode);
                 }
-                DispatchUtils.logMissingPrimitive(primitiveNode, method);
+                DispatchUtils.logMissingPrimitive(null, method);
             }
             return new DispatchDirectMethodNaryNode(assumptions, method);
         }
