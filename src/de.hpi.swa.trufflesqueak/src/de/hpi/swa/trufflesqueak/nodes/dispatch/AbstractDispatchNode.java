@@ -15,13 +15,11 @@ import com.oracle.truffle.api.nodes.Node;
 import de.hpi.swa.trufflesqueak.model.CompiledCodeObject;
 import de.hpi.swa.trufflesqueak.model.NativeObject;
 import de.hpi.swa.trufflesqueak.nodes.AbstractNode;
+import de.hpi.swa.trufflesqueak.nodes.CacheLimits;
 import de.hpi.swa.trufflesqueak.nodes.accessing.SqueakObjectClassNode;
 import de.hpi.swa.trufflesqueak.nodes.accessing.SqueakObjectClassNodeGen;
 
 public abstract class AbstractDispatchNode extends AbstractNode {
-    protected static final int LOOKUP_CACHE_SIZE = 8;
-    protected static final int DISPATCH_CACHE_SIZE = 4;
-
     protected final NativeObject selector;
 
     AbstractDispatchNode(final NativeObject selector) {
@@ -37,7 +35,7 @@ public abstract class AbstractDispatchNode extends AbstractNode {
      * configured limit (DISPATCH_CACHE_SIZE). Each entry maintains a chain of class guards.
      * 2. Wide Tier (headWide): Handles class polymorphism. When a standard method exceeds its
      * allotted class guard limit (LOOKUP_CACHE_SIZE) in the fast tier, it is promoted here.
-     *
+     * <p>
      * The manager is responsible for evaluating lookup results, transitioning nodes between tiers,
      * pruning invalidated cache entries, and signaling a transition to indirect execution when
      * the cache capacity is exhausted. Fallback mechanisms (e.g., #doesNotUnderstand) are strictly
@@ -86,7 +84,7 @@ public abstract class AbstractDispatchNode extends AbstractNode {
                         // Guard chain overflow: Transition directly to wide execution
                         removeFastNode(currentFast, previousFast);
 
-                        final WideDispatchDataNode<T> newWide = new WideDispatchDataNode<>((CompiledCodeObject) lookupResult, currentFast.dispatchDirectNode);
+                        final WideDispatchDataNode<T> newWide = new WideDispatchDataNode<>(targetMethod, currentFast.dispatchDirectNode);
                         newWide.next = headWide;
                         headWide = insert(newWide);
                         return newWide.dispatchDirectNode;
@@ -100,7 +98,7 @@ public abstract class AbstractDispatchNode extends AbstractNode {
             totalMethodCount += countWideNodes();
 
             // 3. Global Budget Check
-            if (totalMethodCount < DISPATCH_CACHE_SIZE) {
+            if (totalMethodCount < CacheLimits.DISPATCH_CACHE_LIMIT) {
                 final FastDispatchDataNode<T> newNext = new FastDispatchDataNode<>(receiver, lookupResult, newDispatchNode);
                 if (previousFast == null) {
                     headFast = insert(newNext);
@@ -208,8 +206,7 @@ public abstract class AbstractDispatchNode extends AbstractNode {
                 count++;
             }
 
-            // Enforce the LOOKUP_CACHE_SIZE limit per method.
-            if (count < LOOKUP_CACHE_SIZE) {
+            if (count < CacheLimits.LOOKUP_CACHE_LIMIT) {
                 current.next = current.insert(new GuardChainDataNode(receiver, assumptions));
                 return true;
             } else {

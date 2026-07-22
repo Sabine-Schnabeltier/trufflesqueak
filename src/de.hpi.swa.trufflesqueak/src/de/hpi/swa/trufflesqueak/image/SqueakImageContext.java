@@ -734,7 +734,6 @@ public final class SqueakImageContext {
         }
     }
 
-    @TruffleBoundary
     public Assumption getAbsentSelectorAssumption(final NativeObject selector) {
         CyclicAssumption absentAssumption = absentSelectorAssumptions.get(selector);
         if (absentAssumption == null) {
