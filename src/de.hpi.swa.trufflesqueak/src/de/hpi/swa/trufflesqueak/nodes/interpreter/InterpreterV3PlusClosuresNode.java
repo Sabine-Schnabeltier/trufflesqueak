@@ -33,14 +33,9 @@ import de.hpi.swa.trufflesqueak.nodes.accessing.SqueakObjectAtPut0Node;
 import de.hpi.swa.trufflesqueak.nodes.accessing.SqueakObjectAtPut0NodeGen;
 import de.hpi.swa.trufflesqueak.nodes.accessing.SqueakObjectClassNodeGen;
 import de.hpi.swa.trufflesqueak.nodes.accessing.SqueakObjectIdentityNodeGen;
-import de.hpi.swa.trufflesqueak.nodes.dispatch.AbstractDispatchNode;
 import de.hpi.swa.trufflesqueak.nodes.dispatch.DispatchSelector0Node.Dispatch0Node;
 import de.hpi.swa.trufflesqueak.nodes.dispatch.DispatchSelector1Node.Dispatch1Node;
 import de.hpi.swa.trufflesqueak.nodes.dispatch.DispatchSelector2Node.Dispatch2Node;
-import de.hpi.swa.trufflesqueak.nodes.dispatch.DispatchSelector3Node.Dispatch3Node;
-import de.hpi.swa.trufflesqueak.nodes.dispatch.DispatchSelector4Node.Dispatch4Node;
-import de.hpi.swa.trufflesqueak.nodes.dispatch.DispatchSelector5Node.Dispatch5Node;
-import de.hpi.swa.trufflesqueak.nodes.dispatch.DispatchSelectorNaryNode.DispatchNaryNode;
 import de.hpi.swa.trufflesqueak.nodes.dispatch.DispatchSelectorNaryNodeFactory.DispatchSuperNaryNodeGen;
 import de.hpi.swa.trufflesqueak.nodes.dispatch.DispatchValueNodeGen;
 import de.hpi.swa.trufflesqueak.nodes.dispatch.DispatchValueWithArgNodeGen;
@@ -1077,20 +1072,8 @@ public final class InterpreterV3PlusClosuresNode extends AbstractInterpreterNode
         } catch (final AbstractStandardSendReturn r) {
             result = handleReturnException(frame, currentPC, r);
         }
-        push(frame, sp++, result);
+        push(frame, sp++, followForwarded(currentPC, result));
         return sp;
-    }
-
-    private static AbstractDispatchNode createDispatchNode(final int numArgs, final NativeObject selector) {
-        return switch (numArgs) {
-            case 0 -> Dispatch0Node.create(selector);
-            case 1 -> Dispatch1Node.create(selector);
-            case 2 -> Dispatch2Node.create(selector);
-            case 3 -> Dispatch3Node.create(selector);
-            case 4 -> Dispatch4Node.create(selector);
-            case 5 -> Dispatch5Node.create(selector);
-            default -> DispatchNaryNode.create(selector);
-        };
     }
 
     @EarlyInline
