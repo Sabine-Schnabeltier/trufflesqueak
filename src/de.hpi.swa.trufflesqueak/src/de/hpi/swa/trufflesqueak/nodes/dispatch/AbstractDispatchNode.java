@@ -19,6 +19,8 @@ import de.hpi.swa.trufflesqueak.nodes.CacheLimits;
 import de.hpi.swa.trufflesqueak.nodes.accessing.SqueakObjectClassNode;
 import de.hpi.swa.trufflesqueak.nodes.accessing.SqueakObjectClassNodeGen;
 
+import java.util.Arrays;
+
 public abstract class AbstractDispatchNode extends AbstractNode {
     protected final NativeObject selector;
 
@@ -65,7 +67,7 @@ public abstract class AbstractDispatchNode extends AbstractNode {
             // 1. Scan Fast Chain to append guard or transition to Wide
             while (currentFast != null) {
                 // Prune nodes with invalidated guards.
-                if (currentFast.guardChainNode.head == null) {
+                if (currentFast.guardChainNode.isEmpty()) {
                     removeFastNode(currentFast, previousFast);
                     currentFast = previousFast == null ? headFast : previousFast.next;
                     continue;
@@ -167,78 +169,83 @@ public abstract class AbstractDispatchNode extends AbstractNode {
     }
 
     public static final class GuardChainNode extends AbstractGuardNode {
-        @Child public GuardChainDataNode head;
+        @Children private GuardChainDataNode[] guards;
 
         public GuardChainNode(final Object receiver, final Assumption[] assumptions) {
-            this.head = new GuardChainDataNode(receiver, assumptions);
+            this.guards = new GuardChainDataNode[]{new GuardChainDataNode(receiver, assumptions)};
+        }
+
+        public boolean isEmpty() {
+            return guards.length == 0;
         }
 
         @Override
         @ExplodeLoop
         public boolean execute(final Object receiver) {
-            GuardChainDataNode current = head;
-            while (current != null) {
-                // 1. Check Assumption Validity
+            final GuardChainDataNode[] currentGuards = this.guards;
+            for (int i = 0; i < currentGuards.length; i++) {
+                final GuardChainDataNode current = currentGuards[i];
                 if (!Assumption.isValidAssumption(current.assumptions)) {
                     CompilerDirectives.transferToInterpreterAndInvalidate();
-                    removeGuardNode(current);
-                    // Note: If the head becomes null, the owning FastDispatchDataNode will be pruned during
-                    // the next specialization pass.
-                } else if (current.guard.check(receiver)) { // 2. Check Receiver Class
+                    return removeInvalidAndCompleteCheck(receiver, i, currentGuards);
+                } else if (current.guard.check(receiver)) {
                     return true;
                 }
-                current = current.next;
             }
             return false;
         }
 
         @Override
         public boolean append(final Object receiver, final Assumption[] assumptions) {
-            if (head == null) {
-                head = insert(new GuardChainDataNode(receiver, assumptions));
-                return true;
-            }
-
-            GuardChainDataNode current = head;
-            int count = 1;
-            while (current.next != null) {
-                current = current.next;
-                count++;
-            }
-
-            if (count < CacheLimits.LOOKUP_CACHE_LIMIT) {
-                current.next = current.insert(new GuardChainDataNode(receiver, assumptions));
-                return true;
-            } else {
+            if (guards.length >= CacheLimits.LOOKUP_CACHE_LIMIT) {
                 return false;
             }
+            final GuardChainDataNode[] newGuards = Arrays.copyOf(guards, guards.length + 1);
+            newGuards[guards.length] = new GuardChainDataNode(receiver, assumptions);
+            this.guards = insert(newGuards);
+            return true;
         }
 
         @TruffleBoundary
-        protected void removeGuardNode(final GuardChainDataNode target) {
-            GuardChainDataNode previous = null;
-            GuardChainDataNode current = head;
-
-            while (current != null) {
-                if (current == target) {
-                    if (previous == null) {
-                        head = current.next;
-                    } else {
-                        previous.next = current.next;
-                    }
-                    return;
+        private boolean removeInvalidAndCompleteCheck(final Object receiver, final int firstInvalidIndex, final GuardChainDataNode[] currentGuards) {
+            // 0 through (firstInvalidIndex - 1) are valid.
+            int validCount = firstInvalidIndex;
+            for (int i = firstInvalidIndex + 1; i < currentGuards.length; i++) {
+                if (Assumption.isValidAssumption(currentGuards[i].assumptions)) {
+                    validCount++;
                 }
-                previous = current;
-                current = current.next;
             }
+
+            final GuardChainDataNode[] newGuards = new GuardChainDataNode[validCount];
+
+            // Copy the initial known valid entries.
+            for (int i = 0; i < firstInvalidIndex; i++) {
+                newGuards[i] = currentGuards[i];
+            }
+
+            boolean foundMatch = false;
+            int newIndex = firstInvalidIndex;
+
+            // Evaluate the tail for both validity and the receiver guard.
+            for (int i = firstInvalidIndex + 1; i < currentGuards.length; i++) {
+                final GuardChainDataNode node = currentGuards[i];
+                if (Assumption.isValidAssumption(node.assumptions)) {
+                    newGuards[newIndex++] = node;
+
+                    if (!foundMatch && node.guard.check(receiver)) {
+                        foundMatch = true;
+                    }
+                }
+            }
+
+            this.guards = insert(newGuards);
+            return foundMatch;
         }
     }
 
     public static final class GuardChainDataNode extends Node {
         public final LookupClassGuard guard;
         @CompilationFinal(dimensions = 1) public final Assumption[] assumptions;
-
-        @Child public GuardChainDataNode next;
 
         public GuardChainDataNode(final Object receiver, final Assumption[] assumptions) {
             this.guard = LookupClassGuard.create(receiver);
