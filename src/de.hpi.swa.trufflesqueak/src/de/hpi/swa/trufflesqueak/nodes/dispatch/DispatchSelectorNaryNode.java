@@ -41,7 +41,6 @@ import de.hpi.swa.trufflesqueak.nodes.LookupMethodNode;
 import de.hpi.swa.trufflesqueak.nodes.accessing.AbstractPointersObjectNodes.AbstractPointersObjectWriteNode;
 import de.hpi.swa.trufflesqueak.nodes.accessing.SqueakObjectClassNode;
 import de.hpi.swa.trufflesqueak.nodes.context.GetOrCreateContextWithoutFrameNode;
-import de.hpi.swa.trufflesqueak.nodes.dispatch.DispatchSelectorNaryNodeFactory.DispatchSuperNaryNodeGen;
 import de.hpi.swa.trufflesqueak.nodes.dispatch.DispatchSelectorNaryNodeFactory.DispatchDirectPrimitiveFallbackNaryNodeGen;
 import de.hpi.swa.trufflesqueak.nodes.dispatch.DispatchSelectorNaryNodeFactory.DispatchIndirectNaryNodeGen.TryPrimitiveNaryNodeGen;
 import de.hpi.swa.trufflesqueak.nodes.primitives.AbstractPrimitiveNode;
@@ -100,22 +99,11 @@ public final class DispatchSelectorNaryNode extends DispatchSelectorNode {
             this.methodClass = methodClass;
         }
 
-        @Specialization(guards = "methodClass.isNotForwarded()", assumptions = {"methodClass.getClassHierarchyAndMethodDictStable()",
-                        "dispatchDirectNode.getAssumptions()"})
+        @Specialization(assumptions = {"methodClass.getClassHierarchyAndMethodDictStable()", "dispatchDirectNode.getAssumptions()"})
         protected static final Object doCached(final VirtualFrame frame, final Object receiver, final Object[] arguments,
-                        @Cached("create(selector, methodClass.getResolvedSuperclass())") final DispatchDirectNaryNode dispatchDirectNode) {
+                        @Cached("create(selector, methodClass.resolveAndGetResolvedSuperclass())") final DispatchDirectNaryNode dispatchDirectNode) {
             return dispatchDirectNode.execute(frame, receiver, arguments);
         }
-
-        @Specialization(guards = "!methodClass.isNotForwarded()")
-        protected final Object doForwarded(final VirtualFrame frame, final Object receiver, final Object[] arguments) {
-            CompilerDirectives.transferToInterpreterAndInvalidate();
-            final ClassObject newMethodClass = (ClassObject) methodClass.resolveForwardingPointer();
-            final DispatchSuperNaryNode newNode = DispatchSuperNaryNodeGen.create(newMethodClass, selector);
-            return this.replace(newNode).execute(frame, receiver, arguments);
-        }
-
-        public abstract Object execute(VirtualFrame frame, Object receiver, Object[] arguments);
     }
 
     public abstract static class DispatchDirectedSuperNaryNode extends AbstractDispatchNode {
