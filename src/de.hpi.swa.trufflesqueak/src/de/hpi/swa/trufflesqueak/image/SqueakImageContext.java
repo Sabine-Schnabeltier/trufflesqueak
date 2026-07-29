@@ -166,7 +166,7 @@ public final class SqueakImageContext {
     // The maximum message arity that supports DNU shortcuts.
     public static final int MAX_DNU_SHORTCUT_ARITY = 3;
 
-    private final Assumption dnuShortcutsAbsent = Truffle.getRuntime().createAssumption("DNU shortcuts");
+    @CompilationFinal private Assumption dnuShortcutsAbsent = Truffle.getRuntime().createAssumption("DNU shortcuts");
     @CompilationFinal(dimensions = 1) private NativeObject[] dnuShortcutSelectors = null;
 
     /* Method Cache */
@@ -494,7 +494,19 @@ public final class SqueakImageContext {
 
     public void setDNUShortcutSelectors(final NativeObject[] newSelectors) {
         CompilerDirectives.transferToInterpreterAndInvalidate();
-        dnuShortcutsAbsent.invalidate("DNU shortcuts set");
+
+        if (newSelectors != null) {
+            // Invalidate the fast-path assumption if it's currently valid.
+            if (dnuShortcutsAbsent.isValid()) {
+                dnuShortcutsAbsent.invalidate("DNU shortcuts set");
+            }
+        } else {
+            // Recreate the assumption so the fast path can recover.
+            if (!dnuShortcutsAbsent.isValid()) {
+                dnuShortcutsAbsent = Truffle.getRuntime().createAssumption("DNU shortcuts");
+            }
+        }
+
         dnuShortcutSelectors = newSelectors;
         flushMethodCache();
     }
