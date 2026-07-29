@@ -19,11 +19,51 @@ import de.hpi.swa.trufflesqueak.nodes.CacheLimits;
 import de.hpi.swa.trufflesqueak.nodes.accessing.SqueakObjectClassNode;
 import de.hpi.swa.trufflesqueak.nodes.accessing.SqueakObjectClassNodeGen;
 
+import java.util.concurrent.atomic.LongAdder;
+
 public abstract class AbstractDispatchNode extends AbstractNode {
     protected final NativeObject selector;
 
     AbstractDispatchNode(final NativeObject selector) {
         this.selector = selector;
+    }
+
+    public static final boolean ENABLE_STATS = true;
+    public static final LongAdder[][] DISPATCH_HISTOGRAM = init2DHistogram(CacheLimits.DISPATCH_CACHE_LIMIT + 1);
+    public static final LongAdder INDIRECT_COUNT = new LongAdder();
+
+    private static LongAdder[][] init2DHistogram(final int cacheLimit) {
+        if (!ENABLE_STATS) {
+            return null;
+        }
+        final LongAdder[][] matrix = new LongAdder[cacheLimit][cacheLimit];
+        for (int f = 0; f < cacheLimit; f++) {
+            for (int w = 0; w < cacheLimit; w++) {
+                matrix[f][w] = new LongAdder();
+            }
+        }
+        return matrix;
+    }
+
+    static {
+        if (ENABLE_STATS) {
+            Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+                System.out.println("\n=== Dispatch Cache Statistics ===");
+                System.out.println("Fast/Wide Tier Distribution (non-zero):");
+
+                for (int f = 0; f <= CacheLimits.DISPATCH_CACHE_LIMIT; f++) {
+                    for (int w = 0; w <= CacheLimits.DISPATCH_CACHE_LIMIT; w++) {
+                        long count = DISPATCH_HISTOGRAM[f][w].sum();
+                        if (count > 0) {
+                            System.out.printf("  [%d fast, %d wide]: %d nodes%n", f, w, count);
+                        }
+                    }
+                }
+
+                System.out.println("Indirect Nodes: " + INDIRECT_COUNT.sum());
+                System.out.println("=================================\n");
+            }, "Dispatch-Stats-Hook"));
+        }
     }
 
     // --- Cache Manager and Data Nodes ---
@@ -47,8 +87,19 @@ public abstract class AbstractDispatchNode extends AbstractNode {
         @Child public FastDispatchDataNode<T> headFast;
         @Child public WideDispatchDataNode<T> headWide;
 
+        public DispatchCacheManager() {
+            if (ENABLE_STATS) {
+                DISPATCH_HISTOGRAM[0][0].increment();
+            }
+        }
+
         @TruffleBoundary
         protected T convertToIndirect() {
+            if (ENABLE_STATS) {
+                DISPATCH_HISTOGRAM[countFastNodes()][countWideNodes()].decrement();
+                INDIRECT_COUNT.increment();
+            }
+
             // Safely drop the fast and wide tiers to free memory.
             this.headFast = null;
             this.headWide = null;
@@ -57,59 +108,80 @@ public abstract class AbstractDispatchNode extends AbstractNode {
 
         @TruffleBoundary
         protected T specialize(final Object receiver, final Object lookupResult, final T newDispatchNode) {
-            int totalMethodCount = 0;
+            int oldFast = 0;
+            int oldWide = 0;
 
-            FastDispatchDataNode<T> currentFast = headFast;
-            FastDispatchDataNode<T> previousFast = null;
+            if (ENABLE_STATS) {
+                oldFast = countFastNodes();
+                oldWide = countWideNodes();
+            }
 
-            // 1. Scan Fast Chain to append guard or transition to Wide
-            while (currentFast != null) {
-                // Prune nodes with invalidated guards.
-                if (currentFast.guardChainNode.head == null) {
-                    removeFastNode(currentFast, previousFast);
-                    currentFast = previousFast == null ? headFast : previousFast.next;
-                    continue;
+            try {
+                int totalMethodCount = 0;
+
+                FastDispatchDataNode<T> currentFast = headFast;
+                FastDispatchDataNode<T> previousFast = null;
+
+                // 1. Scan Fast Chain to append guard or transition to Wide
+                while (currentFast != null) {
+                    // Prune nodes with invalidated guards.
+                    if (currentFast.guardChainNode.head == null) {
+                        removeFastNode(currentFast, previousFast);
+                        currentFast = previousFast == null ? headFast : previousFast.next;
+                        continue;
+                    }
+
+                    totalMethodCount++;
+
+                    // Only coalesce standard methods. Fallbacks (null) and OAMs are isolated by class.
+                    if (lookupResult instanceof CompiledCodeObject targetMethod &&
+                            currentFast.standardMethodOrNull == targetMethod &&
+                            currentFast.dispatchDirectNode.getClass() == newDispatchNode.getClass()) {
+
+                        if (currentFast.guardChainNode.append(receiver, newDispatchNode.getAssumptions())) {
+                            return currentFast.dispatchDirectNode;
+                        } else {
+                            // Guard chain overflow: Transition directly to wide execution
+                            removeFastNode(currentFast, previousFast);
+
+                            final WideDispatchDataNode<T> newWide = new WideDispatchDataNode<>(targetMethod, currentFast.dispatchDirectNode);
+                            newWide.next = headWide;
+                            headWide = insert(newWide);
+                            return newWide.dispatchDirectNode;
+                        }
+                    }
+                    previousFast = currentFast;
+                    currentFast = currentFast.next;
                 }
 
-                totalMethodCount++;
+                // 2. Count Wide Chain
+                totalMethodCount += countWideNodes();
 
-                // Only coalesce standard methods. Fallbacks (null) and OAMs are isolated by class.
-                if (lookupResult instanceof CompiledCodeObject targetMethod &&
-                                currentFast.standardMethodOrNull == targetMethod &&
-                                currentFast.dispatchDirectNode.getClass() == newDispatchNode.getClass()) {
-
-                    if (currentFast.guardChainNode.append(receiver, newDispatchNode.getAssumptions())) {
-                        return currentFast.dispatchDirectNode;
+                // 3. Global Budget Check
+                if (totalMethodCount < CacheLimits.DISPATCH_CACHE_LIMIT) {
+                    final FastDispatchDataNode<T> newNext = new FastDispatchDataNode<>(receiver, lookupResult, newDispatchNode);
+                    if (previousFast == null) {
+                        headFast = insert(newNext);
                     } else {
-                        // Guard chain overflow: Transition directly to wide execution
-                        removeFastNode(currentFast, previousFast);
+                        previousFast.next = previousFast.insert(newNext);
+                    }
+                    return newNext.dispatchDirectNode;
+                }
 
-                        final WideDispatchDataNode<T> newWide = new WideDispatchDataNode<>(targetMethod, currentFast.dispatchDirectNode);
-                        newWide.next = headWide;
-                        headWide = insert(newWide);
-                        return newWide.dispatchDirectNode;
+                // Signals that the dispatch cache capacity is exhausted, requiring a transition to indirect execution.
+                return convertToIndirect();
+            } finally {
+                // If pointers are null, it went indirect, which is handled in convertToIndirect()
+                if (ENABLE_STATS && (this.headFast != null || this.headWide != null)) {
+                    final int newFast = countFastNodes();
+                    final int newWide = countWideNodes();
+
+                    if (oldFast != newFast || oldWide != newWide) {
+                        DISPATCH_HISTOGRAM[oldFast][oldWide].decrement();
+                        DISPATCH_HISTOGRAM[newFast][newWide].increment();
                     }
                 }
-                previousFast = currentFast;
-                currentFast = currentFast.next;
             }
-
-            // 2. Count Wide Chain
-            totalMethodCount += countWideNodes();
-
-            // 3. Global Budget Check
-            if (totalMethodCount < CacheLimits.DISPATCH_CACHE_LIMIT) {
-                final FastDispatchDataNode<T> newNext = new FastDispatchDataNode<>(receiver, lookupResult, newDispatchNode);
-                if (previousFast == null) {
-                    headFast = insert(newNext);
-                } else {
-                    previousFast.next = previousFast.insert(newNext);
-                }
-                return newNext.dispatchDirectNode;
-            }
-
-            // Signals that the dispatch cache capacity is exhausted, requiring a transition to indirect execution.
-            return convertToIndirect();
         }
 
         @TruffleBoundary
@@ -119,6 +191,17 @@ public abstract class AbstractDispatchNode extends AbstractNode {
             } else {
                 previous.next = target.next;
             }
+        }
+
+        @TruffleBoundary
+        protected int countFastNodes() {
+            int count = 0;
+            FastDispatchDataNode<T> current = headFast;
+            while (current != null) {
+                count++;
+                current = current.next;
+            }
+            return count;
         }
 
         @TruffleBoundary
