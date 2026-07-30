@@ -41,6 +41,7 @@ import de.hpi.swa.trufflesqueak.nodes.accessing.AbstractPointersObjectNodes.Abst
 import de.hpi.swa.trufflesqueak.nodes.accessing.SqueakObjectClassNode;
 import de.hpi.swa.trufflesqueak.nodes.context.GetOrCreateContextWithoutFrameNode;
 import de.hpi.swa.trufflesqueak.nodes.dispatch.DispatchSelector1NodeFactory.DispatchDirectPrimitiveFallback1NodeGen;
+import de.hpi.swa.trufflesqueak.nodes.dispatch.DispatchSelector1NodeFactory.DispatchIndirect1NodeGen;
 import de.hpi.swa.trufflesqueak.nodes.dispatch.DispatchSelectorNaryNode.DispatchPrimitiveNode;
 import de.hpi.swa.trufflesqueak.nodes.primitives.AbstractPrimitiveNode;
 import de.hpi.swa.trufflesqueak.nodes.primitives.Primitive.Primitive1;
@@ -75,26 +76,22 @@ public final class DispatchSelector1Node extends AbstractDispatchSelectorNode {
             }
 
             // TIER 1: Direct Execution Fast Path
-            FastDispatchDataNode<DispatchDirect1Node> currentFast = cache.headFast;
-            while (currentFast != null) {
+            for (final FastDispatchDataNode<DispatchDirect1Node> currentFast : cache.fastNodes) {
                 if (currentFast.guardChainNode.execute(receiver)) {
                     return currentFast.dispatchDirectNode.execute(frame, receiver, arg1);
                 }
-                currentFast = currentFast.next;
             }
 
-            // TIER 2 & 3: Wide Execution (Class Polymorphism)
-            if (cache.headWide != null) {
-                final ClassObject receiverClass = cache.headWide.classNode.executeLookup(cache.headWide, receiver);
+            // TIER 2: Wide Execution (Class Polymorphism)
+            if (cache.wideNodes.length > 0) {
+                final ClassObject receiverClass = cache.classNode.executeLookup(cache, receiver);
                 final Object lookupResult = getContext().lookup(receiverClass, selector);
 
                 if (lookupResult instanceof CompiledCodeObject targetMethod) {
-                    WideDispatchDataNode<DispatchDirect1Node> currentWide = cache.headWide;
-                    while (currentWide != null) {
+                    for (final WideDispatchDataNode<DispatchDirect1Node> currentWide : cache.wideNodes) {
                         if (currentWide.standardMethod == targetMethod) {
                             return currentWide.dispatchDirectNode.execute(frame, receiver, arg1);
                         }
-                        currentWide = currentWide.next;
                     }
                 }
             }
@@ -105,7 +102,17 @@ public final class DispatchSelector1Node extends AbstractDispatchSelectorNode {
         }
 
         private Object executeAndSpecialize(final VirtualFrame frame, final Object receiver, final Object arg1) {
-            final ClassObject receiverClass = SqueakObjectClassNode.executeUncached(receiver);
+            /*
+             * Guard against lagging recursive frames. If multiple frames of this method are on the
+             * stack executing compiled code, a deeper frame may have already deoptimized and
+             * transitioned this node to the indirect tier. This intercepts older deoptimized frames
+             * to prevent redundant specialization.
+             */
+            if (indirectNode != null) {
+                return indirectNode.execute(frame, true, selector, receiver, arg1);
+            }
+
+            final ClassObject receiverClass = cache.classNode.executeLookup(cache, receiver);
             final Object lookupResult = getContext().lookup(receiverClass, selector);
 
             // Node creation handles method resolution, including DNU and OAM fallbacks.
@@ -117,7 +124,7 @@ public final class DispatchSelector1Node extends AbstractDispatchSelectorNode {
                 return executor.execute(frame, receiver, arg1);
             } else {
                 this.reportPolymorphicSpecialize();
-                indirectNode = insert(DispatchSelector1NodeFactory.DispatchIndirect1NodeGen.create());
+                indirectNode = insert(DispatchIndirect1NodeGen.create());
                 return indirectNode.execute(frame, true, selector, receiver, arg1);
             }
         }
