@@ -6,12 +6,15 @@
  */
 package de.hpi.swa.trufflesqueak.nodes.dispatch;
 
+import java.util.Arrays;
+
 import com.oracle.truffle.api.Assumption;
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.CompilerDirectives.CompilationFinal;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.nodes.ExplodeLoop;
 import com.oracle.truffle.api.nodes.Node;
+
 import de.hpi.swa.trufflesqueak.model.CompiledCodeObject;
 import de.hpi.swa.trufflesqueak.model.NativeObject;
 import de.hpi.swa.trufflesqueak.nodes.AbstractNode;
@@ -31,9 +34,9 @@ public abstract class AbstractDispatchNode extends AbstractNode {
     /**
      * This manager organizes dispatch nodes into two distinct tiers to balance compilation size
      * and execution efficiency:
-     * 1. Fast Tier (headFast): Caches standard methods and unique fallback scenarios up to a
+     * 1. Fast Tier (fastNodes): Caches standard methods and unique fallback scenarios up to a
      * configured limit (DISPATCH_CACHE_SIZE). Each entry maintains a chain of class guards.
-     * 2. Wide Tier (headWide): Handles class polymorphism. When a standard method exceeds its
+     * 2. Wide Tier (wideNodes): Handles class polymorphism. When a standard method exceeds its
      * allotted class guard limit (LOOKUP_CACHE_SIZE) in the fast tier, it is promoted here.
      * <p>
      * The manager is responsible for evaluating lookup results, transitioning nodes between tiers,
@@ -44,92 +47,96 @@ public abstract class AbstractDispatchNode extends AbstractNode {
      * @param <T> The type of direct dispatch node managed by this cache.
      */
     public static final class DispatchCacheManager<T extends AbstractDispatchDirectNode> extends Node {
-        @Child public FastDispatchDataNode<T> headFast;
-        @Child public WideDispatchDataNode<T> headWide;
+        @Children public FastDispatchDataNode<T>[] fastNodes;
+        @Children public WideDispatchDataNode<T>[] wideNodes;
+        @Child public SqueakObjectClassNode classNode;
 
+        @SuppressWarnings("unchecked")
+        public DispatchCacheManager() {
+            this.fastNodes = (FastDispatchDataNode<T>[]) new FastDispatchDataNode<?>[0];
+            this.wideNodes = (WideDispatchDataNode<T>[]) new WideDispatchDataNode<?>[0];
+            this.classNode = insert(SqueakObjectClassNodeGen.create());
+        }
+
+        @SuppressWarnings("unchecked")
         @TruffleBoundary
         protected T convertToIndirect() {
             // Safely drop the fast and wide tiers to free memory.
-            this.headFast = null;
-            this.headWide = null;
+            this.fastNodes = insert((FastDispatchDataNode<T>[]) new FastDispatchDataNode<?>[0]);
+            this.wideNodes = insert((WideDispatchDataNode<T>[]) new WideDispatchDataNode<?>[0]);
+            this.classNode = null;
             return null;
         }
 
+        @SuppressWarnings("unchecked")
         @TruffleBoundary
         protected T specialize(final Object receiver, final Object lookupResult, final T newDispatchNode) {
-            int totalMethodCount = 0;
+            final FastDispatchDataNode<T>[] newFastNodes = (FastDispatchDataNode<T>[]) new FastDispatchDataNode<?>[CacheLimits.DISPATCH_CACHE_LIMIT];
+            int fastNodesNeeded = 0;
 
-            FastDispatchDataNode<T> currentFast = headFast;
-            FastDispatchDataNode<T> previousFast = null;
+            T resultNode = null;
+            CompiledCodeObject targetMethodToWiden = null;
 
-            // 1. Scan Fast Chain to append guard or transition to Wide
-            while (currentFast != null) {
-                // Prune nodes with invalidated guards.
-                if (currentFast.guardChainNode.head == null) {
-                    removeFastNode(currentFast, previousFast);
-                    currentFast = previousFast == null ? headFast : previousFast.next;
+            // 1. Prune dead nodes and search for coalescing/promotion opportunities
+            for (final FastDispatchDataNode<T> currentFast : fastNodes) {
+                if (currentFast.guardChainNode.isEmpty()) {
                     continue;
                 }
 
-                totalMethodCount++;
-
                 // Only coalesce standard methods. Fallbacks (null) and OAMs are isolated by class.
-                if (lookupResult instanceof CompiledCodeObject targetMethod &&
+                if (resultNode == null && lookupResult instanceof CompiledCodeObject targetMethod &&
                                 currentFast.standardMethodOrNull == targetMethod &&
                                 currentFast.dispatchDirectNode.getClass() == newDispatchNode.getClass()) {
 
+                    // Method matches fast entry: append new guard or transition to wide, if needed.
                     if (currentFast.guardChainNode.append(receiver, newDispatchNode.getAssumptions())) {
-                        return currentFast.dispatchDirectNode;
+                        newFastNodes[fastNodesNeeded++] = currentFast;
+                        resultNode = currentFast.dispatchDirectNode;
                     } else {
-                        // Guard chain overflow: Transition directly to wide execution
-                        removeFastNode(currentFast, previousFast);
-
-                        final WideDispatchDataNode<T> newWide = new WideDispatchDataNode<>(targetMethod, currentFast.dispatchDirectNode);
-                        newWide.next = headWide;
-                        headWide = insert(newWide);
-                        return newWide.dispatchDirectNode;
+                        // Trigger wide transition
+                        targetMethodToWiden = targetMethod;
+                        resultNode = currentFast.dispatchDirectNode;
                     }
-                }
-                previousFast = currentFast;
-                currentFast = currentFast.next;
-            }
-
-            // 2. Count Wide Chain
-            totalMethodCount += countWideNodes();
-
-            // 3. Global Budget Check
-            if (totalMethodCount < CacheLimits.DISPATCH_CACHE_LIMIT) {
-                final FastDispatchDataNode<T> newNext = new FastDispatchDataNode<>(receiver, lookupResult, newDispatchNode);
-                if (previousFast == null) {
-                    headFast = insert(newNext);
                 } else {
-                    previousFast.next = previousFast.insert(newNext);
+                    // Node survives unchanged
+                    newFastNodes[fastNodesNeeded++] = currentFast;
                 }
-                return newNext.dispatchDirectNode;
             }
 
-            // Signals that the dispatch cache capacity is exhausted, requiring a transition to indirect execution.
+            // 2. Handle Wide transition
+            if (targetMethodToWiden != null) {
+                final WideDispatchDataNode<T> newWide = new WideDispatchDataNode<>(targetMethodToWiden, newDispatchNode);
+                appendWideNode(newWide);
+                this.fastNodes = insert(Arrays.copyOf(newFastNodes, fastNodesNeeded));
+                return newWide.dispatchDirectNode;
+            }
+
+            // 3. Return existing appended node, if found
+            if (resultNode != null) {
+                // Update AST only if dead nodes were pruned
+                if (fastNodesNeeded != fastNodes.length) {
+                    this.fastNodes = insert(Arrays.copyOf(newFastNodes, fastNodesNeeded));
+                }
+                return resultNode;
+            }
+
+            // 4. Global budget check & append new Fast node, if possible
+            if (fastNodesNeeded + wideNodes.length < CacheLimits.DISPATCH_CACHE_LIMIT) {
+                final FastDispatchDataNode<T> newFast = new FastDispatchDataNode<>(receiver, lookupResult, newDispatchNode);
+                newFastNodes[fastNodesNeeded++] = newFast;
+                this.fastNodes = insert(Arrays.copyOf(newFastNodes, fastNodesNeeded));
+                return newFast.dispatchDirectNode;
+            }
+
+            // Capacity exhausted, transition to indirect execution.
             return convertToIndirect();
         }
 
         @TruffleBoundary
-        protected void removeFastNode(final FastDispatchDataNode<T> target, final FastDispatchDataNode<T> previous) {
-            if (previous == null) {
-                headFast = target.next;
-            } else {
-                previous.next = target.next;
-            }
-        }
-
-        @TruffleBoundary
-        protected int countWideNodes() {
-            int count = 0;
-            WideDispatchDataNode<T> current = headWide;
-            while (current != null) {
-                count++;
-                current = current.next;
-            }
-            return count;
+        private void appendWideNode(final WideDispatchDataNode<T> node) {
+            final WideDispatchDataNode<T>[] newArray = Arrays.copyOf(wideNodes, wideNodes.length + 1);
+            newArray[wideNodes.length] = node;
+            this.wideNodes = insert(newArray);
         }
     }
 
@@ -137,26 +144,22 @@ public abstract class AbstractDispatchNode extends AbstractNode {
         public final CompiledCodeObject standardMethodOrNull;
         @Child public GuardChainNode guardChainNode;
         @Child public T dispatchDirectNode;
-        @Child public FastDispatchDataNode<T> next;
 
         public FastDispatchDataNode(final Object receiver, final Object lookupResult, final T dispatchNode) {
-            this.guardChainNode = new GuardChainNode(receiver, dispatchNode.getAssumptions());
+            this.guardChainNode = insert(new GuardChainNode(receiver, dispatchNode.getAssumptions()));
             this.standardMethodOrNull = lookupResult instanceof CompiledCodeObject m ? m : null;
-            this.dispatchDirectNode = dispatchNode;
+            this.dispatchDirectNode = insert(dispatchNode);
         }
     }
 
     public static final class WideDispatchDataNode<T extends AbstractDispatchDirectNode> extends Node {
         public final CompiledCodeObject standardMethod;
         @Child public T dispatchDirectNode;
-        @Child public SqueakObjectClassNode classNode;
-        @Child public WideDispatchDataNode<T> next;
 
         public WideDispatchDataNode(final CompiledCodeObject method, final T dispatchNode) {
             assert method != null : "Fallbacks must not enter the wide cache tier";
             this.standardMethod = method;
-            this.dispatchDirectNode = dispatchNode;
-            this.classNode = SqueakObjectClassNodeGen.create();
+            this.dispatchDirectNode = insert(dispatchNode);
         }
     }
 
@@ -167,78 +170,103 @@ public abstract class AbstractDispatchNode extends AbstractNode {
     }
 
     public static final class GuardChainNode extends AbstractGuardNode {
-        @Child public GuardChainDataNode head;
+        @Children private GuardChainDataNode[] guards;
 
         public GuardChainNode(final Object receiver, final Assumption[] assumptions) {
-            this.head = new GuardChainDataNode(receiver, assumptions);
+            this.guards = insert(new GuardChainDataNode[]{new GuardChainDataNode(receiver, assumptions)});
+        }
+
+        public boolean isEmpty() {
+            return guards.length == 0;
         }
 
         @Override
         @ExplodeLoop
         public boolean execute(final Object receiver) {
-            GuardChainDataNode current = head;
-            while (current != null) {
-                // 1. Check Assumption Validity
+            final GuardChainDataNode[] currentGuards = this.guards;
+            for (int i = 0; i < currentGuards.length; i++) {
+                final GuardChainDataNode current = currentGuards[i];
                 if (!Assumption.isValidAssumption(current.assumptions)) {
                     CompilerDirectives.transferToInterpreterAndInvalidate();
-                    removeGuardNode(current);
-                    // Note: If the head becomes null, the owning FastDispatchDataNode will be pruned during
-                    // the next specialization pass.
-                } else if (current.guard.check(receiver)) { // 2. Check Receiver Class
+                    return removeInvalidAndCompleteCheck(receiver, i, currentGuards);
+                } else if (current.guard.check(receiver)) {
                     return true;
                 }
-                current = current.next;
             }
             return false;
         }
 
         @Override
         public boolean append(final Object receiver, final Assumption[] assumptions) {
-            if (head == null) {
-                head = insert(new GuardChainDataNode(receiver, assumptions));
-                return true;
+            // Determine how many guards are still valid
+            int validCount = 0;
+            for (final GuardChainDataNode guard : guards) {
+                if (Assumption.isValidAssumption(guard.assumptions)) {
+                    validCount++;
+                }
             }
 
-            GuardChainDataNode current = head;
-            int count = 1;
-            while (current.next != null) {
-                current = current.next;
-                count++;
-            }
-
-            if (count < CacheLimits.LOOKUP_CACHE_LIMIT) {
-                current.next = current.insert(new GuardChainDataNode(receiver, assumptions));
-                return true;
-            } else {
+            // Fail if the final count of guards exceed the limit
+            if (validCount >= CacheLimits.LOOKUP_CACHE_LIMIT) {
                 return false;
             }
+
+            CompilerDirectives.transferToInterpreterAndInvalidate();
+
+            // Rebuild the array, pruning dead nodes and adding the new one in a single pass
+            final GuardChainDataNode[] newGuards = new GuardChainDataNode[validCount + 1];
+            int index = 0;
+            for (final GuardChainDataNode guard : guards) {
+                if (Assumption.isValidAssumption(guard.assumptions)) {
+                    newGuards[index++] = guard;
+                }
+            }
+
+            newGuards[index] = new GuardChainDataNode(receiver, assumptions);
+            this.guards = insert(newGuards);
+            return true;
         }
 
         @TruffleBoundary
-        protected void removeGuardNode(final GuardChainDataNode target) {
-            GuardChainDataNode previous = null;
-            GuardChainDataNode current = head;
-
-            while (current != null) {
-                if (current == target) {
-                    if (previous == null) {
-                        head = current.next;
-                    } else {
-                        previous.next = current.next;
-                    }
-                    return;
+        private boolean removeInvalidAndCompleteCheck(final Object receiver, final int firstInvalidIndex, final GuardChainDataNode[] currentGuards) {
+            // 0 through (firstInvalidIndex - 1) are valid.
+            int validCount = firstInvalidIndex;
+            for (int i = firstInvalidIndex + 1; i < currentGuards.length; i++) {
+                if (Assumption.isValidAssumption(currentGuards[i].assumptions)) {
+                    validCount++;
                 }
-                previous = current;
-                current = current.next;
             }
+
+            final GuardChainDataNode[] newGuards = new GuardChainDataNode[validCount];
+
+            // Copy the initial known valid entries.
+            for (int i = 0; i < firstInvalidIndex; i++) {
+                newGuards[i] = currentGuards[i];
+            }
+
+            boolean foundMatch = false;
+            int newIndex = firstInvalidIndex;
+
+            // Evaluate the tail for both validity and the receiver guard.
+            for (int i = firstInvalidIndex + 1; i < currentGuards.length; i++) {
+                final GuardChainDataNode node = currentGuards[i];
+                if (Assumption.isValidAssumption(node.assumptions)) {
+                    newGuards[newIndex++] = node;
+
+                    if (!foundMatch && node.guard.check(receiver)) {
+                        foundMatch = true;
+                    }
+                }
+            }
+
+            this.guards = insert(newGuards);
+            return foundMatch;
         }
     }
 
     public static final class GuardChainDataNode extends Node {
         public final LookupClassGuard guard;
         @CompilationFinal(dimensions = 1) public final Assumption[] assumptions;
-
-        @Child public GuardChainDataNode next;
 
         public GuardChainDataNode(final Object receiver, final Assumption[] assumptions) {
             this.guard = LookupClassGuard.create(receiver);
