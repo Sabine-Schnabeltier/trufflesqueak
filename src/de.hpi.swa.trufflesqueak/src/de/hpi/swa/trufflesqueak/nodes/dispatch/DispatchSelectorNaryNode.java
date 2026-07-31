@@ -89,7 +89,7 @@ public final class DispatchSelectorNaryNode extends AbstractDispatchSelectorNode
         @ExplodeLoop
         @InliningCutoff
         public Object execute(final VirtualFrame frame, final Object receiver, final Object[] arguments) {
-            // TIER 4: Megamorphic Fallback (Indirect Execution)
+            // TIER 3: Megamorphic Fallback (Indirect Execution)
             if (indirectNode != null) {
                 return indirectNode.execute(frame, false, selector, receiver, arguments);
             }
@@ -100,21 +100,21 @@ public final class DispatchSelectorNaryNode extends AbstractDispatchSelectorNode
             }
 
             // TIER 1: Direct Execution Fast Path
-            for (final FastDispatchDataNode<DispatchDirectNaryNode> currentFast : cache.fastNodes) {
-                if (currentFast.guardChainNode.execute(receiver)) {
-                    return currentFast.dispatchDirectNode.execute(frame, receiver, arguments);
+            for (final DispatchEntry<DispatchDirectNaryNode> entry : cache.fastEntries) {
+                if (entry.isFastCacheHit(receiver)) {
+                    return entry.executor.execute(frame, receiver, arguments);
                 }
             }
 
             // TIER 2: Wide Execution (Class Polymorphism)
-            if (cache.wideNodes.length > 0) {
+            if (cache.wideEntries.length > 0) {
                 final ClassObject receiverClass = cache.classNode.executeLookup(cache, receiver);
                 final Object lookupResult = getContext().lookup(receiverClass, selector);
 
                 if (lookupResult instanceof CompiledCodeObject targetMethod) {
-                    for (final WideDispatchDataNode<DispatchDirectNaryNode> currentWide : cache.wideNodes) {
-                        if (currentWide.standardMethod == targetMethod) {
-                            return currentWide.dispatchDirectNode.execute(frame, receiver, arguments);
+                    for (final DispatchEntry<DispatchDirectNaryNode> entry : cache.wideEntries) {
+                        if (entry.isWideCacheHit(targetMethod)) {
+                            return entry.executor.execute(frame, receiver, arguments);
                         }
                     }
                 }
@@ -170,7 +170,7 @@ public final class DispatchSelectorNaryNode extends AbstractDispatchSelectorNode
         @Override
         @ExplodeLoop
         public Object execute(final VirtualFrame frame, final Object receiver, final Object[] arguments) {
-            // TIER 4: Megamorphic Fallback (Indirect Execution)
+            // TIER 3: Megamorphic Fallback (Indirect Execution)
             if (indirectNode != null) {
                 return indirectNode.execute(frame, true, selector, receiver, arguments);
             }
@@ -181,21 +181,21 @@ public final class DispatchSelectorNaryNode extends AbstractDispatchSelectorNode
             }
 
             // TIER 1: Direct Execution Fast Path
-            for (final FastDispatchDataNode<DispatchDirectNaryNode> currentFast : cache.fastNodes) {
-                if (currentFast.guardChainNode.execute(receiver)) {
-                    return currentFast.dispatchDirectNode.executeWithCheckedArguments(frame, receiver, arguments);
+            for (final DispatchEntry<DispatchDirectNaryNode> entry : cache.fastEntries) {
+                if (entry.isFastCacheHit(receiver)) {
+                    return entry.executor.executeWithCheckedArguments(frame, receiver, arguments);
                 }
             }
 
             // TIER 2: Wide Execution (Class Polymorphism)
-            if (cache.wideNodes.length > 0) {
+            if (cache.wideEntries.length > 0) {
                 final ClassObject receiverClass = cache.classNode.executeLookup(cache, receiver);
                 final Object lookupResult = getContext().lookup(receiverClass, selector);
 
                 if (lookupResult instanceof CompiledCodeObject targetMethod) {
-                    for (final WideDispatchDataNode<DispatchDirectNaryNode> currentWide : cache.wideNodes) {
-                        if (currentWide.standardMethod == targetMethod) {
-                            return currentWide.dispatchDirectNode.executeWithCheckedArguments(frame, receiver, arguments);
+                    for (final DispatchEntry<DispatchDirectNaryNode> entry : cache.wideEntries) {
+                        if (entry.isWideCacheHit(targetMethod)) {
+                            return entry.executor.executeWithCheckedArguments(frame, receiver, arguments);
                         }
                     }
                 }
