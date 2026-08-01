@@ -178,8 +178,9 @@ jobs:
       name: Lower OpenSSL Security Level and MinProtocol for SqueakSSLTests
       if: runner.os == 'Linux'
       run: |
-        sudo sed -i 's/DEFAULT:@SECLEVEL=2/DEFAULT:@SECLEVEL=0/g' /etc/ssl/openssl.cnf
-        sudo sed -i 's/MinProtocol = TLSv1.2/MinProtocol = TLSv1/g' /etc/ssl/openssl.cnf
+        sudo sed -i 's/^CipherString.*/CipherString = ALL:@SECLEVEL=0\nMinProtocol = SSLv3/' /etc/ssl/openssl.cnf
+        sudo sed -i 's/# legacy = legacy_sect/legacy = legacy_sect/' /etc/ssl/openssl.cnf
+        echo -e "\n[legacy_sect]\nactivate = 1" | sudo tee -a /etc/ssl/openssl.cnf
     - &run_squeak_tests_windows
       name: Run Squeak/Smalltalk tests on TruffleSqueak standalone on Windows
       id: timer_squeak_windows
