@@ -96,7 +96,7 @@ public final class DispatchSelectorNaryNode extends DispatchSelectorNode {
 
         DispatchSuperNaryNode(final CompiledCodeObject codeObject, final NativeObject selector) {
             super(selector);
-            this.method = codeObject.getMethod();
+            method = codeObject.getMethod();
         }
 
         @Specialization(assumptions = {"cachedMethodClass.getClassHierarchyAndMethodDictStable()", "dispatchDirectNode.getAssumptions()"})
