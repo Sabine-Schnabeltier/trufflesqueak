@@ -175,10 +175,11 @@ jobs:
       timeout-minutes: 10
       if: ${{ matrix.os == 'ubuntu-22.04' }}
     - &lower_openssl_security_level
-      name: Lower OpenSSL Security Level for legacy certificates
+      name: Lower OpenSSL Security Level and MinProtocol for SqueakSSLTests
       if: runner.os == 'Linux'
       run: |
         sudo sed -i 's/DEFAULT:@SECLEVEL=2/DEFAULT:@SECLEVEL=0/g' /etc/ssl/openssl.cnf
+        sudo sed -i 's/MinProtocol = TLSv1.2/MinProtocol = TLSv1/g' /etc/ssl/openssl.cnf
     - &run_squeak_tests_windows
       name: Run Squeak/Smalltalk tests on TruffleSqueak standalone on Windows
       id: timer_squeak_windows
