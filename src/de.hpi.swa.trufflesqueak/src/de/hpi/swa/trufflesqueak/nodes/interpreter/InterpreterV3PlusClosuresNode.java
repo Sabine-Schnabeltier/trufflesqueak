@@ -23,7 +23,6 @@ import de.hpi.swa.trufflesqueak.image.SqueakImageContext;
 import de.hpi.swa.trufflesqueak.model.AbstractSqueakObjectWithClassAndHash;
 import de.hpi.swa.trufflesqueak.model.ArrayObject;
 import de.hpi.swa.trufflesqueak.model.BooleanObject;
-import de.hpi.swa.trufflesqueak.model.ClassObject;
 import de.hpi.swa.trufflesqueak.model.CompiledCodeObject;
 import de.hpi.swa.trufflesqueak.model.NativeObject;
 import de.hpi.swa.trufflesqueak.model.NilObject;
@@ -162,8 +161,7 @@ public final class InterpreterV3PlusClosuresNode extends AbstractInterpreterNode
                         }
                         case 1: {
                             final NativeObject selector = (NativeObject) code.getLiteral(byte3);
-                            final ClassObject methodClass = code.getMethod().getMethodClassSlow();
-                            setData(currentPC, insert(DispatchSuperNaryNodeGen.create(methodClass, selector)));
+                            setData(currentPC, insert(DispatchSuperNaryNodeGen.create(code, selector)));
                             break;
                         }
                         case 2: {
@@ -189,8 +187,7 @@ public final class InterpreterV3PlusClosuresNode extends AbstractInterpreterNode
                 }
                 case BC.SINGLE_EXTENDED_SUPER: {
                     final NativeObject selector = (NativeObject) code.getLiteral(getByte(bc, pc++) & 0x1F);
-                    final ClassObject methodClass = code.getMethod().getMethodClassSlow();
-                    setData(currentPC, insert(DispatchSuperNaryNodeGen.create(methodClass, selector)));
+                    setData(currentPC, insert(DispatchSuperNaryNodeGen.create(code, selector)));
                     break;
                 }
                 case BC.SECOND_EXTENDED_SEND: {

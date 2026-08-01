@@ -9,7 +9,6 @@ package de.hpi.swa.trufflesqueak.model;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.VarHandle;
 
-import com.oracle.truffle.api.dsl.Idempotent;
 import org.graalvm.collections.UnmodifiableEconomicMap;
 
 import com.oracle.truffle.api.CompilerAsserts;
@@ -196,7 +195,6 @@ public abstract class AbstractSqueakObjectWithHash extends AbstractSqueakObject 
         squeakHashAndBits |= FORWARDED_BIT;
     }
 
-    @Idempotent
     public final boolean isNotForwarded() {
         return (squeakHashAndBits & FORWARDED_BIT) == 0;
     }

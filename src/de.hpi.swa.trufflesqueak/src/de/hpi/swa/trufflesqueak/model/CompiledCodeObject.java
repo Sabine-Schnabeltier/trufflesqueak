@@ -20,6 +20,7 @@ import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.RootCallTarget;
 import com.oracle.truffle.api.Truffle;
 import com.oracle.truffle.api.dsl.Idempotent;
+import com.oracle.truffle.api.dsl.NeverDefault;
 import com.oracle.truffle.api.dsl.NonIdempotent;
 import com.oracle.truffle.api.frame.FrameDescriptor;
 import com.oracle.truffle.api.source.Source;
@@ -563,7 +564,7 @@ public final class CompiledCodeObject extends AbstractSqueakObjectWithClassAndHa
         } else {
             String className = "UnknownClass";
             String selector = "unknownSelector";
-            final ClassObject methodClass = getMethodClassSlow();
+            final ClassObject methodClass = getMethodClassOrNullSlow();
             if (methodClass != null) {
                 className = methodClass.getClassName();
             }
@@ -699,7 +700,17 @@ public final class CompiledCodeObject extends AbstractSqueakObjectWithClassAndHa
         }
     }
 
+    @NeverDefault
     public ClassObject getMethodClassSlow() {
+        final ClassObject methodClass = getMethodClassOrNullSlow();
+        if (methodClass != null) {
+            return methodClass;
+        } else {
+            throw CompilerDirectives.shouldNotReachHere();
+        }
+    }
+
+    public ClassObject getMethodClassOrNullSlow() {
         CompilerAsserts.neverPartOfCompilation();
         final AbstractPointersObjectReadNode readNode = AbstractPointersObjectReadNode.getUncached();
         if (hasMethodClass(readNode)) {

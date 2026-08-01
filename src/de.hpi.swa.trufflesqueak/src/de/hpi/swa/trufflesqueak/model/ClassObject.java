@@ -313,10 +313,6 @@ public final class ClassObject extends AbstractSqueakObjectWithClassAndHash {
         return superclass;
     }
 
-    public ClassObject resolveAndGetResolvedSuperclass() {
-        return ((ClassObject) resolveForwardingPointer()).getResolvedSuperclass();
-    }
-
     public ClassObject getResolvedSuperclass() {
         assert assertNotForwarded();
         if (!superclass.isNotForwarded()) {
