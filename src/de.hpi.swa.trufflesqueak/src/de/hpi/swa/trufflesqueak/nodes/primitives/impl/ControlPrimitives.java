@@ -809,7 +809,7 @@ public final class ControlPrimitives extends AbstractPrimitiveFactoryHolder {
                 forceFullGC();
             }
 
-            image.checkForPendingFinalizations();
+            image.checkForPendingFinalizationsFull();
             return MiscUtils.runtimeFreeMemory();
         }
 

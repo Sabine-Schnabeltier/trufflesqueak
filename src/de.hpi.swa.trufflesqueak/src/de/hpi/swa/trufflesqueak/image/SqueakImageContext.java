@@ -924,6 +924,12 @@ public final class SqueakImageContext {
     }
 
     public void checkForPendingFinalizations() {
+        if (weakPointersQueue.poll() != null /* has pending finalizations? */) {
+            interrupt.setPendingFinalizations();
+        }
+    }
+
+    public void checkForPendingFinalizationsFull() {
         if (weakPointersQueue.poll() != null /* has pending finalizations? */ ||
                         (containsEphemerons && objectGraphUtils.checkEphemerons()) /* has pending ephemerons? */) {
             interrupt.setPendingFinalizations();
