@@ -174,13 +174,6 @@ jobs:
         echo "cuis75_${SAFE_OS}=${FORMATTED_TIME}" >> "$GITHUB_OUTPUT"
       timeout-minutes: 10
       if: ${{ matrix.os == 'ubuntu-22.04' }}
-    - &lower_openssl_security_level
-      name: Lower OpenSSL Security Level and MinProtocol for SqueakSSLTests
-      if: runner.os == 'Linux'
-      run: |
-        sudo sed -i 's/^CipherString.*/CipherString = ALL:@SECLEVEL=0\nMinProtocol = SSLv3/' /etc/ssl/openssl.cnf
-        sudo sed -i 's/# legacy = legacy_sect/legacy = legacy_sect/' /etc/ssl/openssl.cnf
-        echo -e "\n[legacy_sect]\nactivate = 1" | sudo tee -a /etc/ssl/openssl.cnf
     - &run_squeak_tests_windows
       name: Run Squeak/Smalltalk tests on TruffleSqueak standalone on Windows
       id: timer_squeak_windows
@@ -345,7 +338,6 @@ jobs:
     - *run_polyglot_smoketest
     - *run_cuis73_tests
     - *run_cuis75_tests
-    - *lower_openssl_security_level
     - *run_squeak_tests_windows
     - *run_squeak_tests_unix
     - *upload_graal_dumps

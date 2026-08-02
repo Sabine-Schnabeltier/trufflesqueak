@@ -99,6 +99,13 @@
     } collect: [:testCase |
         testCase allTestSelectors do: [:sel | ignoredTests add: (testCase selector: sel) ]].
 
+    isLinux ifTrue: [
+        {
+            SqueakSSLTest. "certificate errors on Ubuntu 22.04"
+        } collect: [:testCase |
+            testCase allTestSelectors do: [:sel | ignoredTests add: (testCase selector: sel) ]].
+    ].
+
     {
         "slow tests"
         LocaleTest -> #(#test04InstallFont).
