@@ -923,15 +923,15 @@ public final class SqueakImageContext {
         setSpecialObject(index, semaphore);
     }
 
-    public void checkForPendingFinalizations() {
-        if (weakPointersQueue.poll() != null /* has pending finalizations? */) {
-            interrupt.setPendingFinalizations();
+    public void checkEphemerons() {
+        if (containsEphemerons) {
+            objectGraphUtils.checkEphemerons();
         }
     }
 
-    public void checkForPendingFinalizationsFull() {
+    public void checkForPendingFinalizations() {
         if (weakPointersQueue.poll() != null /* has pending finalizations? */ ||
-                        (containsEphemerons && objectGraphUtils.checkEphemerons()) /* has pending ephemerons? */) {
+                        (containsEphemerons && !ephemeronsQueue.isEmpty()) /* has pending ephemerons? */) {
             interrupt.setPendingFinalizations();
         }
     }
