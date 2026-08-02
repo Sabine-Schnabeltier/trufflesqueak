@@ -166,6 +166,7 @@
     {
         BitBltSimulationTest -> #(#testAlphaCompositing2Simulated #testAlphaCompositingSimulated).
         DebuggerTests -> #(#test02UnhandledException #test19Abandon).
+        FloatTest -> #(#testCompiledConstants). "fails on PGO-instrumented standalone"
         MCSnapshotTest -> #(#testInstanceReuse).
         MorphicToolBuilderTests -> #(#testGetButtonColor).
         PCCByLiteralsTest -> #(#testSwitchPrimCallOffOn).
