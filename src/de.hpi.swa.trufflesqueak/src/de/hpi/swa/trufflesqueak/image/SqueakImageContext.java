@@ -923,6 +923,13 @@ public final class SqueakImageContext {
         setSpecialObject(index, semaphore);
     }
 
+    public void checkForPendingFinalizations() {
+        if (weakPointersQueue.poll() != null /* has pending finalizations? */ ||
+                        (containsEphemerons && objectGraphUtils.checkEphemerons()) /* has pending ephemerons? */) {
+            interrupt.setPendingFinalizations();
+        }
+    }
+
     /**
      * Ensure the active process is saved and try to signal low space semaphore (see
      * #setSignalLowSpaceFlagAndSaveProcess). The JVM has just thrown a {@link StackOverflowError},
