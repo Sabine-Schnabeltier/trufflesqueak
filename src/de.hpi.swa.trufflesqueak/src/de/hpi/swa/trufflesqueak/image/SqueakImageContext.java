@@ -716,10 +716,10 @@ public final class SqueakImageContext {
     private void ensureResourcesDirectoryAndPathInitialized() {
         if (resourcesDirectoryBytes == null) {
             CompilerDirectives.transferToInterpreterAndInvalidate();
-            final String languageHome = getLanguage().getTruffleLanguageHome();
             final TruffleFile path;
-            if (languageHome != null) {
+            if (getLanguage().getTruffleLanguageHome() != null) {
                 path = getHomePath().resolve("resources");
+                assert path.exists();
             } else { /* Fallback to image directory. */
                 path = env.getInternalTruffleFile(getImagePath()).getParent();
                 if (path == null) {

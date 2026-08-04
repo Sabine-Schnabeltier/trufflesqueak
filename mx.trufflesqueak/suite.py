@@ -522,6 +522,7 @@ suite = {
                     "file:LICENSE",
                     "file:README.md",
                 ],
+                "./resources/README.md": "string:Directory for Smalltalk image, changes, and sources files.\n",
             },
             "maven": False,
         },
