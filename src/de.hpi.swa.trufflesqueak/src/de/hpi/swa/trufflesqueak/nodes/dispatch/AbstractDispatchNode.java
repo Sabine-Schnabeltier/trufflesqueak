@@ -92,6 +92,7 @@ public abstract class AbstractDispatchNode extends AbstractNode {
                     continue;
                 }
 
+                // Only coalesce standard methods. Fallbacks (null) and OAMs are isolated by class.
                 if (targetEntry == null && lookupResult instanceof CompiledCodeObject targetMethod &&
                                 current.methodOrNull == targetMethod &&
                                 current.executor.getClass() == newDispatchNode.getClass()) {
@@ -169,7 +170,11 @@ public abstract class AbstractDispatchNode extends AbstractNode {
         }
 
         public boolean isFastCacheHit(final Object receiver) {
-            return guardChainNode.execute(receiver);
+            final GuardChainNode chain = this.guardChainNode;
+            if (chain == null) {
+                return false;
+            }
+            return chain.execute(receiver);
         }
 
         public boolean isWideCacheHit(final CompiledCodeObject targetMethod) {
@@ -177,7 +182,8 @@ public abstract class AbstractDispatchNode extends AbstractNode {
         }
 
         public boolean isFastValid() {
-            return !guardChainNode.isEmpty();
+            final GuardChainNode chain = this.guardChainNode;
+            return chain != null && !chain.isEmpty();
         }
 
         public boolean isWideValid() {
@@ -205,18 +211,21 @@ public abstract class AbstractDispatchNode extends AbstractNode {
             final GuardChainDataNode[] currentGuards = this.guards;
             for (int i = 0; i < currentGuards.length; i++) {
                 final GuardChainDataNode current = currentGuards[i];
-                if (!Assumption.isValidAssumption(current.assumptions)) {
-                    CompilerDirectives.transferToInterpreterAndInvalidate();
-                    return removeInvalidAndCompleteCheck(receiver, i, currentGuards);
-                } else if (current.guard.check(receiver)) {
-                    return true;
+
+                if (current.guard.check(receiver)) {
+                    if (Assumption.isValidAssumption(current.assumptions)) {
+                        return true;
+                    } else {
+                        CompilerDirectives.transferToInterpreterAndInvalidate();
+                        removeInvalid(currentGuards);
+                        return false;
+                    }
                 }
             }
             return false;
         }
 
         public boolean append(final Object receiver, final Assumption[] assumptions) {
-            // Determine how many guards are still valid
             int validCount = 0;
             for (final GuardChainDataNode guard : guards) {
                 if (Assumption.isValidAssumption(guard.assumptions)) {
@@ -224,12 +233,10 @@ public abstract class AbstractDispatchNode extends AbstractNode {
                 }
             }
 
-            // Fail if the final count of guards exceed the limit
             if (validCount >= CacheLimits.LOOKUP_CACHE_LIMIT) {
                 return false;
             }
 
-            // Rebuild the array, pruning dead nodes and adding the new one in a single pass
             final GuardChainDataNode[] newGuards = new GuardChainDataNode[validCount + 1];
             int index = 0;
             for (final GuardChainDataNode guard : guards) {
@@ -244,39 +251,23 @@ public abstract class AbstractDispatchNode extends AbstractNode {
         }
 
         @TruffleBoundary
-        private boolean removeInvalidAndCompleteCheck(final Object receiver, final int firstInvalidIndex, final GuardChainDataNode[] currentGuards) {
-            // 0 through (firstInvalidIndex - 1) are valid. firstInvalidIndex is invalid.
-            int validCount = firstInvalidIndex;
-            for (int i = firstInvalidIndex + 1; i < currentGuards.length; i++) {
-                if (Assumption.isValidAssumption(currentGuards[i].assumptions)) {
+        private void removeInvalid(final GuardChainDataNode[] currentGuards) {
+            int validCount = 0;
+            for (final GuardChainDataNode node : currentGuards) {
+                if (Assumption.isValidAssumption(node.assumptions)) {
                     validCount++;
                 }
             }
 
             final GuardChainDataNode[] newGuards = new GuardChainDataNode[validCount];
-
-            // Copy the initial known valid entries.
-            for (int i = 0; i < firstInvalidIndex; i++) {
-                newGuards[i] = currentGuards[i];
-            }
-
-            boolean foundMatch = false;
-            int newIndex = firstInvalidIndex;
-
-            // Evaluate the tail for both validity and the receiver guard.
-            for (int i = firstInvalidIndex + 1; i < currentGuards.length; i++) {
-                final GuardChainDataNode node = currentGuards[i];
+            int index = 0;
+            for (final GuardChainDataNode node : currentGuards) {
                 if (Assumption.isValidAssumption(node.assumptions)) {
-                    newGuards[newIndex++] = node;
-
-                    if (!foundMatch && node.guard.check(receiver)) {
-                        foundMatch = true;
-                    }
+                    newGuards[index++] = node;
                 }
             }
 
             this.guards = insert(newGuards);
-            return foundMatch;
         }
     }
 
