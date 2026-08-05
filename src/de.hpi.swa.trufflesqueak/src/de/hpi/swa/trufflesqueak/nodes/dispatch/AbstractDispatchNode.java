@@ -15,6 +15,8 @@ import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.nodes.ExplodeLoop;
 import com.oracle.truffle.api.nodes.Node;
 
+import de.hpi.swa.trufflesqueak.model.AbstractSqueakObjectWithClassAndHash;
+import de.hpi.swa.trufflesqueak.model.ClassObject;
 import de.hpi.swa.trufflesqueak.model.CompiledCodeObject;
 import de.hpi.swa.trufflesqueak.model.NativeObject;
 import de.hpi.swa.trufflesqueak.nodes.AbstractNode;
@@ -169,7 +171,12 @@ public abstract class AbstractDispatchNode extends AbstractNode {
         }
 
         public boolean isFastCacheHit(final Object receiver) {
-            return guardChainNode.execute(receiver);
+            // Safely deflect lagging compiled frames that hit this entry after it was promoted to Wide
+            final GuardChainNode chain = this.guardChainNode;
+            if (chain == null) {
+                return false;
+            }
+            return chain.execute(receiver);
         }
 
         public boolean isWideCacheHit(final CompiledCodeObject targetMethod) {
@@ -177,7 +184,8 @@ public abstract class AbstractDispatchNode extends AbstractNode {
         }
 
         public boolean isFastValid() {
-            return !guardChainNode.isEmpty();
+            final GuardChainNode chain = guardChainNode;
+            return chain != null && !chain.isEmpty();
         }
 
         public boolean isWideValid() {
@@ -190,101 +198,176 @@ public abstract class AbstractDispatchNode extends AbstractNode {
     }
 
     public static final class GuardChainNode extends AbstractNode {
-        @Children private GuardChainDataNode[] guards;
+        @Children private ClassGuardDataNode[] classGuards;
+        @Children private GenericGuardDataNode[] genericGuards;
 
         public GuardChainNode(final Object receiver, final Assumption[] assumptions) {
-            this.guards = insert(new GuardChainDataNode[]{new GuardChainDataNode(receiver, assumptions)});
+            if (receiver instanceof final AbstractSqueakObjectWithClassAndHash squeakObj) {
+                // ToDo: not sure this is needed -- included to parallel LookupClassGuard implementation
+                final AbstractSqueakObjectWithClassAndHash resolved = (AbstractSqueakObjectWithClassAndHash) squeakObj.resolveForwardingPointer();
+                this.classGuards = insert(new ClassGuardDataNode[]{new ClassGuardDataNode(resolved.getSqueakClass(), assumptions)});
+                this.genericGuards = insert(new GenericGuardDataNode[0]);
+            } else {
+                this.classGuards = insert(new ClassGuardDataNode[0]);
+                this.genericGuards = insert(new GenericGuardDataNode[]{new GenericGuardDataNode(receiver, assumptions)});
+            }
         }
 
         public boolean isEmpty() {
-            return guards.length == 0;
+            return classGuards.length == 0 && genericGuards.length == 0;
         }
 
         @ExplodeLoop
         public boolean execute(final Object receiver) {
-            final GuardChainDataNode[] currentGuards = this.guards;
-            for (int i = 0; i < currentGuards.length; i++) {
-                final GuardChainDataNode current = currentGuards[i];
-                if (!Assumption.isValidAssumption(current.assumptions)) {
-                    CompilerDirectives.transferToInterpreterAndInvalidate();
-                    return removeInvalidAndCompleteCheck(receiver, i, currentGuards);
-                } else if (current.guard.check(receiver)) {
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        public boolean append(final Object receiver, final Assumption[] assumptions) {
-            // Determine how many guards are still valid
-            int validCount = 0;
-            for (final GuardChainDataNode guard : guards) {
-                if (Assumption.isValidAssumption(guard.assumptions)) {
-                    validCount++;
-                }
-            }
-
-            // Fail if the final count of guards exceed the limit
-            if (validCount >= CacheLimits.LOOKUP_CACHE_LIMIT) {
-                return false;
-            }
-
-            // Rebuild the array, pruning dead nodes and adding the new one in a single pass
-            final GuardChainDataNode[] newGuards = new GuardChainDataNode[validCount + 1];
-            int index = 0;
-            for (final GuardChainDataNode guard : guards) {
-                if (Assumption.isValidAssumption(guard.assumptions)) {
-                    newGuards[index++] = guard;
-                }
-            }
-
-            newGuards[index] = new GuardChainDataNode(receiver, assumptions);
-            this.guards = insert(newGuards);
-            return true;
-        }
-
-        @TruffleBoundary
-        private boolean removeInvalidAndCompleteCheck(final Object receiver, final int firstInvalidIndex, final GuardChainDataNode[] currentGuards) {
-            // 0 through (firstInvalidIndex - 1) are valid. firstInvalidIndex is invalid.
-            int validCount = firstInvalidIndex;
-            for (int i = firstInvalidIndex + 1; i < currentGuards.length; i++) {
-                if (Assumption.isValidAssumption(currentGuards[i].assumptions)) {
-                    validCount++;
-                }
-            }
-
-            final GuardChainDataNode[] newGuards = new GuardChainDataNode[validCount];
-
-            // Copy the initial known valid entries.
-            for (int i = 0; i < firstInvalidIndex; i++) {
-                newGuards[i] = currentGuards[i];
-            }
-
-            boolean foundMatch = false;
-            int newIndex = firstInvalidIndex;
-
-            // Evaluate the tail for both validity and the receiver guard.
-            for (int i = firstInvalidIndex + 1; i < currentGuards.length; i++) {
-                final GuardChainDataNode node = currentGuards[i];
-                if (Assumption.isValidAssumption(node.assumptions)) {
-                    newGuards[newIndex++] = node;
-
-                    if (!foundMatch && node.guard.check(receiver)) {
-                        foundMatch = true;
+            // FAST PATH FOR SQUEAK OBJECTS
+            // Evaluated if there are class guards and the receiver is a Squeak object.
+            if (classGuards.length > 0 && receiver instanceof final AbstractSqueakObjectWithClassAndHash squeakObj) {
+                final ClassObject actualClass = squeakObj.getSqueakClass();
+                final ClassGuardDataNode[] currentClass = classGuards;
+                for (int i = 0; i < currentClass.length; i++) {
+                    final ClassGuardDataNode current = currentClass[i];
+                    if (!Assumption.isValidAssumption(current.assumptions)) {
+                        CompilerDirectives.transferToInterpreterAndInvalidate();
+                        return removeInvalidAndCompleteCheck(receiver);
+                    } else if (current.expectedClass == actualClass) {
+                        return true;
                     }
                 }
             }
 
-            this.guards = insert(newGuards);
-            return foundMatch;
+            // FAST PATH FOR PRIMITIVES / SINGLETONS / ALL OTHERS
+            // Evaluated if there are generic guards (and receiver fell through the Squeak check).
+            if (genericGuards.length > 0) {
+                final GenericGuardDataNode[] currentGeneric = genericGuards;
+                for (int i = 0; i < currentGeneric.length; i++) {
+                    final GenericGuardDataNode current = currentGeneric[i];
+                    if (!Assumption.isValidAssumption(current.assumptions)) {
+                        CompilerDirectives.transferToInterpreterAndInvalidate();
+                        return removeInvalidAndCompleteCheck(receiver);
+                    } else if (current.guard.check(receiver)) {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        public boolean append(final Object receiver, final Assumption[] assumptions) {
+            int totalSize = classGuards.length + genericGuards.length;
+
+            // Lazy Pruning: Only prune the opposite list if we are out of space.
+            if (totalSize >= CacheLimits.LOOKUP_CACHE_LIMIT) {
+                fullPrune();
+                totalSize = classGuards.length + genericGuards.length;
+                if (totalSize >= CacheLimits.LOOKUP_CACHE_LIMIT) {
+                    return false; // Still full after prune, trigger Wide tier promotion.
+                }
+            }
+
+            if (receiver instanceof AbstractSqueakObjectWithClassAndHash squeakObj) {
+                // ToDo: not sure this is needed -- included to parallel LookupClassGuard implementation
+                final AbstractSqueakObjectWithClassAndHash resolved = (AbstractSqueakObjectWithClassAndHash) squeakObj.resolveForwardingPointer();
+                final ClassObject expectedClass = resolved.getSqueakClass();
+                final ClassGuardDataNode[] newGuards = new ClassGuardDataNode[getValidCount(classGuards) + 1];
+                int index = 0;
+                for (final ClassGuardDataNode guard : classGuards) {
+                    if (Assumption.isValidAssumption(guard.assumptions)) {
+                        newGuards[index++] = guard;
+                    }
+                }
+                newGuards[index] = new ClassGuardDataNode(expectedClass, assumptions);
+                this.classGuards = insert(newGuards);
+            } else {
+                final GenericGuardDataNode[] newGuards = new GenericGuardDataNode[getValidCount(genericGuards) + 1];
+                int index = 0;
+                for (final GenericGuardDataNode guard : genericGuards) {
+                    if (Assumption.isValidAssumption(guard.assumptions)) {
+                        newGuards[index++] = guard;
+                    }
+                }
+                newGuards[index] = new GenericGuardDataNode(receiver, assumptions);
+                this.genericGuards = insert(newGuards);
+            }
+            return true;
+        }
+
+        private static int getValidCount(final ClassGuardDataNode[] guards) {
+            int validCount = 0;
+            for (final ClassGuardDataNode guard : guards) {
+                if (Assumption.isValidAssumption(guard.assumptions)) validCount++;
+            }
+            return validCount;
+        }
+
+        private static int getValidCount(final GenericGuardDataNode[] guards) {
+            int validCount = 0;
+            for (final GenericGuardDataNode guard : guards) {
+                if (Assumption.isValidAssumption(guard.assumptions)) validCount++;
+            }
+            return validCount;
+        }
+
+        @TruffleBoundary
+        private void fullPrune() {
+            final int validClass = getValidCount(classGuards);
+            if (validClass != classGuards.length) {
+                final ClassGuardDataNode[] newClass = new ClassGuardDataNode[validClass];
+                int index = 0;
+                for (final ClassGuardDataNode guard : classGuards) {
+                    if (Assumption.isValidAssumption(guard.assumptions)) newClass[index++] = guard;
+                }
+                this.classGuards = insert(newClass);
+            }
+
+            final int validGeneric = getValidCount(genericGuards);
+            if (validGeneric != genericGuards.length) {
+                final GenericGuardDataNode[] newGeneric = new GenericGuardDataNode[validGeneric];
+                int index = 0;
+                for (final GenericGuardDataNode guard : genericGuards) {
+                    if (Assumption.isValidAssumption(guard.assumptions)) newGeneric[index++] = guard;
+                }
+                this.genericGuards = insert(newGeneric);
+            }
+        }
+
+        @TruffleBoundary
+        private boolean removeInvalidAndCompleteCheck(final Object receiver) {
+            fullPrune();
+
+            if (receiver instanceof final AbstractSqueakObjectWithClassAndHash squeakObj) {
+                final ClassObject actualClass = squeakObj.getSqueakClass();
+                for (final ClassGuardDataNode current : classGuards) {
+                    if (current.expectedClass == actualClass) {
+                        return true;
+                    }
+                }
+            } else {
+                for (final GenericGuardDataNode current : genericGuards) {
+                    if (current.guard.check(receiver)) {
+                        return true;
+                    }
+                }
+            }
+            return false;
         }
     }
 
-    public static final class GuardChainDataNode extends Node {
+    public static final class ClassGuardDataNode extends Node {
+        public final ClassObject expectedClass;
+        @CompilationFinal(dimensions = 1) public final Assumption[] assumptions;
+
+        public ClassGuardDataNode(final ClassObject expectedClass, final Assumption[] assumptions) {
+            this.expectedClass = expectedClass;
+            this.assumptions = assumptions;
+        }
+    }
+
+    public static final class GenericGuardDataNode extends Node {
         public final LookupClassGuard guard;
         @CompilationFinal(dimensions = 1) public final Assumption[] assumptions;
 
-        public GuardChainDataNode(final Object receiver, final Assumption[] assumptions) {
+        public GenericGuardDataNode(final Object receiver, final Assumption[] assumptions) {
             this.guard = LookupClassGuard.create(receiver);
             this.assumptions = assumptions;
         }
