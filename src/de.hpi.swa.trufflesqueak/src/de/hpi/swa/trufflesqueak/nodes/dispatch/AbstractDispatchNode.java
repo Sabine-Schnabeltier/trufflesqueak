@@ -181,7 +181,7 @@ public abstract class AbstractDispatchNode extends AbstractNode {
                 if (!Assumption.isValidAssumption(current.assumptions)) {
                     CompilerDirectives.transferToInterpreterAndInvalidate();
                     return removeInvalidAndCompleteCheck(receiver, i, currentGuards);
-                } else if (current.guard.check(receiver)) {
+                } else if (current.guard.fastCheck(receiver)) {
                     return true;
                 }
             }

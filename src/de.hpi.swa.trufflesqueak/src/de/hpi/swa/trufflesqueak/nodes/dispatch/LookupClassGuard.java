@@ -23,6 +23,41 @@ import de.hpi.swa.trufflesqueak.model.NilObject;
 import de.hpi.swa.trufflesqueak.nodes.SqueakGuards;
 
 public abstract class LookupClassGuard {
+    public enum GuardType {
+        NIL, TRUE, FALSE, SMALL_INTEGER, CHARACTER, DOUBLE,
+        CONTEXT, BLOCK_CLOSURE, FULL_BLOCK_CLOSURE, FLOAT,
+        SQUEAK_OBJECT, FOREIGN
+    }
+
+    protected final GuardType type;
+
+    protected LookupClassGuard(final GuardType type) {
+        this.type = type;
+    }
+
+    /**
+     * A monomorphic fast-path for the HotSpot interpreter to avoid megamorphic
+     * virtual dispatch overhead. GraalVM will constant-fold this switch during JIT compilation.
+     */
+    public final boolean fastCheck(final Object receiver) {
+        switch (this.type) {
+            case NIL: return receiver == NilObject.SINGLETON;
+            case TRUE: return receiver == Boolean.TRUE;
+            case FALSE: return receiver == Boolean.FALSE;
+            case SMALL_INTEGER: return receiver instanceof Long;
+            case CHARACTER: return receiver instanceof Character || receiver instanceof CharacterObject;
+            case DOUBLE: return receiver instanceof Double;
+            case CONTEXT: return receiver instanceof ContextObject;
+            case BLOCK_CLOSURE: return receiver instanceof BlockClosureObject closure && closure.isABlockClosure();
+            case FULL_BLOCK_CLOSURE: return receiver instanceof BlockClosureObject closure && closure.isAFullBlockClosure();
+            case FLOAT: return receiver instanceof FloatObject;
+            case SQUEAK_OBJECT:
+            case FOREIGN:
+            default:
+                return this.check(receiver);
+        }
+    }
+
     public abstract boolean check(Object receiver);
 
     public final ClassObject getSqueakClass(final Node node) {
@@ -63,6 +98,8 @@ public abstract class LookupClassGuard {
     private static final class NilGuard extends LookupClassGuard {
         private static final NilGuard SINGLETON = new NilGuard();
 
+        private NilGuard() { super(GuardType.NIL); }
+
         @Override
         public boolean check(final Object receiver) {
             return receiver == NilObject.SINGLETON;
@@ -76,6 +113,8 @@ public abstract class LookupClassGuard {
 
     private static final class TrueGuard extends LookupClassGuard {
         private static final TrueGuard SINGLETON = new TrueGuard();
+
+        private TrueGuard() { super(GuardType.TRUE); }
 
         @Override
         public boolean check(final Object receiver) {
@@ -91,6 +130,8 @@ public abstract class LookupClassGuard {
     private static final class FalseGuard extends LookupClassGuard {
         private static final FalseGuard SINGLETON = new FalseGuard();
 
+        private FalseGuard() { super(GuardType.FALSE); }
+
         @Override
         public boolean check(final Object receiver) {
             return receiver == Boolean.FALSE;
@@ -104,6 +145,8 @@ public abstract class LookupClassGuard {
 
     private static final class SmallIntegerGuard extends LookupClassGuard {
         private static final SmallIntegerGuard SINGLETON = new SmallIntegerGuard();
+
+        private SmallIntegerGuard() { super(GuardType.SMALL_INTEGER); }
 
         @Override
         public boolean check(final Object receiver) {
@@ -119,6 +162,8 @@ public abstract class LookupClassGuard {
     private static final class CharacterGuard extends LookupClassGuard {
         private static final CharacterGuard SINGLETON = new CharacterGuard();
 
+        private CharacterGuard() { super(GuardType.CHARACTER); }
+
         @Override
         public boolean check(final Object receiver) {
             return receiver instanceof Character || receiver instanceof CharacterObject;
@@ -132,6 +177,8 @@ public abstract class LookupClassGuard {
 
     private static final class DoubleGuard extends LookupClassGuard {
         private static final DoubleGuard SINGLETON = new DoubleGuard();
+
+        private DoubleGuard() { super(GuardType.DOUBLE); }
 
         @Override
         public boolean check(final Object receiver) {
@@ -147,6 +194,8 @@ public abstract class LookupClassGuard {
     private static final class ContextObjectGuard extends LookupClassGuard {
         private static final ContextObjectGuard SINGLETON = new ContextObjectGuard();
 
+        private ContextObjectGuard() { super(GuardType.CONTEXT); }
+
         @Override
         public boolean check(final Object receiver) {
             return receiver instanceof ContextObject;
@@ -160,6 +209,8 @@ public abstract class LookupClassGuard {
 
     private static final class BlockClosureGuard extends LookupClassGuard {
         private static final BlockClosureGuard SINGLETON = new BlockClosureGuard();
+
+        private BlockClosureGuard() { super(GuardType.BLOCK_CLOSURE); }
 
         @Override
         public boolean check(final Object receiver) {
@@ -175,6 +226,8 @@ public abstract class LookupClassGuard {
     private static final class FullBlockClosureGuard extends LookupClassGuard {
         private static final FullBlockClosureGuard SINGLETON = new FullBlockClosureGuard();
 
+        private FullBlockClosureGuard() { super(GuardType.FULL_BLOCK_CLOSURE); }
+
         @Override
         public boolean check(final Object receiver) {
             return receiver instanceof final BlockClosureObject closure && closure.isAFullBlockClosure();
@@ -188,6 +241,8 @@ public abstract class LookupClassGuard {
 
     private static final class FloatObjectGuard extends LookupClassGuard {
         private static final FloatObjectGuard SINGLETON = new FloatObjectGuard();
+
+        private FloatObjectGuard() { super(GuardType.FLOAT); }
 
         @Override
         public boolean check(final Object receiver) {
@@ -204,6 +259,7 @@ public abstract class LookupClassGuard {
         private final ClassObject expectedClass;
 
         private AbstractSqueakObjectWithClassAndHashGuard(final AbstractSqueakObjectWithClassAndHash receiver) {
+            super(GuardType.SQUEAK_OBJECT);
             expectedClass = receiver.getSqueakClass();
             assert expectedClass.assertNotForwarded();
         }
@@ -221,6 +277,8 @@ public abstract class LookupClassGuard {
 
     private static final class ForeignObjectGuard extends LookupClassGuard {
         private static final ForeignObjectGuard SINGLETON = new ForeignObjectGuard();
+
+        private ForeignObjectGuard() { super(GuardType.FOREIGN); }
 
         @Override
         public boolean check(final Object receiver) {
