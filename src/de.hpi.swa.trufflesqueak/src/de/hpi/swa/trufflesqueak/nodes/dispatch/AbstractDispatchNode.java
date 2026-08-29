@@ -56,12 +56,9 @@ public abstract class AbstractDispatchNode extends AbstractNode {
      * @param <T> The type of direct dispatch node managed by this cache.
      */
     public static final class DispatchCacheManager<T extends AbstractDispatchDirectNode> extends Node {
-        @Children
-        public DispatchEntry<T>[] fastEntries;
-        @Children
-        public DispatchEntry<T>[] wideEntries;
-        @Child
-        public SqueakObjectClassNode classNode;
+        @Children public DispatchEntry<T>[] fastEntries;
+        @Children public DispatchEntry<T>[] wideEntries;
+        @Child public SqueakObjectClassNode classNode;
 
         @SuppressWarnings("unchecked")
         public DispatchCacheManager() {
@@ -98,7 +95,7 @@ public abstract class AbstractDispatchNode extends AbstractNode {
 
                 // Only coalesce standard methods. Fallbacks (null) and OAMs are isolated by class.
                 if (targetEntry == null && lookupResult instanceof CompiledCodeObject targetMethod &&
-                        current.methodOrNull == targetMethod) {
+                                current.methodOrNull == targetMethod) {
 
                     // Generate assumptions lazily without instantiating the execution node
                     final Assumption[] newAssumptions = DispatchUtils.createAssumptions(receiverClass, targetMethod);

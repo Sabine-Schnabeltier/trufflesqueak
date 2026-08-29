@@ -153,7 +153,7 @@ public final class DispatchSelectorNaryNode extends AbstractDispatchSelectorNode
 
             // Node creation handles method resolution, including DNU and OAM fallbacks.
             final DispatchDirectNaryNode executor = cache.specialize(receiver, receiverClass, lookupResult,
-                    () -> DispatchDirectNaryNode.create(selector, receiverClass, arguments.length));
+                            () -> DispatchDirectNaryNode.create(selector, receiverClass, arguments.length));
 
             if (executor != null) {
                 return executor.execute(frame, receiver, arguments);
@@ -246,7 +246,7 @@ public final class DispatchSelectorNaryNode extends AbstractDispatchSelectorNode
 
             // Node creation handles method resolution, including DNU and OAM fallbacks.
             final DispatchDirectNaryNode executor = cache.specialize(receiver, receiverClass, lookupResult,
-                    () -> DispatchDirectNaryNode.create(selector, receiverClass, arguments.length));
+                            () -> DispatchDirectNaryNode.create(selector, receiverClass, arguments.length));
 
             if (executor != null) {
                 return executor.executeWithCheckedArguments(frame, receiver, arguments);

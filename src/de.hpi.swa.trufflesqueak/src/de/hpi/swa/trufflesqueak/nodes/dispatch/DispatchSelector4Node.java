@@ -136,7 +136,7 @@ public final class DispatchSelector4Node extends AbstractDispatchSelectorNode {
 
             // Node creation handles method resolution, including DNU and OAM fallbacks.
             final DispatchDirect4Node executor = cache.specialize(receiver, receiverClass, lookupResult,
-                    () -> DispatchDirect4Node.create(selector, receiverClass, canPrimFail));
+                            () -> DispatchDirect4Node.create(selector, receiverClass, canPrimFail));
 
             if (executor != null) {
                 return executor.execute(frame, receiver, arg1, arg2, arg3, arg4);
