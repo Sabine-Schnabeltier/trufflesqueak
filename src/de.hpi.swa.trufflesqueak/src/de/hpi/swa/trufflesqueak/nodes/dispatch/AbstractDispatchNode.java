@@ -97,11 +97,8 @@ public abstract class AbstractDispatchNode extends AbstractNode {
                 if (targetEntry == null && lookupResult instanceof CompiledCodeObject targetMethod &&
                                 current.methodOrNull == targetMethod) {
 
-                    // Generate assumptions lazily without instantiating the execution node
-                    final Assumption[] newAssumptions = DispatchUtils.createAssumptions(receiverClass, targetMethod);
-
                     // Method matches fast entry: append new guard or transition to wide, if needed.
-                    if (current.guardChainNode.append(receiver, newAssumptions)) {
+                    if (current.guardChainNode.append(receiver, receiverClass, targetMethod)) {
                         newFastEntries[fastEntriesNeeded++] = current;
                         targetEntry = current;
                     } else {
@@ -162,15 +159,15 @@ public abstract class AbstractDispatchNode extends AbstractNode {
 
     public static final class DispatchEntry<T extends AbstractDispatchDirectNode> extends Node {
         public final CompiledCodeObject methodOrNull;
-        @CompilationFinal(dimensions = 1) public final Assumption[] assumptions;
+        @CompilationFinal public final Assumption callTargetStable;
 
         @Child public GuardChainNode guardChainNode;
         @Child public T executor;
 
         public DispatchEntry(final Object receiver, final Object lookupResult, final T executor) {
             this.methodOrNull = lookupResult instanceof CompiledCodeObject m ? m : null;
-            this.assumptions = executor.getAssumptions();
-            this.guardChainNode = insert(new GuardChainNode(receiver, this.assumptions));
+            this.callTargetStable = methodOrNull != null ? methodOrNull.getCallTargetStable() : null;
+            this.guardChainNode = insert(new GuardChainNode(receiver, executor.getAssumptions()));
             this.executor = insert(executor);
         }
 
@@ -183,7 +180,7 @@ public abstract class AbstractDispatchNode extends AbstractNode {
         }
 
         public boolean isWideCacheHit(final CompiledCodeObject targetMethod) {
-            return methodOrNull == targetMethod && Assumption.isValidAssumption(assumptions);
+            return methodOrNull == targetMethod && Assumption.isValidAssumption(callTargetStable);
         }
 
         public boolean isFastValid() {
@@ -192,7 +189,7 @@ public abstract class AbstractDispatchNode extends AbstractNode {
         }
 
         public boolean isWideValid() {
-            return Assumption.isValidAssumption(assumptions);
+            return methodOrNull != null && Assumption.isValidAssumption(callTargetStable);
         }
 
         public void promoteToWide() {
@@ -230,7 +227,7 @@ public abstract class AbstractDispatchNode extends AbstractNode {
             return false;
         }
 
-        public boolean append(final Object receiver, final Assumption[] assumptions) {
+        public boolean append(final Object receiver, final ClassObject receiverClass, final CompiledCodeObject targetMethod) {
             int validCount = 0;
             for (final GuardChainDataNode guard : guards) {
                 if (Assumption.isValidAssumption(guard.assumptions)) {
@@ -242,6 +239,9 @@ public abstract class AbstractDispatchNode extends AbstractNode {
                 return false;
             }
 
+            // Generate and add the new assumptions
+            final Assumption[] newAssumptions = DispatchUtils.createAssumptions(receiverClass, targetMethod);
+
             final GuardChainDataNode[] newGuards = new GuardChainDataNode[validCount + 1];
             int index = 0;
             for (final GuardChainDataNode guard : guards) {
@@ -250,7 +250,7 @@ public abstract class AbstractDispatchNode extends AbstractNode {
                 }
             }
 
-            newGuards[index] = new GuardChainDataNode(receiver, assumptions);
+            newGuards[index] = new GuardChainDataNode(receiver, newAssumptions);
             this.guards = insert(newGuards);
             return true;
         }
