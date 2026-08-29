@@ -15,6 +15,7 @@ import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.nodes.ExplodeLoop;
 import com.oracle.truffle.api.nodes.Node;
 
+import de.hpi.swa.trufflesqueak.model.ClassObject;
 import de.hpi.swa.trufflesqueak.model.CompiledCodeObject;
 import de.hpi.swa.trufflesqueak.model.NativeObject;
 import de.hpi.swa.trufflesqueak.nodes.AbstractNode;
@@ -55,9 +56,12 @@ public abstract class AbstractDispatchNode extends AbstractNode {
      * @param <T> The type of direct dispatch node managed by this cache.
      */
     public static final class DispatchCacheManager<T extends AbstractDispatchDirectNode> extends Node {
-        @Children public DispatchEntry<T>[] fastEntries;
-        @Children public DispatchEntry<T>[] wideEntries;
-        @Child public SqueakObjectClassNode classNode;
+        @Children
+        public DispatchEntry<T>[] fastEntries;
+        @Children
+        public DispatchEntry<T>[] wideEntries;
+        @Child
+        public SqueakObjectClassNode classNode;
 
         @SuppressWarnings("unchecked")
         public DispatchCacheManager() {
@@ -78,7 +82,7 @@ public abstract class AbstractDispatchNode extends AbstractNode {
 
         @SuppressWarnings("unchecked")
         @TruffleBoundary
-        protected T specialize(final Object receiver, final Object lookupResult, final T newDispatchNode) {
+        protected T specialize(final Object receiver, final ClassObject receiverClass, final Object lookupResult, final java.util.function.Supplier<T> nodeSupplier) {
             final DispatchEntry<T>[] newFastEntries = (DispatchEntry<T>[]) new DispatchEntry<?>[CacheLimits.DISPATCH_CACHE_LIMIT];
             final DispatchEntry<T>[] newWideEntries = (DispatchEntry<T>[]) new DispatchEntry<?>[CacheLimits.DISPATCH_CACHE_LIMIT];
 
@@ -94,11 +98,13 @@ public abstract class AbstractDispatchNode extends AbstractNode {
 
                 // Only coalesce standard methods. Fallbacks (null) and OAMs are isolated by class.
                 if (targetEntry == null && lookupResult instanceof CompiledCodeObject targetMethod &&
-                                current.methodOrNull == targetMethod &&
-                                current.executor.getClass() == newDispatchNode.getClass()) {
+                        current.methodOrNull == targetMethod) {
+
+                    // Generate assumptions lazily without instantiating the execution node
+                    final Assumption[] newAssumptions = DispatchUtils.createAssumptions(receiverClass, targetMethod);
 
                     // Method matches fast entry: append new guard or transition to wide, if needed.
-                    if (current.guardChainNode.append(receiver, newDispatchNode.getAssumptions())) {
+                    if (current.guardChainNode.append(receiver, newAssumptions)) {
                         newFastEntries[fastEntriesNeeded++] = current;
                         targetEntry = current;
                     } else {
@@ -144,6 +150,8 @@ public abstract class AbstractDispatchNode extends AbstractNode {
 
             // 5. Append new Fast entry, if cache has space
             if (fastEntriesNeeded + wideEntriesNeeded < CacheLimits.DISPATCH_CACHE_LIMIT) {
+                // Dispatch Node is only built when we need a new entry
+                final T newDispatchNode = nodeSupplier.get();
                 final DispatchEntry<T> newEntry = new DispatchEntry<>(receiver, lookupResult, newDispatchNode);
                 newFastEntries[fastEntriesNeeded++] = newEntry;
                 this.fastEntries = insert(Arrays.copyOf(newFastEntries, fastEntriesNeeded));
