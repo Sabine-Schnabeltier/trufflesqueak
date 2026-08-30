@@ -198,10 +198,12 @@ public abstract class AbstractDispatchNode extends AbstractNode {
     }
 
     public static final class GuardChainNode extends AbstractNode {
-        @Children private GuardChainDataNode[] guards;
+        @CompilationFinal(dimensions = 1) private LookupClassGuard[] guards;
+        @CompilationFinal(dimensions = 2) private Assumption[][] assumptions;
 
-        public GuardChainNode(final Object receiver, final Assumption[] assumptions) {
-            this.guards = insert(new GuardChainDataNode[]{new GuardChainDataNode(receiver, assumptions)});
+        public GuardChainNode(final Object receiver, final Assumption[] initialAssumptions) {
+            this.guards = new LookupClassGuard[]{LookupClassGuard.create(receiver)};
+            this.assumptions = new Assumption[][]{initialAssumptions};
         }
 
         public boolean isEmpty() {
@@ -210,16 +212,16 @@ public abstract class AbstractDispatchNode extends AbstractNode {
 
         @ExplodeLoop
         public boolean execute(final Object receiver) {
-            final GuardChainDataNode[] currentGuards = this.guards;
-            for (int i = 0; i < currentGuards.length; i++) {
-                final GuardChainDataNode current = currentGuards[i];
+            final LookupClassGuard[] currentGuards = guards;
+            final Assumption[][] currentAssumptions = assumptions;
 
-                if (current.guard.check(receiver)) {
-                    if (Assumption.isValidAssumption(current.assumptions)) {
+            for (int i = 0; i < currentGuards.length; i++) {
+                if (currentGuards[i].check(receiver)) {
+                    if (Assumption.isValidAssumption(currentAssumptions[i])) {
                         return true;
                     } else {
                         CompilerDirectives.transferToInterpreterAndInvalidate();
-                        removeInvalid(currentGuards);
+                        removeInvalid(currentGuards, currentAssumptions);
                         return false;
                     }
                 }
@@ -228,9 +230,11 @@ public abstract class AbstractDispatchNode extends AbstractNode {
         }
 
         public boolean append(final Object receiver, final ClassObject receiverClass, final CompiledCodeObject targetMethod) {
+            final Assumption[][] currentAssumptions = assumptions;
             int validCount = 0;
-            for (final GuardChainDataNode guard : guards) {
-                if (Assumption.isValidAssumption(guard.assumptions)) {
+
+            for (int i = 0; i < currentAssumptions.length; i++) {
+                if (Assumption.isValidAssumption(currentAssumptions[i])) {
                     validCount++;
                 }
             }
@@ -242,52 +246,49 @@ public abstract class AbstractDispatchNode extends AbstractNode {
             // Generate and add the new assumptions
             final Assumption[] newAssumptions = DispatchUtils.createAssumptions(receiverClass, targetMethod);
 
-            final GuardChainDataNode[] newGuards = new GuardChainDataNode[validCount + 1];
+            final LookupClassGuard[] newGuards = new LookupClassGuard[validCount + 1];
+            final Assumption[][] newAssumptionsArray = new Assumption[validCount + 1][];
+
             int index = 0;
-            for (final GuardChainDataNode guard : guards) {
-                if (Assumption.isValidAssumption(guard.assumptions)) {
-                    newGuards[index++] = guard;
+            for (int i = 0; i < currentAssumptions.length; i++) {
+                if (Assumption.isValidAssumption(currentAssumptions[i])) {
+                    newGuards[index] = guards[i];
+                    newAssumptionsArray[index] = currentAssumptions[i];
+                    index++;
                 }
             }
 
-            newGuards[index] = new GuardChainDataNode(receiver, newAssumptions);
-            this.guards = insert(newGuards);
+            newGuards[index] = LookupClassGuard.create(receiver);
+            newAssumptionsArray[index] = newAssumptions;
+
+            this.guards = newGuards;
+            this.assumptions = newAssumptionsArray;
             return true;
         }
 
         @TruffleBoundary
-        private void removeInvalid(final GuardChainDataNode[] currentGuards) {
+        private void removeInvalid(final LookupClassGuard[] currentGuards, final Assumption[][] currentAssumptions) {
             int validCount = 0;
-            for (final GuardChainDataNode node : currentGuards) {
-                if (Assumption.isValidAssumption(node.assumptions)) {
+            for (int i = 0; i < currentAssumptions.length; i++) {
+                if (Assumption.isValidAssumption(currentAssumptions[i])) {
                     validCount++;
                 }
             }
 
-            final GuardChainDataNode[] newGuards = new GuardChainDataNode[validCount];
+            final LookupClassGuard[] newGuards = new LookupClassGuard[validCount];
+            final Assumption[][] newAssumptionsArray = new Assumption[validCount][];
+
             int index = 0;
-            for (final GuardChainDataNode node : currentGuards) {
-                if (Assumption.isValidAssumption(node.assumptions)) {
-                    newGuards[index++] = node;
+            for (int i = 0; i < currentAssumptions.length; i++) {
+                if (Assumption.isValidAssumption(currentAssumptions[i])) {
+                    newGuards[index] = currentGuards[i];
+                    newAssumptionsArray[index] = currentAssumptions[i];
+                    index++;
                 }
             }
 
-            this.guards = insert(newGuards);
+            this.guards = newGuards;
+            this.assumptions = newAssumptionsArray;
         }
-    }
-
-    public static final class GuardChainDataNode extends Node {
-        public final LookupClassGuard guard;
-        @CompilationFinal(dimensions = 1) public final Assumption[] assumptions;
-
-        public GuardChainDataNode(final Object receiver, final Assumption[] assumptions) {
-            this.guard = LookupClassGuard.create(receiver);
-            this.assumptions = assumptions;
-        }
-    }
-
-    @Override
-    public final String toString() {
-        return "send: " + selector.toString();
     }
 }

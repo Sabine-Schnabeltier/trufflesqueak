@@ -10,7 +10,7 @@ public final class CacheLimits {
     public static final int EXECUTE_METHOD_CACHE_LIMIT = 4;
     public static final int INDIRECT_PRIMITIVE_CACHE_LIMIT = 2;
     public static final int INLINE_BLOCK_CACHE_LIMIT = 4;
-    public static final int LOOKUP_CACHE_LIMIT = 6;
+    public static final int LOOKUP_CACHE_LIMIT = 8;
     public static final int DISPATCH_CACHE_LIMIT = 4;
     public static final int NEW_CACHE_LIMIT = 3;
     public static final int PERFORM_SELECTOR_CACHE_LIMIT = 4;
