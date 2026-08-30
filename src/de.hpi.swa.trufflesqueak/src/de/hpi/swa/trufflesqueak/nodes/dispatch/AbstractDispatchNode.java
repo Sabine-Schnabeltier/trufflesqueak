@@ -184,8 +184,8 @@ public abstract class AbstractDispatchNode extends AbstractNode {
         }
 
         public boolean isFastValid() {
-            final GuardChainNode chain = this.guardChainNode;
-            return chain != null && !chain.isEmpty();
+            final GuardChainNode chain = guardChainNode;
+            return chain != null && chain.hasValidGuards();
         }
 
         public boolean isWideValid() {
@@ -208,6 +208,16 @@ public abstract class AbstractDispatchNode extends AbstractNode {
 
         public boolean isEmpty() {
             return guards.length == 0;
+        }
+
+        public boolean hasValidGuards() {
+            final Assumption[][] currentAssumptions = assumptions;
+            for (int i = 0; i < currentAssumptions.length; i++) {
+                if (Assumption.isValidAssumption(currentAssumptions[i])) {
+                    return true; // At least one guard is still alive
+                }
+            }
+            return false;
         }
 
         @ExplodeLoop
