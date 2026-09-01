@@ -118,13 +118,9 @@ public final class DispatchSelectorNaryNode extends AbstractDispatchSelectorNode
                         }
                     }
                 }
-
-                // Wide Cache Miss: Delegate to Manager for Specialization
-                CompilerDirectives.transferToInterpreterAndInvalidate();
-                return executeAndSpecialize(frame, receiverClass, lookupResult, receiver, arguments);
             }
 
-            // Fast Cache Miss: Delegate to Manager for Specialization
+            // Cache Miss: Delegate to Manager for Specialization
             CompilerDirectives.transferToInterpreterAndInvalidate();
             return executeAndSpecialize(frame, receiver, arguments);
         }
@@ -142,14 +138,6 @@ public final class DispatchSelectorNaryNode extends AbstractDispatchSelectorNode
 
             final ClassObject receiverClass = cache.classNode.executeLookup(cache, receiver);
             final Object lookupResult = getContext().lookup(receiverClass, selector);
-            return executeAndSpecialize(frame, receiverClass, lookupResult, receiver, arguments);
-        }
-
-        private Object executeAndSpecialize(final VirtualFrame frame, final ClassObject receiverClass, final Object lookupResult, final Object receiver, final Object[] arguments) {
-            // Guard against lagging recursive frames.
-            if (indirectNode != null) {
-                return indirectNode.execute(frame, true, selector, receiver, arguments);
-            }
 
             // Node creation handles method resolution, including DNU and OAM fallbacks.
             final DispatchDirectNaryNode executor = cache.specialize(receiver, receiverClass, lookupResult,
@@ -158,7 +146,7 @@ public final class DispatchSelectorNaryNode extends AbstractDispatchSelectorNode
             if (executor != null) {
                 return executor.execute(frame, receiver, arguments);
             } else {
-                this.reportPolymorphicSpecialize();
+                reportPolymorphicSpecialize();
                 indirectNode = insert(DispatchIndirectNaryNodeGen.create());
                 return indirectNode.execute(frame, false, selector, receiver, arguments);
             }
@@ -210,13 +198,9 @@ public final class DispatchSelectorNaryNode extends AbstractDispatchSelectorNode
                         }
                     }
                 }
-
-                // Wide Cache Miss: Delegate to Manager for Specialization
-                CompilerDirectives.transferToInterpreterAndInvalidate();
-                return executeAndSpecialize(frame, receiverClass, lookupResult, receiver, arguments);
             }
 
-            // Fast Cache Miss: Delegate to Manager for Specialization
+            // Cache Miss: Delegate to Manager for Specialization
             CompilerDirectives.transferToInterpreterAndInvalidate();
             return executeAndSpecialize(frame, receiver, arguments);
         }
@@ -234,15 +218,6 @@ public final class DispatchSelectorNaryNode extends AbstractDispatchSelectorNode
 
             final ClassObject receiverClass = cache.classNode.executeLookup(cache, receiver);
             final Object lookupResult = getContext().lookup(receiverClass, selector);
-            return executeAndSpecialize(frame, receiverClass, lookupResult, receiver, arguments);
-
-        }
-
-        private Object executeAndSpecialize(final VirtualFrame frame, final ClassObject receiverClass, final Object lookupResult, final Object receiver, final Object[] arguments) {
-            // Guard against lagging recursive frames.
-            if (indirectNode != null) {
-                return indirectNode.execute(frame, true, selector, receiver, arguments);
-            }
 
             // Node creation handles method resolution, including DNU and OAM fallbacks.
             final DispatchDirectNaryNode executor = cache.specialize(receiver, receiverClass, lookupResult,
@@ -251,7 +226,7 @@ public final class DispatchSelectorNaryNode extends AbstractDispatchSelectorNode
             if (executor != null) {
                 return executor.executeWithCheckedArguments(frame, receiver, arguments);
             } else {
-                this.reportPolymorphicSpecialize();
+                reportPolymorphicSpecialize();
                 indirectNode = insert(DispatchIndirectNaryNodeGen.create());
                 return indirectNode.execute(frame, true, selector, receiver, arguments);
             }
