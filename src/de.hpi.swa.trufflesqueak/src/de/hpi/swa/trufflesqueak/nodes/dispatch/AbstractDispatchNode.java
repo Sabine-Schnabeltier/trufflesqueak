@@ -120,9 +120,12 @@ public abstract class AbstractDispatchNode<T extends AbstractDispatchDirectNode>
                 final Assumption originalCallTargetStable = originalMethod != null ? originalMethod.getCallTargetStable() : null;
 
                 final DispatchEntry<T> monoEntry = new DispatchEntry<>(originalMethod, originalCallTargetStable,
-                        new LookupClassGuard[]{monoGuard}, originalAssumptions, monoExecutor);
+                        new LookupClassGuard[]{monoGuard}, originalAssumptions);
 
+                // Avoid reparenting issues: add new cache entry as our child first, then add monoEntry as its child
                 this.fastEntries = insert((DispatchEntry<T>[]) new DispatchEntry<?>[]{monoEntry});
+                monoEntry.executor = monoEntry.insert(monoExecutor);
+
                 this.state |= HAS_FAST;
             }
 
@@ -230,13 +233,13 @@ public abstract class AbstractDispatchNode<T extends AbstractDispatchDirectNode>
         }
 
         // Internal Constructor for migrating Mono to Fast
-        protected DispatchEntry(final CompiledCodeObject method, final Assumption callTargetStable, final LookupClassGuard[] guards, final Assumption[] unifiedAssumptions, final T executor) {
+        protected DispatchEntry(final CompiledCodeObject method, final Assumption callTargetStable, final LookupClassGuard[] guards, final Assumption[] unifiedAssumptions) {
             this.methodOrNull = method;
             this.callTargetStable = callTargetStable;
             this.guards = guards;
             this.unifiedAssumptions = unifiedAssumptions;
-            this.executor = insert(executor);
-        }
+            // Executor is deliberately NOT inserted here to avoid Truffle reparenting issues
+            }
 
         @ExplodeLoop
         public boolean isFastCacheHit(final Object receiver) {
