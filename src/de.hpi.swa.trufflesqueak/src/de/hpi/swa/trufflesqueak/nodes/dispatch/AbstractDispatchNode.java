@@ -25,10 +25,11 @@ import de.hpi.swa.trufflesqueak.nodes.accessing.SqueakObjectClassNode;
 import de.hpi.swa.trufflesqueak.nodes.accessing.SqueakObjectClassNodeGen;
 
 public abstract class AbstractDispatchNode<T extends AbstractDispatchDirectNode> extends AbstractNode {
-    protected static final byte HAS_FAST = 1 << 0;
-    protected static final byte HAS_WIDE = 1 << 1;
-    protected static final byte HAS_INDIRECT = 1 << 2;
-    protected static final byte FLAG_PRIM_FAIL = 1 << 3;
+    protected static final byte HAS_MONO = 1 << 0;
+    protected static final byte HAS_FAST = 1 << 1;
+    protected static final byte HAS_WIDE = 1 << 2;
+    protected static final byte HAS_INDIRECT = 1 << 3;
+    protected static final byte FLAG_PRIM_FAIL = 1 << 4;
 
     protected final NativeObject selector;
 
@@ -41,11 +42,14 @@ public abstract class AbstractDispatchNode<T extends AbstractDispatchDirectNode>
     @Children protected DispatchEntry<T>[] wideEntries;
     @Child protected SqueakObjectClassNode classNode;
 
+    @Child protected T monoExecutor;
+    @CompilationFinal protected LookupClassGuard monoGuard;
+
     @SuppressWarnings("unchecked")
     AbstractDispatchNode(final NativeObject selector, final boolean canPrimFail) {
         this.selector = selector;
-        this.fastEntries = (DispatchEntry<T>[]) EMPTY_ENTRIES;
-        this.wideEntries = (DispatchEntry<T>[]) EMPTY_ENTRIES;
+        this.fastEntries = EMPTY_ENTRIES;
+        this.wideEntries = EMPTY_ENTRIES;
         this.state = canPrimFail ? FLAG_PRIM_FAIL : 0;
     }
 
@@ -60,11 +64,34 @@ public abstract class AbstractDispatchNode<T extends AbstractDispatchDirectNode>
         }
     }
 
+    protected static Assumption[] mergeAssumptions(final Assumption[] a1, final Assumption[] a2) {
+        if (a2.length == 0) {
+            return a1;
+        }
+        final Assumption[] merged = Arrays.copyOf(a1, a1.length + a2.length);
+        int count = a1.length;
+        for (final Assumption newA : a2) {
+            boolean exists = false;
+            for (int i = 0; i < count; i++) {
+                if (merged[i] == newA) {
+                    exists = true;
+                    break;
+                }
+            }
+            if (!exists) {
+                merged[count++] = newA;
+            }
+        }
+        return Arrays.copyOf(merged, count);
+    }
+
     @SuppressWarnings("unchecked")
     @TruffleBoundary
     protected final T convertToIndirect() {
-        this.fastEntries = (DispatchEntry<T>[]) EMPTY_ENTRIES;
-        this.wideEntries = (DispatchEntry<T>[]) EMPTY_ENTRIES;
+        this.fastEntries = EMPTY_ENTRIES;
+        this.wideEntries = EMPTY_ENTRIES;
+        this.monoGuard = null;
+        this.monoExecutor = null;
         this.classNode = null;
         this.state = (byte) ((state & FLAG_PRIM_FAIL) | HAS_INDIRECT);
         return null;
@@ -73,14 +100,43 @@ public abstract class AbstractDispatchNode<T extends AbstractDispatchDirectNode>
     @SuppressWarnings("unchecked")
     @TruffleBoundary
     protected final T specialize(final Object receiver, final ClassObject receiverClass, final Object lookupResult, final Supplier<T> nodeSupplier) {
-        /*
-         * THREAD SAFETY NOTE:
-         * TruffleSqueak executes Smalltalk strictly on a single thread. Therefore, AST mutations
-         * (like array cloning and Node insertion here) do not require getLock().lock() synchronization.
-         *
-         * If the VM architecture ever transitions to multithreaded execution, this method MUST be
-         * wrapped in the node's intrinsic lock to prevent AST corruption and lost updates.
-         */
+
+        // 0. Base Case: Uninitialized Node -> Enter Tier 0 (Mono)
+        if ((state & (HAS_MONO | HAS_FAST | HAS_WIDE | HAS_INDIRECT)) == 0) {
+            this.monoExecutor = insert(nodeSupplier.get());
+            this.monoGuard = LookupClassGuard.create(receiver);
+            this.state |= HAS_MONO;
+            return monoExecutor;
+        }
+
+        // 1. Transition Tier 0 (Mono) to Tier 1 (Fast) via Recursion
+        if ((state & HAS_MONO) != 0) {
+            final Assumption[] originalAssumptions = monoExecutor.getAssumptions();
+
+            if (Assumption.isValidAssumption(originalAssumptions)) {
+                final ClassObject originalClass = monoGuard.getSqueakClassInternal(null);
+                final Object originalLookupResult = getContext().lookup(originalClass, selector);
+                final CompiledCodeObject originalMethod = originalLookupResult instanceof CompiledCodeObject m ? m : null;
+                final Assumption originalCallTargetStable = originalMethod != null ? originalMethod.getCallTargetStable() : null;
+
+                final DispatchEntry<T> monoEntry = new DispatchEntry<>(originalMethod, originalCallTargetStable,
+                        new LookupClassGuard[]{monoGuard}, originalAssumptions, monoExecutor);
+
+                this.fastEntries = insert((DispatchEntry<T>[]) new DispatchEntry<?>[]{monoEntry});
+                this.state |= HAS_FAST;
+            }
+
+            this.monoGuard = null;
+            this.monoExecutor = null;
+            this.state &= ~HAS_MONO;
+
+            // RE-ENTER: Process the new class insertion
+            return specialize(receiver, receiverClass, lookupResult, nodeSupplier);
+        }
+
+        // ------------------------------------------------------------------
+        // Standard Fast/Wide Tier Processing (Tier 1 & Tier 2)
+        // ------------------------------------------------------------------
 
         final DispatchEntry<T>[] newFastEntries = (DispatchEntry<T>[]) new DispatchEntry<?>[CacheLimits.DISPATCH_CACHE_LIMIT];
         final DispatchEntry<T>[] newWideEntries = (DispatchEntry<T>[]) new DispatchEntry<?>[CacheLimits.DISPATCH_CACHE_LIMIT];
@@ -89,6 +145,7 @@ public abstract class AbstractDispatchNode<T extends AbstractDispatchDirectNode>
         CompiledCodeObject targetMethodToWiden = null;
         DispatchEntry<T> targetEntry = null;
 
+        // 2. Process Fast Entries
         for (final DispatchEntry<T> current : fastEntries) {
             if (!current.isFastValid()) {
                 continue;
@@ -107,6 +164,7 @@ public abstract class AbstractDispatchNode<T extends AbstractDispatchDirectNode>
             }
         }
 
+        // 3. Process Wide Entries
         int wideEntriesNeeded = 0;
         for (final DispatchEntry<T> current : wideEntries) {
             if (current.isWideValid()) {
@@ -114,6 +172,7 @@ public abstract class AbstractDispatchNode<T extends AbstractDispatchDirectNode>
             }
         }
 
+        // 4. Handle Wide Promotion
         if (targetMethodToWiden != null) {
             targetEntry.promoteToWide();
             newWideEntries[wideEntriesNeeded++] = targetEntry;
@@ -139,6 +198,7 @@ public abstract class AbstractDispatchNode<T extends AbstractDispatchDirectNode>
             return targetEntry.executor;
         }
 
+        // 5. Append New Fast Entry
         if (fastEntriesNeeded + wideEntriesNeeded < CacheLimits.DISPATCH_CACHE_LIMIT) {
             final T newDispatchNode = nodeSupplier.get();
             final DispatchEntry<T> newEntry = new DispatchEntry<>(receiver, lookupResult, newDispatchNode);
@@ -160,11 +220,21 @@ public abstract class AbstractDispatchNode<T extends AbstractDispatchDirectNode>
 
         @Child public T executor;
 
+        // Normal Constructor
         public DispatchEntry(final Object receiver, final Object lookupResult, final T executor) {
             this.methodOrNull = lookupResult instanceof CompiledCodeObject m ? m : null;
             this.callTargetStable = methodOrNull != null ? methodOrNull.getCallTargetStable() : null;
             this.guards = new LookupClassGuard[]{LookupClassGuard.create(receiver)};
             this.unifiedAssumptions = executor.getAssumptions();
+            this.executor = insert(executor);
+        }
+
+        // Internal Constructor for migrating Mono to Fast
+        protected DispatchEntry(final CompiledCodeObject method, final Assumption callTargetStable, final LookupClassGuard[] guards, final Assumption[] unifiedAssumptions, final T executor) {
+            this.methodOrNull = method;
+            this.callTargetStable = callTargetStable;
+            this.guards = guards;
+            this.unifiedAssumptions = unifiedAssumptions;
             this.executor = insert(executor);
         }
 
@@ -199,7 +269,7 @@ public abstract class AbstractDispatchNode<T extends AbstractDispatchDirectNode>
         }
 
         public void promoteToWide() {
-            this.guards = null; // Drop fast-tier receiver checking to free memory
+            this.guards = null;
         }
 
         public boolean append(final Object receiver, final ClassObject receiverClass, final CompiledCodeObject targetMethod) {
@@ -210,30 +280,11 @@ public abstract class AbstractDispatchNode<T extends AbstractDispatchDirectNode>
                 return false;
             }
 
-            // Append Guard
             final LookupClassGuard[] newGuards = Arrays.copyOf(guards, guards.length + 1);
             newGuards[guards.length] = LookupClassGuard.create(receiver);
             this.guards = newGuards;
 
-            // Union Assumptions
-            Assumption[] newAssumptions = DispatchUtils.createAssumptions(receiverClass, targetMethod);
-            if (newAssumptions.length > 0) {
-                Assumption[] merged = Arrays.copyOf(unifiedAssumptions, unifiedAssumptions.length + newAssumptions.length);
-                int count = unifiedAssumptions.length;
-                for (Assumption newA : newAssumptions) {
-                    boolean exists = false;
-                    for (int i = 0; i < count; i++) {
-                        if (merged[i] == newA) {
-                            exists = true;
-                            break;
-                        }
-                    }
-                    if (!exists) {
-                        merged[count++] = newA;
-                    }
-                }
-                this.unifiedAssumptions = Arrays.copyOf(merged, count);
-            }
+            this.unifiedAssumptions = mergeAssumptions(unifiedAssumptions, DispatchUtils.createAssumptions(receiverClass, targetMethod));
             return true;
         }
     }

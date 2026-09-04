@@ -90,6 +90,13 @@ public final class DispatchSelectorNaryNode extends AbstractDispatchSelectorNode
         public Object execute(final VirtualFrame frame, final Object receiver, final Object[] arguments) {
             final byte currentState = state;
 
+            // TIER 0: Pure Monomorphic Fast Path
+            if ((currentState & HAS_MONO) != 0) {
+                if (Assumption.isValidAssumption(monoExecutor.getAssumptions()) && monoGuard.check(receiver)) {
+                    return monoExecutor.execute(frame, receiver, arguments);
+                }
+            }
+
             // TIER 3: Megamorphic Fallback (Indirect Execution)
             if ((currentState & HAS_INDIRECT) != 0) {
                 return indirectNode.execute(frame, canPrimFail(), selector, receiver, arguments);
@@ -164,6 +171,13 @@ public final class DispatchSelectorNaryNode extends AbstractDispatchSelectorNode
         @ExplodeLoop
         public Object execute(final VirtualFrame frame, final Object receiver, final Object[] arguments) {
             final byte currentState = state;
+
+            // TIER 0: Pure Monomorphic Fast Path
+            if ((currentState & HAS_MONO) != 0) {
+                if (Assumption.isValidAssumption(monoExecutor.getAssumptions()) && monoGuard.check(receiver)) {
+                    return monoExecutor.executeWithCheckedArguments(frame, receiver, arguments);
+                }
+            }
 
             // TIER 3: Megamorphic Fallback (Indirect Execution)
             if ((currentState & HAS_INDIRECT) != 0) {
