@@ -113,13 +113,16 @@ public final class DispatchSelectorNaryNode extends AbstractDispatchSelectorNode
 
             // TIER 2: Wide Execution (Class Polymorphism)
             if ((currentState & HAS_WIDE) != 0) {
-                final ClassObject receiverClass = classNode.executeLookup(this, receiver);
-                final Object lookupResult = getContext().lookup(receiverClass, selector);
+                final SqueakObjectClassNode node = classNode;
+                if (node != null) {
+                    final ClassObject receiverClass = node.executeLookup(this, receiver);
+                    final Object lookupResult = getContext().lookup(receiverClass, selector);
 
-                if (lookupResult instanceof CompiledCodeObject targetMethod) {
-                    for (final DispatchEntry<DispatchDirectNaryNode> entry : wideEntries) {
-                        if (entry.isWideCacheHit(targetMethod)) {
-                            return entry.executor.execute(frame, receiver, arguments);
+                    if (lookupResult instanceof CompiledCodeObject targetMethod) {
+                        for (final DispatchEntry<DispatchDirectNaryNode> entry : wideEntries) {
+                            if (entry.isWideCacheHit(targetMethod)) {
+                                return entry.executor.execute(frame, receiver, arguments);
+                            }
                         }
                     }
                 }
@@ -150,6 +153,7 @@ public final class DispatchSelectorNaryNode extends AbstractDispatchSelectorNode
             } else {
                 reportPolymorphicSpecialize();
                 indirectNode = insert(DispatchIndirectNaryNodeGen.create());
+                convertToIndirect();
                 return indirectNode.execute(frame, canPrimFail(), selector, receiver, arguments);
             }
         }
@@ -195,13 +199,16 @@ public final class DispatchSelectorNaryNode extends AbstractDispatchSelectorNode
 
             // TIER 2: Wide Execution (Class Polymorphism)
             if ((currentState & HAS_WIDE) != 0) {
-                final ClassObject receiverClass = classNode.executeLookup(this, receiver);
-                final Object lookupResult = getContext().lookup(receiverClass, selector);
+                final SqueakObjectClassNode node = classNode;
+                if (node != null) {
+                    final ClassObject receiverClass = node.executeLookup(this, receiver);
+                    final Object lookupResult = getContext().lookup(receiverClass, selector);
 
-                if (lookupResult instanceof CompiledCodeObject targetMethod) {
-                    for (final DispatchEntry<DispatchDirectNaryNode> entry : wideEntries) {
-                        if (entry.isWideCacheHit(targetMethod)) {
-                            return entry.executor.executeWithCheckedArguments(frame, receiver, arguments); // Checked Execution
+                    if (lookupResult instanceof CompiledCodeObject targetMethod) {
+                        for (final DispatchEntry<DispatchDirectNaryNode> entry : wideEntries) {
+                            if (entry.isWideCacheHit(targetMethod)) {
+                                return entry.executor.executeWithCheckedArguments(frame, receiver, arguments); // Checked Execution
+                            }
                         }
                     }
                 }
@@ -232,6 +239,7 @@ public final class DispatchSelectorNaryNode extends AbstractDispatchSelectorNode
             } else {
                 reportPolymorphicSpecialize();
                 indirectNode = insert(DispatchIndirectNaryNodeGen.create());
+                convertToIndirect();
                 return indirectNode.execute(frame, canPrimFail(), selector, receiver, arguments);
             }
         }

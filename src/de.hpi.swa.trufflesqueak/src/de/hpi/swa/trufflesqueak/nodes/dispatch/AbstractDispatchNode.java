@@ -87,14 +87,16 @@ public abstract class AbstractDispatchNode<T extends AbstractDispatchDirectNode>
 
     @SuppressWarnings("unchecked")
     @TruffleBoundary
-    protected final T convertToIndirect() {
-        this.fastEntries = EMPTY_ENTRIES;
-        this.wideEntries = EMPTY_ENTRIES;
+    protected final void convertToIndirect() {
+        this.state = (byte) ((state & FLAG_PRIM_FAIL) | HAS_INDIRECT);
+
         this.monoGuard = null;
         this.monoExecutor = null;
+
         this.classNode = null;
-        this.state = (byte) ((state & FLAG_PRIM_FAIL) | HAS_INDIRECT);
-        return null;
+
+        this.fastEntries = EMPTY_ENTRIES;
+        this.wideEntries = EMPTY_ENTRIES;
     }
 
     @SuppressWarnings("unchecked")
@@ -129,8 +131,6 @@ public abstract class AbstractDispatchNode<T extends AbstractDispatchDirectNode>
                 this.state |= HAS_FAST;
             }
 
-            this.monoGuard = null;
-            this.monoExecutor = null;
             this.state &= ~HAS_MONO;
 
             // RE-ENTER: Process the new class insertion
@@ -211,7 +211,8 @@ public abstract class AbstractDispatchNode<T extends AbstractDispatchDirectNode>
             return newDispatchNode;
         }
 
-        return convertToIndirect();
+        // Cache exhausted: convert to indirect
+        return null;
     }
 
     public static final class DispatchEntry<T extends AbstractDispatchDirectNode> extends Node {
