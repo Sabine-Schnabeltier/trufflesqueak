@@ -24,6 +24,20 @@ import de.hpi.swa.trufflesqueak.nodes.CacheLimits;
 import de.hpi.swa.trufflesqueak.nodes.accessing.SqueakObjectClassNode;
 import de.hpi.swa.trufflesqueak.nodes.accessing.SqueakObjectClassNodeGen;
 
+/*
+ * Multi-tier dispatch architecture for method resolution and execution.
+ *
+ * Tier 0 (Monomorphic): Direct execution guarded by a single fast receiver check.
+ *                       Bypasses wrapper objects and array iterations.
+ * Tier 1 (Fast): Receiver-based polymorphism. Dispatches based on fast receiver guards.
+ *                Bounded by DISPATCH_CACHE_LIMIT. Each entry maps
+ *                up to LOOKUP_CACHE_LIMIT receiver types to a single method.
+ * Tier 2 (Wide): Target-based polymorphism. Performs a full Smalltalk class and method
+ *                dictionary lookup, dispatching based on the resolved target method.
+ *                Bounded by DISPATCH_CACHE_LIMIT. Consolidates execution
+ *                for deep hierarchies where many distinct classes inherit the same method.
+ * Tier 3 (Indirect): Megamorphic fallback using uncached lookups and indirect calls.
+ */
 public abstract class AbstractDispatchNode<T extends AbstractDispatchDirectNode> extends AbstractNode {
     protected static final byte HAS_MONO = 1 << 0;
     protected static final byte HAS_FAST = 1 << 1;
@@ -35,8 +49,7 @@ public abstract class AbstractDispatchNode<T extends AbstractDispatchDirectNode>
 
     @CompilationFinal protected byte state;
 
-    @SuppressWarnings("rawtypes")
-    private static final DispatchEntry[] EMPTY_ENTRIES = new DispatchEntry[0];
+    @SuppressWarnings("rawtypes") private static final DispatchEntry[] EMPTY_ENTRIES = new DispatchEntry[0];
 
     @Children protected DispatchEntry<T>[] fastEntries;
     @Children protected DispatchEntry<T>[] wideEntries;
@@ -90,15 +103,20 @@ public abstract class AbstractDispatchNode<T extends AbstractDispatchDirectNode>
     protected final void convertToIndirect() {
         this.state = (byte) ((state & FLAG_PRIM_FAIL) | HAS_INDIRECT);
 
+        /* Clear child nodes and arrays to release memory. */
         this.monoGuard = null;
         this.monoExecutor = null;
-
         this.classNode = null;
-
         this.fastEntries = EMPTY_ENTRIES;
         this.wideEntries = EMPTY_ENTRIES;
     }
 
+    /*
+     * Note on concurrency: Smalltalk execution is strictly single-threaded.
+     * If multiple OS threads of execution are ever permitted in the VM,
+     * the non-atomic state bit transitions and cache array mutations in
+     * this implementation will require synchronization and revision.
+     */
     @SuppressWarnings("unchecked")
     @TruffleBoundary
     protected final T specialize(final Object receiver, final ClassObject receiverClass, final Object lookupResult, final Supplier<T> nodeSupplier) {
@@ -122,7 +140,7 @@ public abstract class AbstractDispatchNode<T extends AbstractDispatchDirectNode>
                 final Assumption originalCallTargetStable = originalMethod != null ? originalMethod.getCallTargetStable() : null;
 
                 final DispatchEntry<T> monoEntry = new DispatchEntry<>(originalMethod, originalCallTargetStable,
-                        new LookupClassGuard[]{monoGuard}, originalAssumptions);
+                                new LookupClassGuard[]{monoGuard}, originalAssumptions);
 
                 // Avoid reparenting issues: add new cache entry as our child first, then add monoEntry as its child
                 this.fastEntries = insert((DispatchEntry<T>[]) new DispatchEntry<?>[]{monoEntry});
@@ -240,7 +258,7 @@ public abstract class AbstractDispatchNode<T extends AbstractDispatchDirectNode>
             this.guards = guards;
             this.unifiedAssumptions = unifiedAssumptions;
             // Executor is deliberately NOT inserted here to avoid Truffle reparenting issues
-            }
+        }
 
         @ExplodeLoop
         public boolean isFastCacheHit(final Object receiver) {

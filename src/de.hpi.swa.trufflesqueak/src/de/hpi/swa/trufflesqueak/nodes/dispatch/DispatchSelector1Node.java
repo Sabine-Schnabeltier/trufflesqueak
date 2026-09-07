@@ -94,6 +94,7 @@ public final class DispatchSelector1Node extends AbstractDispatchSelectorNode {
 
             // TIER 2: Wide Execution (Class Polymorphism)
             if ((currentState & HAS_WIDE) != 0) {
+                /* Local snapshot guards against stale compiled code during invalidation. */
                 final SqueakObjectClassNode node = classNode;
                 if (node != null) {
                     final ClassObject receiverClass = node.executeLookup(this, receiver);

@@ -95,6 +95,7 @@ public final class DispatchSelector0Node extends AbstractDispatchSelectorNode {
 
             // TIER 2: Wide Execution (Class Polymorphism)
             if ((currentState & HAS_WIDE) != 0) {
+                /* Local snapshot guards against stale compiled code during invalidation. */
                 final SqueakObjectClassNode node = classNode;
                 if (node != null) {
                     final ClassObject receiverClass = node.executeLookup(this, receiver);
@@ -129,7 +130,7 @@ public final class DispatchSelector0Node extends AbstractDispatchSelectorNode {
 
             // Node creation handles method resolution, including DNU and OAM fallbacks.
             final DispatchDirect0Node executor = specialize(receiver, receiverClass, lookupResult,
-                    () -> DispatchDirect0Node.create(selector, receiverClass, canPrimFail()));
+                            () -> DispatchDirect0Node.create(selector, receiverClass, canPrimFail()));
 
             if (executor != null) {
                 return executor.execute(frame, receiver);
