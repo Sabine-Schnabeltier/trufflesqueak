@@ -133,7 +133,6 @@
         SlangTests -> #(#testSimpleMethod). "broken"
         SlangTypePromotionTest -> #(#testFloatAndNil #testNilAndFloat). "broken"
         SmalltalkImageTest -> #(#testForceChangesToDiskRobustness).
-        SocketTest -> #(#testSocketReuse #testTCPSocketReuse #testUDP).
         StackInterpreterTests -> #(#testImmediateFloats #testPointerTaggingDetagging). "broken"
         SystemChangeFileTest -> #(#testClassRenamed). "flaky and can hang the system"
     } collect: [:assoc | | testCase |
@@ -150,6 +149,14 @@
         VMMakerDecompilerTests.
     } collect: [:testCase |
         testCase allTestSelectors do: [:sel | failingTests add: (testCase selector: sel) ]].
+
+    isMacOS ifTrue: [
+        {
+            SocketTest -> #(#testSocketReuse).  "fails on GitHub CI but passes locally"
+        } collect: [:assoc | | testCase |
+            testCase := assoc key.
+            assoc value do: [:sel | ignoredTests add: (testCase selector: sel) ]].
+    ].
 
     isWin ifTrue: [
         {
