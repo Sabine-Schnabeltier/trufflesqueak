@@ -75,6 +75,7 @@ import de.hpi.swa.trufflesqueak.nodes.interrupts.CheckForInterruptsState;
 import de.hpi.swa.trufflesqueak.nodes.plugins.B2D;
 import de.hpi.swa.trufflesqueak.nodes.plugins.BitBlt;
 import de.hpi.swa.trufflesqueak.nodes.plugins.JPEGReader;
+import de.hpi.swa.trufflesqueak.nodes.plugins.network.SqueakSocketContext;
 import de.hpi.swa.trufflesqueak.nodes.plugins.Zip;
 import de.hpi.swa.trufflesqueak.nodes.process.SignalSemaphoreNodeGen;
 import de.hpi.swa.trufflesqueak.shared.SqueakImageLocator;
@@ -235,6 +236,7 @@ public final class SqueakImageContext {
     public final BitBlt bitblt = new BitBlt(this);
     public String[] dropPluginFileList = ArrayUtils.EMPTY_STRINGS_ARRAY;
     public final JPEGReader jpegReader = new JPEGReader();
+    public final SqueakSocketContext squeakSocketContext = new SqueakSocketContext();
     public final Zip zip = new Zip();
 
     public SqueakImageContext(final SqueakLanguage squeakLanguage, final SqueakLanguage.Env environment) {
@@ -1088,6 +1090,7 @@ public final class SqueakImageContext {
         if (options.printResourceSummary()) {
             MiscUtils.printResourceSummary();
         }
+        squeakSocketContext.close();
     }
 
     public int getPrimFailCode() {
