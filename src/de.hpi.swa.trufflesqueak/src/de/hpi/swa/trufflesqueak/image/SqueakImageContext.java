@@ -998,6 +998,7 @@ public final class SqueakImageContext {
         if (options.printResourceSummary()) {
             MiscUtils.printResourceSummary();
         }
+        squeakSocketContext.close();
     }
 
     public int getPrimFailCode() {
