@@ -79,7 +79,7 @@ public final class FloatObject extends AbstractSqueakObjectWithHash {
         /* Shift out the sign bit, exponent bits are then the 11 most significant bits. */
         final long bits = Double.doubleToRawLongBits(value) << 1;
         /* Exponent bits are neither all zero (zero, subnormal) nor all one (NaN, infinity). */
-        return Long.compareUnsigned(bits - (1L << 53), 0x7FEL << 53) < 0 || bits == 0;
+        return (Long.compareUnsigned(bits - (1L << 53), 0x7FEL << 53) < 0) | (bits == 0);
     }
 
     public static Object boxIfNecessary(final double value) {
