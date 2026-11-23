@@ -78,8 +78,16 @@ public final class FloatObject extends AbstractSqueakObjectWithHash {
     public static boolean isUnboxable(final double value) {
         /* Shift out the sign bit, exponent bits are then the 11 most significant bits. */
         final long bits = Double.doubleToRawLongBits(value) << 1;
-        /* Exponent bits are neither all zero (zero, subnormal) nor all one (NaN, infinity). */
-        return Long.compareUnsigned(bits - (1L << 53), 0x7FEL << 53) < 0 || bits == 0;
+        /* 0 if value is +/-0.0, 1 otherwise. */
+        final long nonZero = (bits | -bits) >>> 63;
+        /*
+         * Unsigned check (exp - nonZero) < 2046:
+         *   +/-0.0:    0       - 0 = 0        (unboxable)
+         *   normal:    1..2046 - 1 = 0..2045  (unboxable)
+         *   Inf/NaN:   2047    - 1 = 2046     (boxed)
+         *   subnormal: 0       - 1 = -1 (max) (boxed)
+         */
+        return Long.compareUnsigned((bits >>> 53) - nonZero, 2046) < 0;
     }
 
     public static Object boxIfNecessary(final double value) {
